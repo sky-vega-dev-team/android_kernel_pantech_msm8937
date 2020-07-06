@@ -99,6 +99,13 @@ EXPORT_SYMBOL_GPL(ehci_cf_port_reset_rwsem);
 #define HUB_DEBOUNCE_STEP	  25
 #define HUB_DEBOUNCE_STABLE	 100
 
+#ifdef CONFIG_ANDROID_PANTECH_USB_OTG_INTENT
+extern int set_otg_dev_state(int mode);
+#endif
+#ifdef CONFIG_PANTECH_OTG_LOW_BATTERY
+extern void pantech_otg_uvlo_notify(int uvlo);
+extern int get_percentage_of_battery(void);
+#endif
 static void hub_release(struct kref *kref);
 static int usb_reset_and_verify_device(struct usb_device *udev);
 
@@ -1030,11 +1037,27 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 	unsigned delay;
 
 	/* Continue a partial initialization */
+#ifdef CONFIG_PANTECH_SIO_BUG_FIX //Android security CVE-2015-8816
+	if (type == HUB_INIT2 || type == HUB_INIT3) {
+		device_lock(hub->intfdev);
+
+		/* Was the hub disconnected while we were waiting? */
+		if(hub->disconnected) {
+			device_unlock(hub->intfdev);
+			kref_put(&hub->kref, hub_release);
+			return;
+		}
+		if (type == HUB_INIT2)
+			goto init2;
+		goto init3;
+	}
+	kref_get(&hub->kref);
+#else
 	if (type == HUB_INIT2)
 		goto init2;
 	if (type == HUB_INIT3)
 		goto init3;
-
+#endif
 	/* The superspeed hub except for root hub has to use Hub Depth
 	 * value as an offset into the route string to locate the bits
 	 * it uses to determine the downstream port number. So hub driver
@@ -1231,6 +1254,9 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 			queue_delayed_work(system_power_efficient_wq,
 					&hub->init_work,
 					msecs_to_jiffies(delay));
+#ifdef CONFIG_PANTECH_SIO_BUG_FIX //Android security CVE-2015-8816
+			device_unlock(hub->intfdev);
+#endif
 			return;		/* Continues at init3: below */
 		} else {
 			msleep(delay);
@@ -1252,6 +1278,13 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 	/* Allow autosuspend if it was suppressed */
 	if (type <= HUB_INIT3)
 		usb_autopm_put_interface_async(to_usb_interface(hub->intfdev));
+
+#ifdef CONFIG_PANTECH_SIO_BUG_FIX //Android security CVE-2015-8816
+	if (type == HUB_INIT2 || type == HUB_INIT3)
+		device_unlock(hub->intfdev);
+
+	kref_put(&hub->kref, hub_release);
+#endif
 }
 
 /* Implement the continuations for the delays above */
@@ -2133,6 +2166,27 @@ void usb_disconnect(struct usb_device **pdev)
 	usb_set_device_state(udev, USB_STATE_NOTATTACHED);
 	dev_info(&udev->dev, "USB disconnect, device number %d\n",
 			udev->devnum);
+#ifdef CONFIG_ANDROID_PANTECH_USB_OTG_INTENT
+	if(udev->product != NULL){
+		if ((strcmp(udev->product, "EHCI Host Controller") != 0)
+			&& (strncmp(udev->product, "QHSUSB", strlen("QHSUSB")) != 0)	
+			&& (strncmp(udev->product, "Qualcomm", strlen("Qualcomm")) != 0) ) {
+			set_otg_dev_state(0);
+#ifdef CONFIG_PANTECH_OTG_LOW_BATTERY
+			{
+				int level = get_percentage_of_battery();
+				if(level < 10){
+					printk(KERN_ERR "batt level < 10 \n");
+					pantech_otg_uvlo_notify(0);
+				}
+			}
+#endif
+		}
+	} else {
+		printk(KERN_ERR "%s udev->product is NULL \n", __func__);
+		set_otg_dev_state(0);
+	}
+#endif
 
 	usb_lock_device(udev);
 
@@ -2442,6 +2496,28 @@ int usb_new_device(struct usb_device *udev)
 
 	/* Tell the world! */
 	announce_device(udev);
+
+#ifdef CONFIG_ANDROID_PANTECH_USB_OTG_INTENT
+	printk(KERN_ERR "^^^^ bDeviceClass %d\n", udev->descriptor.bDeviceClass);
+	printk(KERN_ERR "^^^^ bDeviceSubClass %d\n", udev->descriptor.bDeviceSubClass);
+	printk(KERN_ERR "^^^^ bDeviceProtocol %d\n", udev->descriptor.bDeviceProtocol);
+
+	if(udev->product != NULL){
+		if (strcmp(udev->product, "EHCI Host Controller")) {			
+			set_otg_dev_state(1);
+		}
+	}else{
+		if(udev->descriptor.bDeviceClass == 0x09 && udev->descriptor.bDeviceSubClass == 0x00 && 
+				udev->descriptor.bDeviceProtocol == 0x01){
+			//printk("^^^^ it's hub\n");
+			err = 1;
+			goto fail;
+		}else{
+			set_otg_dev_state(1);
+			//printk("^^^^ it's not hub\n");
+		}
+	}
+#endif
 
 	if (udev->serial)
 		add_device_randomness(udev->serial, strlen(udev->serial));

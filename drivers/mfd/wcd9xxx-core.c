@@ -25,7 +25,6 @@
 #include <linux/mfd/wcd9xxx/wcd9xxx_registers.h>
 #include <linux/mfd/wcd9xxx/wcd-gpio-ctrl.h>
 #include <linux/mfd/wcd9335/registers.h>
-
 #include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/debugfs.h>

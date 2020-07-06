@@ -1502,6 +1502,12 @@ static int mtp_function_set_alt(struct usb_function *f,
 
 	/* readers may be blocked waiting for us to go online */
 	wake_up(&dev->read_wq);
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+	if(dev && dev->function.hs_descriptors == hs_ptp_descs)
+		usb_interface_enum_cb(PTP_TYPE_FLAG);
+	else
+        usb_interface_enum_cb(MTP_TYPE_FLAG);
+#endif
 	return 0;
 }
 

@@ -876,8 +876,11 @@ static int scsi_try_to_abort_cmd(struct scsi_host_template *hostt, struct scsi_c
 
 	return hostt->eh_abort_handler(scmd);
 }
-
+#ifdef CONFIG_ANDROID_PANTECH_USB_OTG_INTENT
+void scsi_abort_eh_cmnd(struct scsi_cmnd *scmd)
+#else
 static void scsi_abort_eh_cmnd(struct scsi_cmnd *scmd)
+#endif
 {
 	if (scsi_try_to_abort_cmd(scmd->device->host->hostt, scmd) != SUCCESS)
 		if (scsi_try_bus_device_reset(scmd) != SUCCESS)

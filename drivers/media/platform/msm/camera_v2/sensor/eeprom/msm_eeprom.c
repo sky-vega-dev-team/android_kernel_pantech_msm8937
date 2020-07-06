@@ -14,6 +14,9 @@
 #include <linux/of_gpio.h>
 #include <linux/delay.h>
 #include <linux/crc32.h>
+#ifdef CONFIG_PANTECH_CAMERA
+#include <linux/crc16.h>
+#endif
 #include "msm_sd.h"
 #include "msm_cci.h"
 #include "msm_eeprom.h"
@@ -26,6 +29,36 @@ DEFINE_MSM_MUTEX(msm_eeprom_mutex);
 static struct v4l2_file_operations msm_eeprom_v4l2_subdev_fops;
 #endif
 
+//#if(CONFIG_BOARD_VER >= CONFIG_TP20) // change TP10 because of EF71 build issue
+#if(CONFIG_BOARD_VER >= CONFIG_TP10) 
+#define CONFIG_PANTECH_CAMERA_FRONT_OTP  //EF71 s5k5e2 sensor OTP memory read
+#endif
+#ifdef CONFIG_PANTECH_CAMERA_FRONT_OTP 
+#define OTP_PAGE_NUM 12
+#define OTP_PAGE_CSUM_OFFSET 8
+typedef enum {
+  OTP_PAGE2 = 2,
+  OTP_PAGE3 = 3,
+  OTP_PAGE4 = 4,
+  OTP_PAGE5 = 5,
+  OTP_PAGE_MAX,
+} otp_page_type;
+
+typedef enum
+{
+  OTP_PAGE2_OFFSET = 0,
+  OTP_PAGE3_OFFSET = 13,
+  OTP_PAGE4_OFFSET = 25,
+  OTP_PAGE5_OFFSET = 37,
+  OTP_PAGE_OFFSET_MAX = 40,
+}otp_page_offset_type;
+
+typedef struct 
+{
+  int page;
+  int page_offset;
+} otp_data_type;
+#endif
 /**
   * msm_get_read_mem_size - Get the total size for allocation
   * @eeprom_map_array:	mem map
@@ -39,7 +72,7 @@ static int msm_get_read_mem_size
 
 	if (eeprom_map_array->msm_size_of_max_mappings >
 		MSM_EEPROM_MAX_MEM_MAP_CNT) {
-		pr_err("%s:%d Memory map cnt greter then expected: %d",
+		pr_err("%s:%d Memory map cnt greter then expected: %d\n",
 			__func__, __LINE__,
 			eeprom_map_array->msm_size_of_max_mappings);
 		return -EINVAL;
@@ -48,7 +81,7 @@ static int msm_get_read_mem_size
 		eeprom_map = &(eeprom_map_array->memory_map[j]);
 		if (eeprom_map->memory_map_size >
 			MSM_EEPROM_MEMORY_MAP_MAX_SIZE) {
-			pr_err("%s:%d Memory map size greter then expected: %d",
+			pr_err("%s:%d Memory map size greter then expected: %d\n",
 				__func__, __LINE__,
 				eeprom_map->memory_map_size);
 			return -EINVAL;
@@ -72,9 +105,81 @@ static int msm_get_read_mem_size
   *
   * Returns 0 if checksum match, -EINVAL otherwise.
   */
+#if 0//Qualcomm provide CRC check from LP
+#define EEPROM_CHECKSUM_SIZE 2
+ uint16_t crc16table[] = {
+  0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,
+  0xC601, 0x06C0, 0x0780, 0xC741, 0x0500, 0xC5C1, 0xC481, 0x0440,
+  0xCC01, 0x0CC0, 0x0D80, 0xCD41, 0x0F00, 0xCFC1, 0xCE81, 0x0E40,
+  0x0A00, 0xCAC1, 0xCB81, 0x0B40, 0xC901, 0x09C0, 0x0880, 0xC841,
+  0xD801, 0x18C0, 0x1980, 0xD941, 0x1B00, 0xDBC1, 0xDA81, 0x1A40,
+  0x1E00, 0xDEC1, 0xDF81, 0x1F40, 0xDD01, 0x1DC0, 0x1C80, 0xDC41,
+  0x1400, 0xD4C1, 0xD581, 0x1540, 0xD701, 0x17C0, 0x1680, 0xD641,
+  0xD201, 0x12C0, 0x1380, 0xD341, 0x1100, 0xD1C1, 0xD081, 0x1040,
+  0xF001, 0x30C0, 0x3180, 0xF141, 0x3300, 0xF3C1, 0xF281, 0x3240,
+  0x3600, 0xF6C1, 0xF781, 0x3740, 0xF501, 0x35C0, 0x3480, 0xF441,
+  0x3C00, 0xFCC1, 0xFD81, 0x3D40, 0xFF01, 0x3FC0, 0x3E80, 0xFE41,
+  0xFA01, 0x3AC0, 0x3B80, 0xFB41, 0x3900, 0xF9C1, 0xF881, 0x3840,
+  0x2800, 0xE8C1, 0xE981, 0x2940, 0xEB01, 0x2BC0, 0x2A80, 0xEA41,
+  0xEE01, 0x2EC0, 0x2F80, 0xEF41, 0x2D00, 0xEDC1, 0xEC81, 0x2C40,
+  0xE401, 0x24C0, 0x2580, 0xE541, 0x2700, 0xE7C1, 0xE681, 0x2640,
+  0x2200, 0xE2C1, 0xE381, 0x2340, 0xE101, 0x21C0, 0x2080, 0xE041,
+  0xA001, 0x60C0, 0x6180, 0xA141, 0x6300, 0xA3C1, 0xA281, 0x6240,
+  0x6600, 0xA6C1, 0xA781, 0x6740, 0xA501, 0x65C0, 0x6480, 0xA441,
+  0x6C00, 0xACC1, 0xAD81, 0x6D40, 0xAF01, 0x6FC0, 0x6E80, 0xAE41,
+  0xAA01, 0x6AC0, 0x6B80, 0xAB41, 0x6900, 0xA9C1, 0xA881, 0x6840,
+  0x7800, 0xB8C1, 0xB981, 0x7940, 0xBB01, 0x7BC0, 0x7A80, 0xBA41,
+  0xBE01, 0x7EC0, 0x7F80, 0xBF41, 0x7D00, 0xBDC1, 0xBC81, 0x7C40,
+  0xB401, 0x74C0, 0x7580, 0xB541, 0x7700, 0xB7C1, 0xB681, 0x7640,
+  0x7200, 0xB2C1, 0xB381, 0x7340, 0xB101, 0x71C0, 0x7080, 0xB041,
+  0x5000, 0x90C1, 0x9181, 0x5140, 0x9301, 0x53C0, 0x5280, 0x9241,
+  0x9601, 0x56C0, 0x5780, 0x9741, 0x5500, 0x95C1, 0x9481, 0x5440,
+  0x9C01, 0x5CC0, 0x5D80, 0x9D41, 0x5F00, 0x9FC1, 0x9E81, 0x5E40,
+  0x5A00, 0x9AC1, 0x9B81, 0x5B40, 0x9901, 0x59C0, 0x5880, 0x9841,
+  0x8801, 0x48C0, 0x4980, 0x8941, 0x4B00, 0x8BC1, 0x8A81, 0x4A40,
+  0x4E00, 0x8EC1, 0x8F81, 0x4F40, 0x8D01, 0x4DC0, 0x4C80, 0x8C41,
+  0x4400, 0x84C1, 0x8581, 0x4540, 0x8701, 0x47C0, 0x4680, 0x8641,
+  0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040
+};
+
+uint16_t get_nvm_checksum(const uint8_t *a_data_ptr, signed long a_size)
+{
+       uint16_t crc = 0;
+       int i;
+       for (i = 0; i < a_size; i++)
+       {
+            uint8_t index = crc ^ a_data_ptr[i];
+            crc = (crc >> 8) ^ crc16table[index];
+       }
+       return crc;
+}
+#endif
+
+#ifdef CONFIG_PANTECH_CAMERA
+static int msm_eeprom_verify_sum(const char *mem, uint32_t size, uint16_t sum)
+{
+	uint16_t crc = 0;
+
+	/* check overflow */
+	if (size > crc - sizeof(uint16_t))
+	{
+		pr_err("%s: check overflow : error!!\n", __func__);
+		return -EINVAL;
+	}
+
+	crc = crc16(crc, mem, size);
+	
+	if (crc != sum) {
+		pr_err("%s: expect 0x%x, result 0x%x\n", __func__, sum, crc);
+		return -EINVAL;
+	}
+	pr_err("%s: checksum pass 0x%x\n", __func__, sum);
+	return 0;
+}
+#else
 static int msm_eeprom_verify_sum(const char *mem, uint32_t size, uint32_t sum)
 {
-	uint32_t crc = ~0;
+	uint32_t crc = ~0UL;
 
 	/* check overflow */
 	if (size > crc - sizeof(uint32_t))
@@ -88,6 +193,66 @@ static int msm_eeprom_verify_sum(const char *mem, uint32_t size, uint32_t sum)
 	CDBG("%s: checksum pass 0x%x\n", __func__, sum);
 	return 0;
 }
+#endif
+
+#ifdef CONFIG_PANTECH_CAMERA
+static inline uint16_t crc16_swap(uint16_t sum)
+{
+	uint16_t ret_sum = 0;
+	ret_sum = (sum >> 8) | ((sum & 0xFF) << 8);
+	return ret_sum;
+}
+
+static uint32_t eeprom_match_crc(struct msm_eeprom_ctrl_t *e_ctrl, struct msm_eeprom_mem_map_t *map)
+{
+	int i, rc = 0;
+#if 0
+	int j;
+	uint16_t checksum_data = 0;
+#endif
+	uint16_t *sum;
+	uint8_t *memptr;
+	CDBG("eeprom_match_crc Enter num_data %d  size %d\n",e_ctrl->cal_data.num_data,map->memory_map_size);
+	if (!e_ctrl) {
+		pr_err("%s data is NULL\n", __func__);
+		return -EINVAL;
+	}
+	memptr = e_ctrl->cal_data.mapdata;
+
+	if((e_ctrl->cal_data.num_data!= 0) && e_ctrl->userspace_probe == 1)
+	{
+      for(i=0; i+1<map->memory_map_size; i+=2)
+      {
+        if(map->mem_settings[i].reg_data != sizeof(uint16_t))
+        {
+          CDBG("%s: malformatted data mapping %d\n", __func__,map->mem_settings[i].reg_data);
+          return -EINVAL;
+        }
+
+        sum =  (uint16_t *) (memptr);
+        rc = msm_eeprom_verify_sum(&memptr[map->mem_settings[i].reg_data], map->mem_settings[i+1].reg_data, crc16_swap(*sum));
+#if 0 //Qualcomm provide CRC check from LP
+        for(j=0; j<EEPROM_CHECKSUM_SIZE; j++)
+        {
+          checksum_data |= memptr[j] << (8*(EEPROM_CHECKSUM_SIZE-j-1));
+        }
+        rc = get_nvm_checksum(&memptr[map->mem_settings[i].reg_data], map->mem_settings[i+1].reg_data);
+        if(checksum_data != rc)
+        {          
+          pr_err("check CRC Fail!! checksum 0x%x  Read data 0x%x\n",checksum_data,rc);
+          //return -EINVAL;
+        }
+        CDBG("checksum 0x%x  Read data 0x%x\n",checksum_data,rc);
+        checksum_data = 0;
+#endif
+        memptr += map->mem_settings[i].reg_data +map->mem_settings[i+1].reg_data;
+      }
+	}
+
+	CDBG("Exit\n");
+	return rc;
+}
+#endif
 
 /**
   * msm_eeprom_match_crc - verify multiple regions using crc
@@ -102,13 +267,17 @@ static int msm_eeprom_verify_sum(const char *mem, uint32_t size, uint32_t sum)
 static uint32_t msm_eeprom_match_crc(struct msm_eeprom_memory_block_t *data)
 {
 	int j, rc;
+#ifdef CONFIG_PANTECH_CAMERA
+	uint16_t *sum;
+#else
 	uint32_t *sum;
+#endif
 	uint32_t ret = 0;
 	uint8_t *memptr;
 	struct msm_eeprom_memory_map_t *map;
-
+	CDBG("msm_eeprom_match_crc Enter\n");
 	if (!data) {
-		pr_err("%s data is NULL", __func__);
+		pr_err("%s data is NULL\n", __func__);
 		return -EINVAL;
 	}
 	map = data->map;
@@ -121,13 +290,24 @@ static uint32_t msm_eeprom_match_crc(struct msm_eeprom_memory_block_t *data)
 				+ map[j+1].mem.valid_size;
 			continue;
 		}
+
+#ifdef CONFIG_PANTECH_CAMERA
+		if (map[j+1].mem.valid_size != sizeof(uint16_t)) {
+//			CDBG("%s: malformatted data mapping %d  %ld\n", __func__,map[j+1].mem.valid_size,sizeof(uint16_t));
+			return -EINVAL;
+		}
+		sum = (uint16_t *) (memptr + map[j].mem.valid_size);
+		rc = msm_eeprom_verify_sum(memptr, map[j].mem.valid_size, crc16_swap(*sum));
+#else
 		if (map[j+1].mem.valid_size != sizeof(uint32_t)) {
-			CDBG("%s: malformatted data mapping\n", __func__);
+//			CDBG("%s: malformatted data mapping %d  %ld\n", __func__,map[j+1].mem.valid_size,sizeof(uint32_t));
 			return -EINVAL;
 		}
 		sum = (uint32_t *) (memptr + map[j].mem.valid_size);
 		rc = msm_eeprom_verify_sum(memptr, map[j].mem.valid_size,
 					   *sum);
+#endif
+
 		if (!rc)
 			ret |= 1 << (j/2);
 		memptr += map[j].mem.valid_size + map[j+1].mem.valid_size;
@@ -143,6 +323,232 @@ static uint32_t msm_eeprom_match_crc(struct msm_eeprom_memory_block_t *data)
   * This function iterates through blocks stored in block->map, reads each
   * region and concatenate them into the pre-allocated block->mapdata
   */
+#ifdef CONFIG_PANTECH_CAMERA_FRONT_OTP 
+static uint32_t crc32_swap(uint32_t x)
+{
+  return (x >> 24) | ((x >>  8) & 0x0000FF00) |
+         ((x <<  8) & 0x00FF0000) | (x << 24);
+}
+
+static int msm_otp_verify_sum(const char *mem, uint32_t size, uint32_t sum)
+{
+#ifdef CONFIG_COMPAT
+  uint32_t crc = ~0L;
+#else
+  uint32_t crc = ~0UL;
+#endif
+
+  /* check overflow */
+  if (size > crc - sizeof(uint32_t))
+  return -EINVAL;
+  
+  crc = crc32_le(crc, mem, size);
+  if (~crc != sum) {
+    pr_err("%s: expect 0x%x, result 0x%x\n", __func__, sum, ~crc);
+    return -EINVAL;
+  }
+  pr_err("%s: checksum pass 0x%x\n", __func__, sum);
+  return 0;
+}
+
+static int get_otp_mem_offset(uint8_t page)
+{
+  int offset=0;
+
+  switch(page)
+  {
+    case OTP_PAGE2:
+      offset = OTP_PAGE2_OFFSET;
+    break;
+
+    case OTP_PAGE3:
+      offset = OTP_PAGE3_OFFSET;
+    break;
+
+    case OTP_PAGE4:
+      offset = OTP_PAGE4_OFFSET;
+    break;
+
+    case OTP_PAGE5:
+      offset = OTP_PAGE5_OFFSET;
+    break;
+
+    default:
+      offset = OTP_PAGE_OFFSET_MAX; // for front sensor which not write OTP data
+      pr_err("%s Invalid page num %d\n",__func__, page);
+    break;
+  }
+  return offset;
+}
+
+static int otp_check_page(uint8_t value)
+{
+  int i, set=0;
+  int used_page[5][2] ={{0x00, 0x00},{0x01, 0x02},{0x03, 0x03},{0x07, 0x04},{0x0F, 0x05}};
+
+  for(i=1; i<5;i++)
+  {
+    if(used_page[i][0] == value)
+    {
+      set = i;
+      break;
+    }
+  }
+  CDBG("%s value 0x%x set %d  page is %d\n",__func__,value,set,used_page[set][1]);
+  return used_page[set][1];
+}
+
+static uint32_t otp_match_crc(struct msm_eeprom_ctrl_t *e_ctrl, struct msm_eeprom_mem_map_t *map)
+{
+	int rc = 0;
+	int page, mem_offset;
+	uint32_t *sum;
+	uint8_t *memptr;
+
+	CDBG("%s Enter num_data %d  size %d\n",__func__,e_ctrl->cal_data.num_data,map->memory_map_size);
+
+	if (!e_ctrl) {
+		pr_err("%s data is NULL\n", __func__);
+		return -EINVAL;
+	}
+	memptr = e_ctrl->cal_data.mapdata;
+
+	if((e_ctrl->cal_data.num_data!= 0) && e_ctrl->userspace_probe == 1)
+	{
+      page = otp_check_page(memptr[OTP_PAGE_NUM]);
+      if(page == 0)
+      {
+        pr_err("%s Invalid OTP page\n",__func__);
+        return -EINVAL;
+      }
+
+      mem_offset = get_otp_mem_offset(page);
+      pr_err("%s page %d  offset %d checksum 0x%x\n",__func__, page, mem_offset, memptr[mem_offset+OTP_PAGE_CSUM_OFFSET]);
+
+      sum =  (uint32_t *) (memptr+mem_offset+OTP_PAGE_CSUM_OFFSET);
+      rc = msm_otp_verify_sum(&memptr[mem_offset], OTP_PAGE_CSUM_OFFSET, crc32_swap(*sum));
+	}
+
+	CDBG("Exit\n");
+	return rc;
+}
+
+
+static uint32_t msm_otp_match_crc(struct msm_eeprom_memory_block_t *data, otp_data_type *otp)
+{
+	int rc = 0, page_offset;
+	uint32_t *sum;
+	uint8_t *memptr;
+
+	CDBG("%s Enter\n",__func__);
+
+	if (!data || (otp->page_offset > OTP_PAGE5_OFFSET)) {
+		pr_err("%s data is NULL %d\n", __func__,otp->page_offset);
+		return -EINVAL;
+	}
+	memptr =  data->mapdata;
+
+	if(data->num_data!= 0)
+	{
+      page_offset = otp->page_offset;
+      sum =  (uint32_t *) (memptr+page_offset+OTP_PAGE_CSUM_OFFSET);
+      rc = msm_otp_verify_sum(&memptr[page_offset], OTP_PAGE_CSUM_OFFSET, crc32_swap(*sum));
+	}
+
+	CDBG("Exit\n");
+	return rc;
+}
+
+static int read_eeprom_memory_OTP(struct msm_eeprom_ctrl_t *e_ctrl,
+  struct msm_eeprom_memory_block_t *block, otp_data_type *otp)
+{
+  int rc = 0;
+  int j;
+  otp_data_type *otp_data;
+  struct msm_eeprom_memory_map_t *emap = block->map;
+  struct msm_eeprom_board_info *eb_info;
+  uint8_t *memptr = block->mapdata;
+  CDBG("%s Enter\n",__func__);
+  if (!e_ctrl) {
+    pr_err("%s e_ctrl is NULL\n", __func__);
+    return -EINVAL;
+  }
+ 
+  eb_info = e_ctrl->eboard_info;
+  otp_data = kzalloc(sizeof(otp_data_type), GFP_KERNEL);
+  if(!otp_data) 
+  {
+    pr_err("%s otp kzalloc failed line %d\n", __func__, __LINE__);
+    return -ENOMEM;
+  }
+
+  for (j = 0; j < block->num_map; j++) {
+    if (emap[j].saddr.addr) {
+      eb_info->i2c_slaveaddr = emap[j].saddr.addr;
+      e_ctrl->i2c_client.cci_client->sid =
+          eb_info->i2c_slaveaddr >> 1;
+      pr_err("qcom,slave-addr = 0x%X\n",
+        eb_info->i2c_slaveaddr);
+    }
+ 
+    if (emap[j].page.valid_size) {
+      e_ctrl->i2c_client.addr_type = emap[j].page.addr_t;
+      rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+        &(e_ctrl->i2c_client), emap[j].page.addr,
+        emap[j].page.data, emap[j].page.data_t);
+        msleep(emap[j].page.delay);
+      if (rc < 0) {
+        pr_err("%s: page write failed\n", __func__);
+        return rc;
+      }
+    }
+    if (emap[j].pageen.valid_size) {
+      e_ctrl->i2c_client.addr_type = emap[j].pageen.addr_t;
+      rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+        &(e_ctrl->i2c_client), emap[j].pageen.addr,
+        emap[j].pageen.data, emap[j].pageen.data_t);
+        msleep(emap[j].pageen.delay);
+      if (rc < 0) {
+        pr_err("%s: page enable failed\n", __func__);
+        return rc;
+      }
+    }
+    if (emap[j].poll.valid_size) {
+      e_ctrl->i2c_client.addr_type = emap[j].poll.addr_t;
+      rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+        &(e_ctrl->i2c_client), emap[j].poll.addr,
+        emap[j].poll.data, emap[j].poll.data_t);
+        msleep(emap[j].poll.delay);
+      if (rc < 0) {
+        pr_err("%s: poll write failed\n", __func__);
+        return rc;
+      }
+    }
+ 
+    if (emap[j].mem.valid_size) {
+      e_ctrl->i2c_client.addr_type = emap[j].mem.addr_t;
+      rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_read_seq(
+        &(e_ctrl->i2c_client), emap[j].mem.addr,
+        memptr, emap[j].mem.valid_size);
+      if (rc < 0) {
+        pr_err("%s: read failed\n", __func__);
+        return rc;
+      }
+      if(j == 0)
+      {
+        otp_data->page = otp_check_page(memptr[emap[j].mem.valid_size-1]);
+        otp_data->page_offset = get_otp_mem_offset(otp_data->page);
+        CDBG("used page %d offset %d\n",otp_data->page,otp_data->page_offset);
+      }
+      //if(j == (otp_data->page-2))
+        memptr += emap[j].mem.valid_size;
+      memcpy(otp, otp_data, sizeof(otp_data_type));
+    }
+   }
+   return rc;
+ }
+#endif
+
 static int read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl,
 	struct msm_eeprom_memory_block_t *block)
 {
@@ -153,7 +559,7 @@ static int read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl,
 	uint8_t *memptr = block->mapdata;
 
 	if (!e_ctrl) {
-		pr_err("%s e_ctrl is NULL", __func__);
+		pr_err("%s e_ctrl is NULL\n", __func__);
 		return -EINVAL;
 	}
 
@@ -352,9 +758,9 @@ static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 			e_ctrl->i2c_client.client->addr =
 				eeprom_map->slave_addr >> 1;
 		}
-		CDBG("Slave Addr: 0x%X\n", eeprom_map->slave_addr);
-		CDBG("Memory map Size: %d",
-			eeprom_map->memory_map_size);
+		CDBG("Slave Addr: 0x%X  num_data %d  ID %d\n", eeprom_map->slave_addr, e_ctrl->cal_data.num_data, e_ctrl->subdev_id);
+		CDBG("Memory map Size: %d  OP %d  size %d\n",
+			eeprom_map->memory_map_size,eeprom_map->mem_settings[j].i2c_operation,eeprom_map->mem_settings[j].reg_data);
 		for (i = 0; i < eeprom_map->memory_map_size; i++) {
 			switch (eeprom_map->mem_settings[i].i2c_operation) {
 			case MSM_CAM_WRITE: {
@@ -415,7 +821,21 @@ static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 	}
 	memptr = e_ctrl->cal_data.mapdata;
 	for (i = 0; i < e_ctrl->cal_data.num_data; i++)
-		CDBG("memory_data[%d] = 0x%X\n", i, memptr[i]);
+		CDBG("memory_data [%d] = 0x%X\n", i, memptr[i]);
+
+#if defined(CONFIG_PANTECH_CAMERA) && defined(CONFIG_PANTECH_CAMERA_FRONT_OTP)
+	if(e_ctrl->subdev_id == 0)
+	{
+	  rc = eeprom_match_crc(e_ctrl, eeprom_map);
+	}
+	else if(e_ctrl->subdev_id == 1)
+	{
+	  rc = otp_match_crc(e_ctrl, eeprom_map);
+	}
+#else
+	rc = eeprom_match_crc(e_ctrl, eeprom_map);
+#endif
+
 	return rc;
 
 clean_up:
@@ -440,7 +860,7 @@ static int msm_eeprom_power_up(struct msm_eeprom_ctrl_t *e_ctrl,
 		power_info->cam_vreg, power_info->num_vreg,
 		power_info->power_setting, power_info->power_setting_size);
 	if (rc < 0) {
-		pr_err("%s:%d failed in camera_fill_vreg_params  rc %d",
+		pr_err("%s:%d failed in camera_fill_vreg_params  rc %d\n",
 			__func__, __LINE__, rc);
 		return rc;
 	}
@@ -451,7 +871,7 @@ static int msm_eeprom_power_up(struct msm_eeprom_ctrl_t *e_ctrl,
 		power_info->power_down_setting,
 		power_info->power_down_setting_size);
 	if (rc < 0) {
-		pr_err("%s:%d failed msm_camera_fill_vreg_params for PDOWN rc %d",
+		pr_err("%s:%d failed msm_camera_fill_vreg_params for PDOWN rc %d\n",
 			__func__, __LINE__, rc);
 		return rc;
 	}
@@ -562,6 +982,10 @@ static int eeprom_init_config(struct msm_eeprom_ctrl_t *e_ctrl,
 	rc = eeprom_parse_memory_map(e_ctrl, memory_map_arr);
 	if (rc < 0) {
 		pr_err("%s::%d memory map parse failed\n", __func__, __LINE__);
+#if defined(CONFIG_PANTECH_CAMERA) && defined(CONFIG_PANTECH_CAMERA_FRONT_OTP)
+        pr_err("%s:%d msm_camera_power_down call! \n", __func__, __LINE__);
+        msm_camera_power_down(power_info, e_ctrl->eeprom_device_type, &e_ctrl->i2c_client);
+#endif        
 		goto free_mem;
 	}
 
@@ -620,11 +1044,11 @@ static int msm_eeprom_config(struct msm_eeprom_ctrl_t *e_ctrl,
 		(struct msm_eeprom_cfg_data *)argp;
 	int rc = 0;
 
-	CDBG("%s E\n", __func__);
+	CDBG("%s E  Id %d  type %d\n", __func__,e_ctrl->subdev_id,cdata->cfgtype);
 	switch (cdata->cfgtype) {
 	case CFG_EEPROM_GET_INFO:
 		if (e_ctrl->userspace_probe == 1) {
-			pr_err("%s:%d Eeprom name should be module driver",
+			pr_err("%s:%d Eeprom name should be module driver\n",
 				__func__, __LINE__);
 			rc = -EINVAL;
 			break;
@@ -636,7 +1060,7 @@ static int msm_eeprom_config(struct msm_eeprom_ctrl_t *e_ctrl,
 			sizeof(cdata->cfg.eeprom_name));
 		break;
 	case CFG_EEPROM_GET_CAL_DATA:
-		CDBG("%s E CFG_EEPROM_GET_CAL_DATA\n", __func__);
+		CDBG("%s E CFG_EEPROM_GET_CAL_DATA num : %d\n", __func__,e_ctrl->cal_data.num_data);
 		cdata->cfg.get_data.num_bytes =
 			e_ctrl->cal_data.num_data;
 		break;
@@ -650,7 +1074,7 @@ static int msm_eeprom_config(struct msm_eeprom_ctrl_t *e_ctrl,
 		break;
 	case CFG_EEPROM_INIT:
 		if (e_ctrl->userspace_probe == 0) {
-			pr_err("%s:%d Eeprom already probed at kernel boot",
+			pr_err("%s:%d Eeprom already probed at kernel boot\n",
 				__func__, __LINE__);
 			rc = -EINVAL;
 			break;
@@ -696,7 +1120,7 @@ static long msm_eeprom_subdev_ioctl(struct v4l2_subdev *sd,
 	struct msm_eeprom_ctrl_t *e_ctrl = v4l2_get_subdevdata(sd);
 	void __user *argp = (void __user *)arg;
 	CDBG("%s E\n", __func__);
-	CDBG("%s:%d a_ctrl %p argp %p\n", __func__, __LINE__, e_ctrl, argp);
+	CDBG("%s:%d a_ctrl %pK argp %pK\n", __func__, __LINE__, e_ctrl, argp);
 	switch (cmd) {
 	case VIDIOC_MSM_SENSOR_GET_SUBDEV_ID:
 		return msm_eeprom_get_subdev_id(e_ctrl, argp);
@@ -805,7 +1229,7 @@ static int msm_eeprom_i2c_probe(struct i2c_client *client,
 	}
 	e_ctrl->eeprom_v4l2_subdev_ops = &msm_eeprom_subdev_ops;
 	e_ctrl->eeprom_mutex = &msm_eeprom_mutex;
-	CDBG("%s client = 0x%p\n", __func__, client);
+	CDBG("%s client = 0x%pK\n", __func__, client);
 	e_ctrl->eboard_info = (struct msm_eeprom_board_info *)(id->driver_data);
 	if (!e_ctrl->eboard_info) {
 		pr_err("%s:%d board info NULL\n", __func__, __LINE__);
@@ -1426,6 +1850,10 @@ static int eeprom_init_config32(struct msm_eeprom_ctrl_t *e_ctrl,
 	if (rc < 0) {
 		pr_err("%s:%d memory map parse failed\n",
 			__func__, __LINE__);
+#if defined(CONFIG_PANTECH_CAMERA) && defined(CONFIG_PANTECH_CAMERA_FRONT_OTP)
+        pr_err("%s:%d msm_camera_power_down call! \n", __func__, __LINE__);
+        msm_camera_power_down(power_info, e_ctrl->eeprom_device_type, &e_ctrl->i2c_client);
+#endif        
 		goto free_mem;
 	}
 
@@ -1452,11 +1880,11 @@ static int msm_eeprom_config32(struct msm_eeprom_ctrl_t *e_ctrl,
 		(struct msm_eeprom_cfg_data32 *)argp;
 	int rc = 0;
 
-	CDBG("%s E\n", __func__);
+	CDBG("%s E type %d\n", __func__,cdata->cfgtype);
 	switch (cdata->cfgtype) {
 	case CFG_EEPROM_GET_INFO:
 		if (e_ctrl->userspace_probe == 1) {
-			pr_err("%s:%d Eeprom name should be module driver",
+			pr_err("%s:%d Eeprom name should be module driver\n",
 				__func__, __LINE__);
 			rc = -EINVAL;
 			break;
@@ -1468,7 +1896,7 @@ static int msm_eeprom_config32(struct msm_eeprom_ctrl_t *e_ctrl,
 			sizeof(cdata->cfg.eeprom_name));
 		break;
 	case CFG_EEPROM_GET_CAL_DATA:
-		CDBG("%s E CFG_EEPROM_GET_CAL_DATA\n", __func__);
+		CDBG("%s E CFG_EEPROM_GET_CAL_DATA %d\n", __func__,e_ctrl->cal_data.num_data);
 		cdata->cfg.get_data.num_bytes =
 			e_ctrl->cal_data.num_data;
 		break;
@@ -1478,11 +1906,12 @@ static int msm_eeprom_config32(struct msm_eeprom_ctrl_t *e_ctrl,
 		break;
 	case CFG_EEPROM_INIT:
 		if (e_ctrl->userspace_probe == 0) {
-			pr_err("%s:%d Eeprom already probed at kernel boot",
-				__func__, __LINE__);
+			pr_err("%s:%d Eeprom already probed at kernel boot\n",
+				__func__, __LINE__);			
 			rc = -EINVAL;
 			break;
 		}
+
 		if (e_ctrl->cal_data.num_data == 0) {
 			rc = eeprom_init_config32(e_ctrl, argp);
 			if (rc < 0)
@@ -1508,7 +1937,7 @@ static long msm_eeprom_subdev_ioctl32(struct v4l2_subdev *sd,
 	void __user *argp = (void __user *)arg;
 
 	CDBG("%s E\n", __func__);
-	CDBG("%s:%d a_ctrl %p argp %p\n", __func__, __LINE__, e_ctrl, argp);
+	CDBG("%s:%d a_ctrl %pK argp %pK\n", __func__, __LINE__, e_ctrl, argp);
 	switch (cmd) {
 	case VIDIOC_MSM_SENSOR_GET_SUBDEV_ID:
 		return msm_eeprom_get_subdev_id(e_ctrl, argp);
@@ -1549,7 +1978,9 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 	struct msm_eeprom_board_info *eb_info = NULL;
 	struct device_node *of_node = pdev->dev.of_node;
 	struct msm_camera_power_ctrl_t *power_info = NULL;
-
+#ifdef CONFIG_PANTECH_CAMERA_FRONT_OTP
+	otp_data_type *otp_type = NULL;
+#endif
 	CDBG("%s E\n", __func__);
 
 	e_ctrl = kzalloc(sizeof(*e_ctrl), GFP_KERNEL);
@@ -1623,7 +2054,7 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 	CDBG("%s qcom,eeprom-name %s, rc %d\n", __func__,
 		eb_info->eeprom_name, rc);
 	if (rc < 0) {
-		pr_err("%s failed %d\n", __func__, __LINE__);
+		pr_err("%s failed %d -> set userprobe 1\n", __func__, __LINE__);
 		e_ctrl->userspace_probe = 1;
 	}
 
@@ -1669,17 +2100,45 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 			pr_err("failed rc %d\n", rc);
 			goto memdata_free;
 		}
+#if defined(CONFIG_PANTECH_CAMERA) && defined(CONFIG_PANTECH_CAMERA_FRONT_OTP)
+		if(e_ctrl->cci_master == MASTER_0)
+		{
+		  rc = read_eeprom_memory(e_ctrl, &e_ctrl->cal_data);
+		}
+		else if(e_ctrl->cci_master == MASTER_1)
+		{
+		  otp_type = kzalloc(sizeof(otp_data_type), GFP_KERNEL);
+		  if(!otp_type) 
+		  {
+		    pr_err("%s otp kzalloc failed line %d\n", __func__, __LINE__);
+		    return -ENOMEM;
+		  }
+		  rc = read_eeprom_memory_OTP(e_ctrl, &e_ctrl->cal_data, otp_type); //Cannot read kernel base OTP because GPIO 0..
+		}
+#else
 		rc = read_eeprom_memory(e_ctrl, &e_ctrl->cal_data);
+#endif
 		if (rc < 0) {
 			pr_err("%s read_eeprom_memory failed\n", __func__);
 			goto power_down;
 		}
-		for (j = 0; j < e_ctrl->cal_data.num_data; j++)
+
+		for (j = 0; j < e_ctrl->cal_data.num_data; j++) {
 			CDBG("memory_data[%d] = 0x%X\n", j,
 				e_ctrl->cal_data.mapdata[j]);
-
+		}
+#if defined(CONFIG_PANTECH_CAMERA) && defined(CONFIG_PANTECH_CAMERA_FRONT_OTP)
+		if(e_ctrl->cci_master == MASTER_0)
+		{
+		  e_ctrl->is_supported |= msm_eeprom_match_crc(&e_ctrl->cal_data);
+		}
+		else if(e_ctrl->cci_master == MASTER_1)
+		{
+		  e_ctrl->is_supported |= msm_otp_match_crc(&e_ctrl->cal_data, otp_type);  //Not yet confirmed this case..
+		}
+#else
 		e_ctrl->is_supported |= msm_eeprom_match_crc(&e_ctrl->cal_data);
-
+#endif
 		rc = msm_camera_power_down(power_info,
 			e_ctrl->eeprom_device_type, &e_ctrl->i2c_client);
 		if (rc) {
@@ -1710,7 +2169,7 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 #endif
 
 	e_ctrl->is_supported = (e_ctrl->is_supported << 1) | 1;
-	CDBG("%s X\n", __func__);
+	CDBG("%s X %d\n", __func__,e_ctrl->is_supported);
 	return rc;
 
 power_down:
@@ -1800,6 +2259,9 @@ static int __init msm_eeprom_init_module(void)
 	CDBG("%s E\n", __func__);
 	rc = platform_driver_register(&msm_eeprom_platform_driver);
 	CDBG("%s:%d platform rc %d\n", __func__, __LINE__, rc);
+#ifdef CONFIG_PANTECH_CAMERA
+	return rc;
+#endif
 	rc = spi_register_driver(&msm_eeprom_spi_driver);
 	CDBG("%s:%d spi rc %d\n", __func__, __LINE__, rc);
 	return i2c_add_driver(&msm_eeprom_i2c_driver);

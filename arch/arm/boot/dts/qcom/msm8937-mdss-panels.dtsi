@@ -10,19 +10,51 @@
  * GNU General Public License for more details.
  */
 
-#include "dsi-panel-sim-video.dtsi"
-#include "dsi-panel-sim-cmd.dtsi"
-#include "dsi-panel-truly-1080p-video.dtsi"
-#include "dsi-panel-truly-1080p-cmd.dtsi"
-#include "dsi-panel-r69006-1080p-cmd.dtsi"
-#include "dsi-panel-r69006-1080p-video.dtsi"
-#include "dsi-panel-hx8394f-720p-video.dtsi"
-#include "dsi-adv7533-1080p.dtsi"
-#include "dsi-adv7533-720p.dtsi"
-#include "dsi-panel-truly-720p-video.dtsi"
-#include "dsi-panel-truly-wuxga-video.dtsi"
+#include "dsi-panel-nt35695-1080p-video-ef71.dtsi"
+#include "dsi-panel-nt35695-1080p-cmd-ef71.dtsi"
+//#include "dsi-panel-nt35531-1080p-video-ef78.dtsi"
+//#include "dsi-panel-nt35531-1080p-cmd-ef78.dtsi"
 
 &soc {
+       /* DISPLAY_SKYDISP_LABIBB */ //can not change this. (msm8937-ef71s-tp10.dts) hohi
+	dsi_panel_pwr_supply_labibb: dsi_panel_pwr_supply_labibb {
+		#address-cells = <1>;
+		#size-cells = <0>;
+/* blocked by parksungho
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vddio";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <62000>;
+			qcom,supply-disable-load = <80>;
+		};
+*/
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "lab";
+			qcom,supply-min-voltage = <4600000>;
+			qcom,supply-max-voltage = <6000000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+			qcom,supply-pre-on-sleep = <1>;  /* 1ms to wait tA > 0ms */
+			qcom,supply-post-on-sleep = <10>;  /*  10ms to wait tC-1 > 10ms for AVDD- power stable */
+		};
+
+		qcom,panel-supply-entry@1 {
+			reg = <1>;
+			qcom,supply-name = "ibb";
+			qcom,supply-min-voltage = <4600000>;
+			qcom,supply-max-voltage = <6000000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+			qcom,supply-pre-off-sleep = <2>;  /* 2ms to wait tL > 1ms for AVEE power stable */
+			qcom,supply-post-off-sleep = <1>;  /*  1ms to wait tM > 0ms */
+			/* qcom,supply-post-on-sleep = <10>;  */
+		};
+	};
+	
+
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -35,7 +67,7 @@
 			qcom,supply-enable-load = <100000>;
 			qcom,supply-disable-load = <100>;
 		};
-
+/* blocked by parksungho
 		qcom,panel-supply-entry@1 {
 			reg = <1>;
 			qcom,supply-name = "vddio";
@@ -44,6 +76,156 @@
 			qcom,supply-enable-load = <100000>;
 			qcom,supply-disable-load = <100>;
 		};
+*/
+        };
+};
 
+
+/* DISPLAY_SKYDISP_LABIBB *///can not change this. (msm8937-ef71s-tp10.dts) hohi
+&mdss_dsi0 {
+	lab-supply = <&lab_regulator>;
+	ibb-supply = <&ibb_regulator>;
+};
+
+&mdss_dsi1 {
+	lab-supply = <&lab_regulator>;
+	ibb-supply = <&ibb_regulator>;
+}; 
+
+&labibb {
+	//status = "ok";
+	status = "disabled";
+	qpnp,qpnp-labibb-mode = "lcd";
+};
+
+&ibb_regulator {
+	qcom,qpnp-ibb-discharge-resistor = <32>;
+};
+
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi {
+	hw-config = "single_dsi";
+};
+
+
+
+//qualcomm
+/*
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_nt35695_1080p_video_ef71>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+
+	qcom,platform-te-gpio = <&tlmm 24 0>;
+	qcom,platform-enable-gpio = <&tlmm 50 0>;
+	qcom,platform-reset-gpio = <&tlmm 60 0>;
+	qcom,platform-bklight-en-gpio = <&tlmm 35 0>;
+};
+
+&mdss_dsi1 {
+	status = "disabled";
+	qcom,dsi-pref-prim-pan = <&dsi_nt35695_1080p_video_ef71>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+
+	qcom,platform-te-gpio = <&tlmm 24 0>;
+	qcom,platform-enable-gpio = <&tlmm 50 0>;
+	qcom,platform-reset-gpio = <&tlmm 60 0>;
+	qcom,platform-bklight-en-gpio = <&tlmm 35 0>;
+};
+*/
+
+
+
+//video mode
+/*
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_nt35695_1080p_video_ef71>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active >;
+	pinctrl-1 = <&mdss_dsi_suspend>;
+	
+	qcom,platform-reset-gpio = <&tlmm 60 0>;
+       qcom,platform-bl-en-gpio = <&tlmm 35 0>;
+       qcom,platform-vcip-reg-gpio = <&tlmm 13 0>;
+       qcom,platform-vcip-reg-mpps = <&pmi8950_mpps 3 0>;
+       qcom,platform-vddio-switch-gpio = <&tlmm 50 0>;
+}; 
+
+&mdss_dsi1 {
+	status = "disabled";
+	qcom,dsi-pref-prim-pan = <&dsi_nt35695_1080p_video_ef71>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active>;
+	pinctrl-1 = <&mdss_dsi_suspend>;
+	
+	qcom,platform-reset-gpio = <&tlmm 60 0>;
+       qcom,platform-bl-en-gpio = <&tlmm 35 0>;
+       qcom,platform-vcip-reg-gpio = <&tlmm 13 0>;
+       qcom,platform-vcip-reg-mpps = <&pmi8950_mpps 3 0>;
+       qcom,platform-vddio-switch-gpio = <&tlmm 50 0>;
+};
+
+&dsi_nt35695_1080p_video_ef71 {
+       // DISPLAY_SKYDISP_LABIBB 
+       //qcom,panel-supply-entries = <&dsi_panel_pwr_supply_labibb>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,cont-splash-enabled;
+};
+*/
+
+
+//command mode
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_nt35695_1080p_cmd_ef71>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	
+	qcom,platform-te-gpio = <&tlmm 24 0>;
+	qcom,platform-reset-gpio = <&tlmm 60 0>;
+       qcom,platform-bl-en-gpio = <&tlmm 35 0>;
+       qcom,platform-vcip-reg-gpio = <&tlmm 13 0>;
+       qcom,platform-vcip-reg-mpps = <&pmi8950_mpps 3 0>;
+       qcom,platform-vddio-switch-gpio = <&tlmm 50 0>;
+}; 
+
+&mdss_dsi1 {
+	status = "disabled";
+	qcom,dsi-pref-prim-pan = <&dsi_nt35695_1080p_cmd_ef71>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	
+	qcom,platform-te-gpio = <&tlmm 24 0>;
+	qcom,platform-reset-gpio = <&tlmm 60 0>;
+       qcom,platform-bl-en-gpio = <&tlmm 35 0>;
+       qcom,platform-vcip-reg-gpio = <&tlmm 13 0>;
+       qcom,platform-vcip-reg-mpps = <&pmi8950_mpps 3 0>;
+       qcom,platform-vddio-switch-gpio = <&tlmm 50 0>;
+};
+
+&dsi_nt35695_1080p_cmd_ef71 {
+       // DISPLAY_SKYDISP_LABIBB 
+       //qcom,panel-supply-entries = <&dsi_panel_pwr_supply_labibb>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,cont-splash-enabled;
+};
+
+
+&pmi8950_mpps {
+	mpp@a200 { 
+		qcom,mode = <1>;	
+		qcom,vin-sel = <2>;	
+		qcom,src-sel = <0>; 
+		qcom,master-en = <1>;
+		status = "okay";
 	};
 };
+

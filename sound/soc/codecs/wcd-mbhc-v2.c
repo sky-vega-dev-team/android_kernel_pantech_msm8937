@@ -67,6 +67,20 @@ enum wcd_mbhc_cs_mb_en_flag {
 	WCD_MBHC_EN_NONE,
 };
 
+#ifdef CONFIG_PANTECH_SND_BOOTUP_HEADSET_INFO
+static int headset_jack_status = 0;
+
+int wcd9xxx_headsetJackStatusGet(void)
+{
+	return headset_jack_status;
+}
+#endif
+
+#ifdef CONFIG_PANTECH_SND //check headset impedance    
+extern int headset_impedance;
+extern int headset_impedanceL;
+extern int headset_impedanceR;
+#endif
 static void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 				struct snd_soc_jack *jack, int status, int mask)
 {
@@ -586,6 +600,15 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 		mbhc->zl = mbhc->zr = 0;
 		pr_debug("%s: Reporting removal %d(%x)\n", __func__,
 			 jack_type, mbhc->hph_status);
+
+#ifdef CONFIG_PANTECH_SND_BOOTUP_HEADSET_INFO
+		headset_jack_status = 0;
+#endif
+#ifdef CONFIG_PANTECH_SND //check headset impedance
+              headset_impedance = 0;
+              headset_impedanceL = 0;
+              headset_impedanceR = 0;
+#endif
 		wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
 				mbhc->hph_status, WCD_MBHC_JACK_MASK);
 		wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
@@ -618,6 +641,14 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			mbhc->zl = mbhc->zr = 0;
 			pr_debug("%s: Reporting removal (%x)\n",
 				 __func__, mbhc->hph_status);
+#ifdef CONFIG_PANTECH_SND_BOOTUP_HEADSET_INFO
+		headset_jack_status = 0;
+#endif
+#ifdef CONFIG_PANTECH_SND //check headset impedance
+              headset_impedance = 0;
+              headset_impedanceL = 0;
+              headset_impedanceR = 0;
+#endif
 			wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
 					    0, WCD_MBHC_JACK_MASK);
 
@@ -664,6 +695,7 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			(mbhc->mbhc_cfg->linein_th != 0)) {
 				mbhc->mbhc_cb->compute_impedance(mbhc,
 						&mbhc->zl, &mbhc->zr);
+#ifndef CONFIG_PANTECH_SND_QCOM_PATCH //[PATCH] ASoC: wcd-mbhc: high impedance detection //Do not detect 3pole aux to detect jut 3pole headphone  
 			if ((mbhc->zl > mbhc->mbhc_cfg->linein_th &&
 				mbhc->zl < MAX_IMPED) &&
 				(mbhc->zr > mbhc->mbhc_cfg->linein_th &&
@@ -683,12 +715,16 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 				pr_debug("%s: Marking jack type as SND_JACK_LINEOUT\n",
 				__func__);
 			}
+#endif     
 		}
 
 		mbhc->hph_status |= jack_type;
 
 		pr_debug("%s: Reporting insertion %d(%x)\n", __func__,
 			 jack_type, mbhc->hph_status);
+#ifdef CONFIG_PANTECH_SND_BOOTUP_HEADSET_INFO
+		headset_jack_status = jack_type;
+#endif         
 		wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
 				    (mbhc->hph_status | SND_JACK_MECHANICAL),
 				    WCD_MBHC_JACK_MASK);
@@ -1594,7 +1630,11 @@ static int wcd_mbhc_get_button_mask(struct wcd_mbhc *mbhc)
 		mask = SND_JACK_BTN_0;
 		break;
 	case 1:
-		mask = SND_JACK_BTN_1;
+#ifdef CONFIG_PANTECH_SND // pantech don't use BTN_1 for voice searching.        
+		mask = SND_JACK_BTN_2;
+#else
+		mask = SND_JACK_BTN_1;    
+#endif
 		break;
 	case 2:
 		mask = SND_JACK_BTN_2;
@@ -2179,7 +2219,11 @@ int wcd_mbhc_set_keycode(struct wcd_mbhc *mbhc)
 				type = SND_JACK_BTN_0;
 				break;
 			case 1:
+#ifdef CONFIG_PANTECH_SND // pantech don't use BTN_1 for voice searching.                
+				type = SND_JACK_BTN_2;
+#else
 				type = SND_JACK_BTN_1;
+#endif
 				break;
 			case 2:
 				type = SND_JACK_BTN_2;

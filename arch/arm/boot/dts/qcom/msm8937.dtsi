@@ -61,7 +61,6 @@
 			reusable;
 			alignment = <0 0x400000>;
 			size = <0 0x7000000>;
-			status = "disabled";
 		};
 
 		qseecom_mem: qseecom_region@0 {
@@ -99,10 +98,13 @@
 		smd36 = &smdtty_loopback;
 		i2c2 = &i2c_2;
 		i2c5 = &i2c_5;
+		i2c1 = &i2c_1;
 		spi3 = &spi_3;
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 for SD card */
 		i2c3 = &i2c_3;
+		i2c6 = &i2c_6;
+		i2c8 = &i2c_8;
 	};
 
 	soc: soc { };
@@ -478,6 +480,32 @@
 		qcom,summing-threshold = <10>;
 	};
 
+	i2c_1: i2c@78b5000 { /* BLSP1 QUP1 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x78b5000 0x600>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 95 0>;
+		qcom,clk-freq-out = <400000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp1_qup1_i2c_apps_clk>;
+
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_1_active>;
+		pinctrl-1 = <&i2c_1_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,master-id = <86>;
+		dmas = <&dma_blsp1 4 64 0x20000020 0x20>,
+			<&dma_blsp1 5 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+
+	};
+
 	i2c_2: i2c@78b6000 { /* BLSP1 QUP2 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
@@ -516,6 +544,7 @@
 		/* DSI_TO_HDMI I2C configuration */
 		adv7533@39 {
 			compatible = "adv7533";
+			status = "disabled";
 			reg = <0x39>;
 			instance_id = <0>;
 			adi,video-mode = <3>; /* 3 = 1080p */
@@ -585,6 +614,58 @@
 		dmas = <&dma_blsp2 4 64 0x20000020 0x20>,
 			<&dma_blsp2 5 32 0x20000020 0x20>;
 		dma-names = "tx", "rx";
+	};
+
+	i2c_6: i2c@7af6000 { /* BLSP2 QUP2 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x7af6000 0x600>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 300 0>;
+		qcom,clk-freq-out = <400000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp2_qup2_i2c_apps_clk>;
+
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_6_active>;
+		pinctrl-1 = <&i2c_6_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,master-id = <84>;
+		dmas = <&dma_blsp2 6 64 0x20000020 0x20>,
+			<&dma_blsp2 7 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+		status = "disabled";
+	};
+
+	i2c_8: i2c@7af8000 { /* BLSP2 QUP4 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x7af8000 0x600>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 302 0>;
+		qcom,clk-freq-out = <400000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp2_qup4_i2c_apps_clk>;
+
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_8_active>;
+		pinctrl-1 = <&i2c_8_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,master-id = <84>;
+		dmas = <&dma_blsp2 10 64 0x20000020 0x20>,
+			<&dma_blsp2 11 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+		status = "disabled";
 	};
 
 	spi_3: spi@78b7000 { /* BLSP1 QUP3 */
@@ -1914,7 +1995,8 @@
 #include "msm-gdsc-8916.dtsi"
 #include "msm8937-camera.dtsi"
 #include "msm-audio.dtsi"
-#include "msm8937-audio.dtsi"
+#include "msm8937-audio.dtsi" //FEATURE_PANTECH_SND
+//#include "msm8937-ef71-ext-codec.dtsi" //FEATURE_PANTECH_SND
 #include "msm8937-mdss.dtsi"
 #include "msm8937-mdss-pll.dtsi"
 
@@ -1988,3 +2070,84 @@
 	clocks = <&clock_gcc clk_gcc_oxili_gfx3d_clk>;
 	status = "okay";
 };
+//FEATURE_PANTECH_SND START
+&ext_codec {
+	status = "okay";	
+};
+
+&wcd9335 {
+	status = "okay";	
+};
+
+&dai_slim {
+	status = "okay";	
+};
+
+&slim_msm {
+       status = "okay";
+};
+
+&wcd9xxx_intc {
+       status = "okay";
+};
+
+&clock_audio {
+       status = "okay";
+};
+
+//FEATURE_PANTECH_SND_QCOM_PATCH START
+&wcd_rst_gpio {
+	status = "okay";
+};
+//FEATURE_PANTECH_SND_QCOM_PATCH END
+
+&int_codec {
+	status = "disabled";
+};
+
+&pm8937_cajon_dig {
+	status = "disabled";
+};
+
+&pm8937_cajon_analog {
+	status = "disabled";
+};
+
+&wsa881x_i2c_e {
+	status = "disabled";
+};
+
+&wsa881x_i2c_44 {
+	status = "disabled";
+};
+
+&wsa881x_i2c_f {
+	status = "disabled";
+};
+
+&wsa881x_i2c_45 {
+	status = "disabled";
+};
+
+&pm8937_gpios {
+	gpio@c000 {
+		status = "ok";
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <2>;
+		qcom,master-en = <1>;
+		qcom,out-strength = <2>;
+	};
+	gpio@c600 {
+		status = "ok";
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		qcom,out-strength = <2>;
+	};
+};
+//FEATURE_PANTECH_SND END
+

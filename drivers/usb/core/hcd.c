@@ -2849,6 +2849,9 @@ void usb_remove_hcd(struct usb_hcd *hcd)
 	usb_get_dev(rhdev);
 	sysfs_remove_group(&rhdev->dev.kobj, &usb_bus_attr_group);
 
+#if defined(CONFIG_ANDROID_PANTECH_USB_OTG_INTENT)
+	clear_bit(HCD_FLAG_DEAD, &hcd->flags);
+#endif
 	clear_bit(HCD_FLAG_RH_RUNNING, &hcd->flags);
 	if (HC_IS_RUNNING (hcd->state))
 		hcd->state = HC_STATE_QUIESCING;

@@ -12,4 +12,12 @@ config SWITCH_GPIO
 	help
 	  Say Y here to enable GPIO based switch support.
 
+config SWITCH_SKY
+	tristate "SKY SWITCH DRIVER"
+	depends on GPIOLIB
+	default y
+	help
+	  Say Y here if you have a SKY_SWITCH o enable
+	  support for the built-in SKY_SWITCH.
+
 endif # SWITCH

@@ -282,6 +282,7 @@
 			      "dsi_phy_regulator", "mmss_misc_phys";
 
 			qcom,timing-db-mode;
+
 			qcom,mdss-mdp = <&mdss_mdp>;
 			vdd-supply = <&pm8937_l17>;
 			vddio-supply = <&pm8937_l6>;
@@ -319,7 +320,7 @@
 			qcom,mdss-mdp = <&mdss_mdp>;
 			vdd-supply = <&pm8937_l17>;
 			vddio-supply = <&pm8937_l6>;
-
+                     
 			clocks = <&clock_gcc_mdss clk_gcc_mdss_byte1_clk>,
 				<&clock_gcc_mdss clk_gcc_mdss_pclk1_clk>,
 				<&clock_gcc clk_gcc_mdss_esc1_clk>,

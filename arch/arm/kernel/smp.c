@@ -671,6 +671,9 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 		break;
 
 	case IPI_CPU_STOP:
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING 
+		__save_regs_and_mmu(regs, false);
+#endif
 		irq_enter();
 		ipi_cpu_stop(cpu);
 		irq_exit();

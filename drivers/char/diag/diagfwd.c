@@ -53,6 +53,7 @@ module_param(timestamp_switch, int, 0644);
 
 int wrap_enabled;
 uint16_t wrap_count;
+
 static struct diag_hdlc_decode_type *hdlc_decode;
 
 #define DIAG_NUM_COMMON_CMD	1

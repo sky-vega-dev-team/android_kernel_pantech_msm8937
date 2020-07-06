@@ -21,6 +21,9 @@
 #include <linux/log2.h>
 #include <linux/of.h>
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#include <mach/pantech_apanic.h>
+#endif
 #define PON_CNTL_1 0x1C
 #define PON_CNTL_PULL_UP BIT(7)
 #define PON_CNTL_TRIG_DELAY_MASK (0x7)
@@ -39,7 +42,9 @@ static irqreturn_t pwrkey_press_irq(int irq, void *_pwr)
 
 	input_report_key(pwr, KEY_POWER, 1);
 	input_sync(pwr);
-
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	pantech_force_dump_key(KEY_POWER, 1);
+#endif
 	return IRQ_HANDLED;
 }
 
@@ -50,6 +55,9 @@ static irqreturn_t pwrkey_release_irq(int irq, void *_pwr)
 	input_report_key(pwr, KEY_POWER, 0);
 	input_sync(pwr);
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	pantech_force_dump_key(KEY_POWER, 0);
+#endif
 	return IRQ_HANDLED;
 }
 

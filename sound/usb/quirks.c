@@ -168,6 +168,13 @@ static int create_fixed_stream_quirk(struct snd_usb_audio *chip,
 	}
 	alts = &iface->altsetting[fp->altset_idx];
 	altsd = get_iface_desc(alts);
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //20170105 BS1@SND - ALSA: usb-audio: Fix NULL dereference (Google Security patch CVE-2016-2184)
+	if (altsd->bNumEndpoints < 1) {
+		kfree(fp);
+		kfree(rate_table);
+		return -EINVAL;
+	}
+#endif
 	fp->protocol = altsd->bInterfaceProtocol;
 
 	if (fp->datainterval == 0)

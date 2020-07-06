@@ -28,6 +28,10 @@
 #include <linux/hrtimer.h>
 #include <linux/power_supply.h>
 #include <linux/cdev.h>
+
+#ifdef CONFIG_ANDROID_PANTECH_USB_OTG_INTENT
+#include <linux/switch.h>
+#endif
 /*
  * The following are bit fields describing the usb_request.udc_priv word.
  * These bit fields are set by function drivers that wish to queue
@@ -156,6 +160,9 @@ enum usb_chg_type {
 	USB_CDP_CHARGER,
 	USB_PROPRIETARY_CHARGER,
 	USB_FLOATED_CHARGER,
+#if defined(CONFIG_PANTECH_USB_CHARGER_WIRELESS) && defined(CONFIG_PANTECH_PMIC_CHARGER_WIRELESS)
+	PT_WIRELESS_CHARGER,
+#endif
 };
 
 /**
@@ -315,6 +322,9 @@ struct msm_otg_platform_data {
 	bool enable_axi_prefetch;
 	bool enable_sdp_typec_current_limit;
 	struct clk *system_clk;
+#ifdef CONFIG_PANTECH_USB_OTG_EN_CONTROL
+	int otg_en_gpio;
+#endif
 };
 
 /* phy related flags */
@@ -532,6 +542,13 @@ struct msm_otg {
 	char (buf[DEBUG_MAX_MSG])[DEBUG_MSG_LEN];   /* buffer */
 	u32 max_nominal_system_clk_rate;
 	unsigned int vbus_state;
+#ifdef CONFIG_ANDROID_PANTECH_USB_OTG_INTENT
+	struct switch_dev sdev_otg;
+	struct switch_dev sdev_otg_dev;
+#endif
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+	struct delayed_work connect_work;
+#endif	
 };
 
 struct ci13xxx_platform_data {

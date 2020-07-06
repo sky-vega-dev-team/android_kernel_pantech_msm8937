@@ -12,7 +12,7 @@
  */
 
 #include "msm8937-pinctrl.dtsi"
-#include "msm8937-camera-sensor-mtp.dtsi"
+/*changed by CONFIG_PANTECH_CAMERA #include "msm8937-camera-sensor-mtp.dtsi"*/
 
 &flash_led {
 	compatible = "qcom,qpnp-flash-led";
@@ -28,6 +28,7 @@
 };
 
 &soc {
+/*
 	gpio_keys {
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";
@@ -59,14 +60,17 @@
 			debounce-interval = <15>;
 		};
 	};
-
+*/
+/*
 	hbtp {
+		status = "disabled";
 		compatible = "qcom,hbtp-input";
 		vcc_dig-supply = <&pm8937_l5>;
 		qcom,dig-load = <15000>;
 		qcom,dig-vtg-min = <1800000>;
 		qcom,dig-vtg-max = <1800000>;
 	};
+*/	
 };
 
 &blsp1_uart2 {
@@ -76,8 +80,7 @@
 };
 
 &pmi_haptic{
-	qcom,wave-play-rate-us = <4165>;
-	qcom,actuator-type = "lra";
+	status = "ok";
 };
 
 &spi_3 { /* BLSP1 QUP3 */
@@ -103,7 +106,8 @@
 	};
 };
 
-&i2c_5 { /* BLSP2 QUP1 */
+/*
+&i2c_5 { // BLSP2 QUP1
 	nq@28 {
 		compatible = "qcom,nq-nci";
 		reg = <0x28>;
@@ -122,6 +126,7 @@
 		clock-names = "ref_clk";
 	};
 };
+*/
 
 &sdhc_1 {
 	/* device core power supply */
@@ -181,6 +186,7 @@
 	status = "ok";
 };
 
+/*
 &pm8937_gpios {
 	gpio@c400 {
 		qcom,mode = <0>;
@@ -193,9 +199,10 @@
 		status = "okay";
 	};
 };
+*/
 
 #include "msm8937-mdss-panels.dtsi"
-
+/*
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
 };
@@ -247,17 +254,9 @@
 	qcom,mdss-dsi-pan-enable-dynamic-fps;
 	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
 };
-
-/* PM8937 GPIO configuration */
-&pm8937_gpios {
-	gpio@c100 {
-		qcom,mode = <0>;
-		qcom,vin-sel = <3>;
-		qcom,dtest-sel = <1>;
-		status = "okay";
-	};
-};
-
+*/
+/*
 &qpdi {
 	qcom,pmic-carddetect-gpio = <&pm8937_gpios 0x2 0>;
 };
+*/

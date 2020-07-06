@@ -1,0 +1,152 @@
+if CUST_PANTECH_H
+
+###################################################
+# PANTECH LCD Feature Section                     #
+#                                                 #
+###################################################
+# * Defined LCD common feature                    # 
+###################################################
+config MACH_MSM8937_LCD_COMMON
+	bool
+	default y
+	#select F_SKYDISP_LCD_RESET
+	#select F_SKYDISP_LCD_FORCE_ONOFF        
+	#select F_SKYDISP_BACKLIGHT_DEBUG
+	select F_SKYDISP_SILENT_BOOT
+	#select F_SKYDISP_CMDS_CONTROL
+	#select F_SKYDISP_BACKLIGHT_CMDS_CTL
+	select F_SKYDISP_FACTORY_SLEEP_ENABLE
+###################################################
+# * Defined LCD board feature                     # 
+###################################################
+if MACH_MSM8937_EF71S
+config DEFINE_LIST_EF71S
+	bool
+	default y
+	select F_SKYDISP_EF71_SS
+	select F_SKYDISP_CABC_CONTROL
+	#select F_SKYDISP_SHARPNESS_CTRL
+	select F_SKYDISP_BACKLIGHT_CMDS_CTL
+	select F_SKYDISP_GAMMA_CONTROL
+endif
+
+if MACH_MSM8937_EF71IE
+config DEFINE_LIST_EF71IE
+	bool
+	default y
+	select F_SKYDISP_EF71_SS
+	select F_SKYDISP_CABC_CONTROL
+	#select F_SKYDISP_SHARPNESS_CTRL
+	select F_SKYDISP_BACKLIGHT_CMDS_CTL
+endif
+
+if MACH_MSM8937_EF71K
+config DEFINE_LIST_EF71K
+	bool
+	default y
+	select F_SKYDISP_EF71_SS
+	select F_SKYDISP_CABC_CONTROL
+	#select F_SKYDISP_SHARPNESS_CTRL
+	select F_SKYDISP_BACKLIGHT_CMDS_CTL
+	select F_SKYDISP_GAMMA_CONTROL	
+endif
+
+##############################################################
+##############################################################
+#               PANTECH  FEARTURE                            # 
+#                                                            #
+##############################################################
+##############################################################      
+
+##############################################################
+# owner  : p14974          
+# date    : 2014.12.24 
+# PLM    : 
+# Case  :       
+# Description : EF78 model LCD common
+##############################################################
+config F_SKYDISP_EF71_SS
+	bool
+
+##############################################################
+# owner  : p13832   seunghwa_ji       
+# date    : 2013.04.11 
+# PLM    : 
+# Case  :       
+# Description : it is for cabc control
+##############################################################
+config F_SKYDISP_CABC_CONTROL
+	bool
+
+##############################################################
+# owner  : 
+# date    : 2016.04.14
+# PLM    :
+# Case  :
+# Description : it is for gamma control
+##############################################################
+config F_SKYDISP_GAMMA_CONTROL
+        bool
+
+
+##############################################################
+# owner  : p13832 seunghwa_ji         
+# date    : 2013.04.30
+# PLM    : 
+# Case  :       
+# Description :  it's for silentboot
+##############################################################
+config F_SKYDISP_SILENT_BOOT
+	bool
+
+##############################################################
+# owner  : p13447 shin jaegon    
+# date    : 2013.05.02 
+# PLM    : 
+# Case  :       
+# Description : Added codes for factory command ("FACTORY_SLEEP_ENABLE_I") 
+##############################################################
+config F_SKYDISP_FACTORY_SLEEP_ENABLE
+	bool
+
+##############################################################
+# owner  : p10443          
+# date    : 2013.06.27 
+# PLM    : 
+# Case  :       
+# Description : EF56/EF59/EF60/61/62 sharpness control
+##############################################################
+config F_SKYDISP_SHARPNESS_CTRL
+	bool
+
+##############################################################
+# owner  : p13832    
+# date    : 2013.07.02 
+# PLM    : 
+# Case  :       
+# Description : LCD cmds Test
+##############################################################
+config F_SKYDISP_CMDS_CONTROL
+	bool
+
+##############################################################
+# owner  : p13832    
+# date    : 2013.08.19 
+# PLM    : 
+# Case  :       
+# Description : backlight on/off
+##############################################################
+config F_SKYDISP_BACKLIGHT_CMDS_CTL
+	bool
+
+
+##############################################################
+##############################################################
+#               QUALCOMM FEARTURE                 	         # 
+#							                                 #
+##############################################################
+##############################################################
+
+	
+endif
+

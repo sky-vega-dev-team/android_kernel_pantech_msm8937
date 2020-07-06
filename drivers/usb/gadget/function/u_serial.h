@@ -81,8 +81,10 @@ void gserial_disconnect(struct gserial *);
 int gsmd_setup(struct usb_gadget *g, unsigned n_ports);
 int gsmd_connect(struct gserial *, u8 port_num);
 void gsmd_disconnect(struct gserial *, u8 portno);
+#ifndef CONFIG_PANTECH_USB_BUG_FIX
 void gsmd_suspend(struct gserial *, u8 port_num);
 void gsmd_resume(struct gserial *, u8 port_num);
+#endif
 int gsmd_write(u8 portno, char *buf, unsigned int size);
 
 /* functions are bound to configurations by a config or gadget driver */

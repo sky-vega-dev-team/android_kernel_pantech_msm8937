@@ -617,7 +617,7 @@ void msm_isp_check_for_output_error(struct vfe_device *vfe_dev,
 	int i;
 
 	if (!vfe_dev || !sof_info) {
-		pr_err("%s %d failed: vfe_dev %p sof_info %p\n", __func__,
+		pr_err("%s %d failed: vfe_dev %pK sof_info %pK\n", __func__,
 			__LINE__, vfe_dev, sof_info);
 		return;
 	}
@@ -1172,7 +1172,7 @@ static int  msm_isp_axi_stream_enable_cfg(
 				!dual_vfe_res->axi_data[ISP_VFE0] ||
 				!dual_vfe_res->vfe_base[ISP_VFE1] ||
 				!dual_vfe_res->axi_data[ISP_VFE1]) {
-				pr_err("%s:%d failed vfe0 %p %p vfe %p %p\n",
+				pr_err("%s:%d failed vfe0 %pK %pK vfe %pK %pK\n",
 					__func__, __LINE__,
 					dual_vfe_res->vfe_base[ISP_VFE0],
 					dual_vfe_res->axi_data[ISP_VFE0],
@@ -1367,6 +1367,37 @@ void msm_isp_axi_cfg_update(struct vfe_device *vfe_dev,
 			&axi_data->axi_cfg_update[frame_src]);
 }
 
+#if 0//debugging patch // F_PANTECH_CAMERA_QBUG_ISP_PINGPONG_MISMATCH	
+static int msm_isp_update_sw_ping_pong_bit(struct vfe_device *vfe_dev,
+	struct msm_vfe_axi_stream *stream_info, uint32_t pingpong_bit)
+{
+	int rc = 0;
+        if (!stream_info->controllable_output) {
+                trace_printk("update pingpong bit %d, for stream 0x%x, sw pingpong bit (%d), on vfe %d\n",
+                        pingpong_bit,
+                        stream_info->stream_id,
+                        stream_info->sw_ping_pong_bit,
+                        vfe_dev->pdev->id);
+                if (pingpong_bit != stream_info->sw_ping_pong_bit) {
+                        pr_err("%s:%d ping pong bit actual %d sw %d on hal1 stream 0x%x, vfe %d\n",
+                                __func__, __LINE__, pingpong_bit,
+                                stream_info->sw_ping_pong_bit,
+                                stream_info->stream_id,
+                                vfe_dev->pdev->id);
+
+                        trace_printk("ERR: ping pong bit mismatch: actual %d, sw %d, on hal1 stream 0x%x, vfe %d\n",
+                                pingpong_bit, stream_info->sw_ping_pong_bit,
+                                stream_info->stream_id,
+                                vfe_dev->pdev->id);
+
+                        rc = -1;
+                } else
+			stream_info->sw_ping_pong_bit ^= 1;
+        }
+	return rc;
+}
+#endif
+
 static int msm_isp_update_deliver_count(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_stream *stream_info, uint32_t pingpong_bit)
 {
@@ -1555,7 +1586,7 @@ static int msm_isp_cfg_ping_pong_address(struct vfe_device *vfe_dev,
 			!dual_vfe_res->axi_data[ISP_VFE0] ||
 			!dual_vfe_res->vfe_base[ISP_VFE1] ||
 			!dual_vfe_res->axi_data[ISP_VFE1]) {
-			pr_err("%s:%d failed vfe0 %p %p vfe %p %p\n",
+			pr_err("%s:%d failed vfe0 %pK %pK vfe %pK %pK\n",
 				__func__, __LINE__,
 				dual_vfe_res->vfe_base[ISP_VFE0],
 				dual_vfe_res->axi_data[ISP_VFE0],
@@ -1805,6 +1836,9 @@ static int msm_isp_process_done_buf(struct vfe_device *vfe_dev,
 		ISP_DBG("%s: vfe_id %d send buf done buf-id %d bufq %x\n",
 			__func__, vfe_dev->pdev->id, buf->buf_idx,
 			buf->bufq_handle);
+#if 1//defCONFIG_PANTECH_CAMERA//F_PANTECH_CAMERA_QCOM_PATCH_CTS_BURSTREPROCESSING//wsyang_debug //#02404555
+//pr_err("%s: BUF_DONE frameID:%d\n", __func__, frame_id);
+#endif
 		msm_isp_send_event(vfe_dev, ISP_EVENT_BUF_DONE,
 			&buf_event);
 		buf->buf_debug.put_state[
@@ -1835,7 +1869,7 @@ int msm_isp_drop_frame(struct vfe_device *vfe_dev,
 	uint32_t pingpong_bit;
 
 	if (!vfe_dev || !stream_info || !ts || !sof_info) {
-		pr_err("%s %d vfe_dev %p stream_info %p ts %p op_info %p\n",
+		pr_err("%s %d vfe_dev %pK stream_info %pK ts %pK op_info %pK\n",
 			 __func__, __LINE__, vfe_dev, stream_info, ts,
 			sof_info);
 		return -EINVAL;
@@ -2123,7 +2157,7 @@ int msm_isp_axi_reset(struct vfe_device *vfe_dev,
 	unsigned long flags;
 
 	if (!reset_cmd) {
-		pr_err("%s: NULL pointer reset cmd %p\n", __func__, reset_cmd);
+		pr_err("%s: NULL pointer reset cmd %pK\n", __func__, reset_cmd);
 		rc = -1;
 		return rc;
 	}
@@ -2203,6 +2237,9 @@ int msm_isp_axi_restart(struct vfe_device *vfe_dev,
 		spin_lock_irqsave(&stream_info->lock, flags);
 		msm_isp_init_stream_ping_pong_reg(vfe_dev, stream_info);
 		spin_unlock_irqrestore(&stream_info->lock, flags);
+#if 0//debugging patch // F_PANTECH_CAMERA_QBUG_ISP_PINGPONG_MISMATCH
+		stream_info->sw_ping_pong_bit = 0;
+#endif
 	}
 	vfe_dev->hw_info->vfe_ops.axi_ops.reload_wm(vfe_dev,
 		vfe_dev->vfe_base, wm_reload_mask);
@@ -2480,8 +2517,14 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 		spin_unlock_irqrestore(&stream_info->lock, flags);
 
 		stream_info->state = START_PENDING;
+#if 0//debugging patch // F_PANTECH_CAMERA_QBUG_ISP_PINGPONG_MISMATCH
+		trace_printk("start axi Stream 0x%x src_state %d type %d vfe %d\n",
+ 			stream_info->stream_id, src_state,
+ 			stream_info->stream_type, vfe_dev->pdev->id);
+#else
 		ISP_DBG("%s, Stream 0x%x src_state %d on vfe %d\n", __func__,
 			stream_info->stream_id, src_state, vfe_dev->pdev->id);
+#endif
 		if (src_state) {
 			src_mask |= (1 << SRC_TO_INTF(stream_info->stream_src));
 			wait_for_complete = 1;
@@ -2519,6 +2562,9 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 					stream_info->stream_src)].active = 1;
 			}
 		}
+#if 0//debugging patch // F_PANTECH_CAMERA_QBUG_ISP_PINGPONG_MISMATCH
+		stream_info->sw_ping_pong_bit = 0;
+#endif
 	}
 	msm_isp_update_stream_bandwidth(vfe_dev);
 	vfe_dev->hw_info->vfe_ops.axi_ops.reload_wm(vfe_dev,
@@ -2578,7 +2624,12 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 		wait_for_complete_for_this_stream = 0;
 
 		stream_info->state = STOP_PENDING;
+#if 0//debugging patch // F_PANTECH_CAMERA_QBUG_ISP_PINGPONG_MISMATCH
+		trace_printk("Stop axi Stream 0x%x on vfe %d\n",
+			stream_info->stream_id, vfe_dev->pdev->id);
+#else
 		ISP_DBG("Stop axi Stream 0x%x\n", stream_info->stream_id);
+#endif
 		if (stream_info->stream_src == CAMIF_RAW ||
 			stream_info->stream_src == IDEAL_RAW) {
 			/* We dont get reg update IRQ for raw snapshot
@@ -2603,10 +2654,17 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 				(!ext_read))
 				wait_for_complete_for_this_stream = 1;
 		}
+#if 0//debugging patch // F_PANTECH_CAMERA_QBUG_ISP_PINGPONG_MISMATCH
+		trace_printk("vfe_dev %d camif_update %d wait %d\n",
+			vfe_dev->pdev->id,
+			camif_update,
+			wait_for_complete_for_this_stream);
+#else
 		ISP_DBG("%s: vfe_dev %d camif_update %d wait %d\n", __func__,
 			vfe_dev->pdev->id,
 			camif_update,
 			wait_for_complete_for_this_stream);
+#endif
 		intf = SRC_TO_INTF(stream_info->stream_src);
 		if (!wait_for_complete_for_this_stream ||
 			stream_info->state == INACTIVE ||
@@ -2734,6 +2792,10 @@ int msm_isp_cfg_axi_stream(struct vfe_device *vfe_dev, void *arg)
 	}
 
 	if (axi_data->num_active_stream == 0) {
+#ifdef CONFIG_PANTECH_CAMERA//F_PANTECH_CAMERA_QCOM_PATCH_CTS_BURSTREPROCESSING
+pr_err("%s: reset_hw(vfe_dev, 0, 1) call !!\n", __func__);
+        vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev, 0, 1);
+#endif
 		/*Configure UB*/
 		vfe_dev->hw_info->vfe_ops.axi_ops.cfg_ub(vfe_dev);
 		/*when start reset overflow state*/
@@ -2786,7 +2848,7 @@ static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
 	struct msm_isp_timestamp timestamp;
 
 	if (!vfe_dev || !stream_info) {
-		pr_err("%s %d failed: vfe_dev %p stream_info %p\n", __func__,
+		pr_err("%s %d failed: vfe_dev %pK stream_info %pK\n", __func__,
 			__LINE__, vfe_dev, stream_info);
 		return -EINVAL;
 	}
@@ -2864,7 +2926,7 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 	bool dual_vfe = false;
 
 	if (!vfe_dev || !stream_info) {
-		pr_err("%s %d failed: vfe_dev %p stream_info %p\n", __func__,
+		pr_err("%s %d failed: vfe_dev %pK stream_info %pK\n", __func__,
 			__LINE__, vfe_dev, stream_info);
 		return -EINVAL;
 	}
@@ -3327,7 +3389,13 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 			return;
 		}
 	}
-
+#if 0//debugging patch // F_PANTECH_CAMERA_QBUG_ISP_PINGPONG_MISMATCH
+	if (msm_isp_update_sw_ping_pong_bit(vfe_dev, stream_info, pingpong_bit) != 0) {
+		spin_unlock_irqrestore(&stream_info->lock, flags);
+		msm_isp_halt_send_error(vfe_dev, ISP_EVENT_PING_PONG_MISMATCH);
+		return;
+	}
+#endif
 	if (stream_info->state == INACTIVE) {
 		msm_isp_cfg_stream_scratch(vfe_dev, stream_info,
 					pingpong_status);
@@ -3349,11 +3417,13 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 	if (done_buf)
 		buf_index = done_buf->buf_idx;
 
+
 	rc = vfe_dev->buf_mgr->ops->update_put_buf_cnt(vfe_dev->buf_mgr,
 		vfe_dev->pdev->id,
 		done_buf ? done_buf->bufq_handle :
 		stream_info->bufq_handle[VFE_BUF_QUEUE_DEFAULT], buf_index,
 		time_stamp, frame_id, pingpong_bit);
+
 
 	if (rc < 0) {
 		spin_unlock_irqrestore(&stream_info->lock, flags);
@@ -3361,6 +3431,7 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 		msm_isp_halt_send_error(vfe_dev, ISP_EVENT_BUF_FATAL_ERROR);
 		return;
 	}
+
 	/*
 	 * Buf divert return value represent whether the buf
 	 * can be diverted. A positive return value means
@@ -3387,7 +3458,14 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 				__func__);
 	}
 
+
 	if (!done_buf) {
+#if 0//debugging patch // F_PANTECH_CAMERA_QBUG_ISP_PINGPONG_MISMATCH
+		if (!stream_info->controllable_output)
+			trace_printk("%d: new sw ping pong bit is %d on stream 0x%x, vfe %d\n",
+				__LINE__, stream_info->sw_ping_pong_bit,
+				stream_info->stream_id, vfe_dev->pdev->id);
+#endif
 		spin_unlock_irqrestore(&stream_info->lock, flags);
 		return;
 	}
@@ -3431,6 +3509,10 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 
 	if ((done_buf->frame_id != frame_id) &&
 		vfe_dev->axi_data.enable_frameid_recovery) {
+#if 0//debugging patch // F_PANTECH_CAMERA_QBUG_ISP_PINGPONG_MISMATCH
+		trace_printk("frame mismatch: current %d, buffer %d\n",
+			frame_id, done_buf->frame_id);
+#endif
 		msm_isp_handle_done_buf_frame_id_mismatch(vfe_dev,
 			stream_info, done_buf, time_stamp, frame_id);
 		return;
@@ -3438,6 +3520,12 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 
 	msm_isp_process_done_buf(vfe_dev, stream_info,
 			done_buf, time_stamp, frame_id);
+#if 0//debugging patch // F_PANTECH_CAMERA_QBUG_ISP_PINGPONG_MISMATCH
+	if (!stream_info->controllable_output)
+		trace_printk("%d: new sw ping pong bit is %d on stream 0x%x, vfe %d\n",
+			__LINE__, stream_info->sw_ping_pong_bit,
+			stream_info->stream_id, vfe_dev->pdev->id);
+#endif
 }
 
 void msm_isp_process_axi_irq(struct vfe_device *vfe_dev,
@@ -3515,7 +3603,7 @@ void msm_isp_axi_disable_all_wm(struct vfe_device *vfe_dev)
 	int i, j;
 
 	if (!vfe_dev || !axi_data) {
-		pr_err("%s: error  %p %p\n", __func__, vfe_dev, axi_data);
+		pr_err("%s: error  %pK %pK\n", __func__, vfe_dev, axi_data);
 		return;
 	}
 

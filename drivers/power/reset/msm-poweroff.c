@@ -33,6 +33,10 @@
 #include <soc/qcom/restart.h>
 #include <soc/qcom/watchdog.h>
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#include <mach/pantech_sys.h>
+#endif
+
 #define EMERGENCY_DLOAD_MAGIC1    0x322A4F99
 #define EMERGENCY_DLOAD_MAGIC2    0xC67E4350
 #define EMERGENCY_DLOAD_MAGIC3    0x77777777
@@ -329,7 +333,25 @@ static void msm_restart_prepare(const char *cmd)
 					     restart_reason);
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
-		} else {
+#ifdef CONFIG_PANTECH_FS_AUTO_REPAIR 
+		/* added for ext4 auto repair */
+		} else if (!strncmp(cmd, "autorepair-user", 15)){
+			pantech_sys_reset_reason_set(SYS_RESET_REASON_USERDATA_FS); 
+		} else if (!strncmp(cmd, "data_mount_err", 14)){
+			pantech_sys_reset_reason_set(SYS_RESET_REASON_DATA_MOUNT_ERR);
+		}
+ #ifdef CONFIG_PANTECH_DXHDCP_PROVISIONING //lsi@bs1 FEATURE_PANTECH_DXHDCP_PROVISIONING run e2fsck for secure parition (fs error)
+    else if (!strncmp(cmd, "autorepair-secure", 15))
+    {
+			pr_notice("reboot autorepair-secure\n");
+			pantech_sys_reset_reason_set(SYS_RESET_REASON_SECURE_FS); 
+			//panic("secure partition, adb reboot autorepair-secure -> forced panic \n");
+    } 
+ #endif
+
+#endif
+
+		else {
 			__raw_writel(0x77665501, restart_reason);
 		}
 	}
@@ -538,6 +560,11 @@ static int msm_restart_probe(struct platform_device *pdev)
 	}
 skip_sysfs_create:
 #endif
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+    //pantech_sys_imem_init();
+#endif
+
 	np = of_find_compatible_node(NULL, NULL,
 				"qcom,msm-imem-restart_reason");
 	if (!np) {

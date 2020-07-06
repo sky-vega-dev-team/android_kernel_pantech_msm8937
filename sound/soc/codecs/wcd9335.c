@@ -105,8 +105,11 @@
 
 /* Convert from vout ctl to micbias voltage in mV */
 #define WCD_VOUT_CTL_TO_MICB(v) (1000 + v * 50)
-
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //hdj Qpatch Z-det Impedance detection .
 #define TASHA_ZDET_NUM_MEASUREMENTS 150
+#else
+#define TASHA_ZDET_NUM_MEASUREMENTS 150 //cs patch
+#endif
 #define TASHA_MBHC_GET_C1(c)  ((c & 0xC000) >> 14)
 #define TASHA_MBHC_GET_X1(x)  (x & 0x3FFF)
 /* z value compared in milliOhm */
@@ -210,6 +213,16 @@ struct tasha_mbhc_zdet_param {
 	u16 btn7;
 };
 
+#ifdef CONFIG_PANTECH_SND //check headset impedance    
+#define HEADSET_IMPEDANCE_DEFAULT 1000 //Default group3
+int headset_impedance;
+int headset_impedanceL;
+int headset_impedanceR;
+int wcd9xxx_headsetImpedanceGet(void)
+{
+	return headset_impedance;
+}
+#endif
 static struct afe_param_cdc_reg_page_cfg tasha_cdc_reg_page_cfg = {
 	.minor_version = AFE_API_VERSION_CDC_REG_PAGE_CFG,
 	.enable = 1,
@@ -800,7 +813,11 @@ static const struct tasha_reg_mask_val tasha_spkr_default[] = {
 	{WCD9335_CDC_COMPANDER8_CTL3, 0x80, 0x80},
 	{WCD9335_CDC_COMPANDER7_CTL7, 0x01, 0x01},
 	{WCD9335_CDC_COMPANDER8_CTL7, 0x01, 0x01},
+#ifdef CONFIG_PANTECH_SND //20160201 hdj [BST_SPKR_GAIN set 01] 
+	{WCD9335_CDC_BOOST0_BOOST_CTL, 0x7C, 0x10},
+#else
 	{WCD9335_CDC_BOOST0_BOOST_CTL, 0x7C, 0x50},
+#endif
 	{WCD9335_CDC_BOOST1_BOOST_CTL, 0x7C, 0x50},
 };
 
@@ -1606,9 +1623,12 @@ static inline void tasha_mbhc_get_result_params(struct wcd9xxx *wcd9xxx,
 				WCD9335_ANA_MBHC_RESULT_1);
 	wcd9xxx_reg_update_bits(&wcd9xxx->core_res,
 				WCD9335_ANA_MBHC_ZDET, 0x20, 0x00);
+       dev_dbg(wcd9xxx->dev,
+			"%s: Impedance detect val =0x%x\n",
+			__func__, val);
 	x1 = TASHA_MBHC_GET_X1(val);
 	c1 = TASHA_MBHC_GET_C1(val);
-	/* If ramp is not complete, give additional 5ms */
+        /* If ramp is not complete, give additional 5ms */ //cs patch
 	if ((c1 < 2) && x1)
 		usleep_range(5000, 5050);
 
@@ -1616,7 +1636,7 @@ static inline void tasha_mbhc_get_result_params(struct wcd9xxx *wcd9xxx,
 		dev_dbg(wcd9xxx->dev,
 			"%s: Impedance detect ramp error, c1=%d, x1=0x%x\n",
 			__func__, c1, x1);
-		goto ramp_down;
+                goto ramp_down; //cs patch
 	}
 	d1 = d1_a[c1];
 	denom = (x1 * d1) - (1 << (14 - noff));
@@ -1627,7 +1647,9 @@ static inline void tasha_mbhc_get_result_params(struct wcd9xxx *wcd9xxx,
 
 	dev_dbg(wcd9xxx->dev, "%s: d1=%d, c1=%d, x1=0x%x, z_val=%d(milliOhm)\n",
 		__func__, d1, c1, x1, *zdet);
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //hdj Qpatch Z-det Impedance detection .		
 ramp_down:
+#endif
 	i = 0;
 	while (x1) {
 		wcd9xxx_bulk_read(&wcd9xxx->core_res,
@@ -1740,12 +1762,24 @@ static void tasha_wcd_mbhc_calc_impedance(struct wcd_mbhc *mbhc, uint32_t *zl,
 	int zMono, z_diff1, z_diff2;
 	bool is_fsm_disable = false;
 	bool is_change = false;
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //[PATCH] ASoC: wcd-mbhc: high impedance detection
 	struct tasha_mbhc_zdet_param zdet_param[] = {
 		{4, 0, 4, 0x08, 0x14, 0x18}, /* < 32ohm */
 		{2, 0, 3, 0x18, 0x7C, 0x90}, /* 32ohm < Z < 400ohm */
+		{3, 4, 3, 0x18, 0x7C, 0x90}, /* 400ohm < Z < 1200ohm */
+		{3, 6, 6, 0x18, 0x7C, 0x90}, /* >1200ohm */
+	};
+
+#else
+#if 0
+	struct tasha_mbhc_zdet_param zdet_param[] = {
+		{4, 0, 4, 0x08, 0x14, 0x18}, /* < 32ohm */
+        {2, 0, 3, 0x18, 0x7C, 0x90}, /* 32ohm < Z < 400ohm */ //cs patch
 		{1, 4, 5, 0x18, 0x7C, 0x90}, /* 400ohm < Z < 1200ohm */
 		{1, 6, 7, 0x18, 0x7C, 0x90}, /* >1200ohm */
 	};
+#endif
+#endif
 	struct tasha_mbhc_zdet_param *zdet_param_ptr = NULL;
 	s16 d1_a[][4] = {
 		{0, 30, 90, 30},
@@ -1803,10 +1837,18 @@ static void tasha_wcd_mbhc_calc_impedance(struct wcd_mbhc *mbhc, uint32_t *zl,
 	if (z1L < TASHA_ZDET_VAL_32) {
 		zdet_param_ptr = &zdet_param[0];
 		d1 = d1_a[0];
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //[PATCH] ASoC: wcd-mbhc: high impedance detection
+       } else if ((z1L > TASHA_ZDET_VAL_400) && (z1L <= TASHA_ZDET_VAL_10k)) {
+#else
 	} else if ((z1L > TASHA_ZDET_VAL_400) && (z1L <= TASHA_ZDET_VAL_1200)) {
+#endif	
 		zdet_param_ptr = &zdet_param[2];
 		d1 = d1_a[2];
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //[PATCH] ASoC: wcd-mbhc: high impedance detection
+       } else if (z1L > TASHA_ZDET_VAL_10k) {
+#else
 	} else if (z1L > TASHA_ZDET_VAL_1200) {
+#endif
 		zdet_param_ptr = &zdet_param[3];
 		d1 = d1_a[3];
 	}
@@ -1824,7 +1866,9 @@ left_ch_impedance:
 	}
 	dev_dbg(codec->dev, "%s: impedance on HPH_L = %d(ohms)\n",
 				__func__, *zl);
-
+#ifdef CONFIG_PANTECH_SND //check headset impedance         
+       headset_impedanceL = *zl;
+#endif
 	/* start of right impedance ramp and calculation */
 	tasha_mbhc_zdet_ramp(codec, zdet_param_ptr, NULL, &z1R, d1);
 	if (TASHA_MBHC_IS_SECOND_RAMP_REQUIRED(z1R)) {
@@ -1837,10 +1881,18 @@ left_ch_impedance:
 			zdet_param_ptr = &zdet_param[0];
 			d1 = d1_a[0];
 		} else if ((z1R > TASHA_ZDET_VAL_400) &&
-			(z1R <= TASHA_ZDET_VAL_1200)) {
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //[PATCH] ASoC: wcd-mbhc: high impedance detection
+              (z1R <= TASHA_ZDET_VAL_10k)) {
+#else	
+              (z1R <= TASHA_ZDET_VAL_1200)) {
+#endif
 			zdet_param_ptr = &zdet_param[2];
 			d1 = d1_a[2];
-		} else if (z1R > TASHA_ZDET_VAL_1200) {
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //[PATCH] ASoC: wcd-mbhc: high impedance detection
+              } else if (z1R > TASHA_ZDET_VAL_10k) {
+#else
+              } else if (z1R > TASHA_ZDET_VAL_1200) {
+#endif		
 			zdet_param_ptr = &zdet_param[3];
 			d1 = d1_a[3];
 		}
@@ -1856,13 +1908,38 @@ right_ch_impedance:
 	}
 	dev_dbg(codec->dev, "%s: impedance on HPH_R = %d(ohms)\n",
 				__func__, *zr);
-
+#ifdef CONFIG_PANTECH_SND //check headset impedance    
+       headset_impedanceR = *zr;
+#endif
 	/* mono/stereo detection */
 	if ((*zl == TASHA_ZDET_FLOATING_IMPEDANCE) &&
 		(*zr == TASHA_ZDET_FLOATING_IMPEDANCE)) {
 		dev_dbg(codec->dev,
 			"%s: plug type is invalid or extension cable\n",
 			__func__);
+#ifdef CONFIG_PANTECH_SND //check headset impedance        
+       dev_dbg(codec->dev, "%s:[SND] headset Impedance cal\n",
+				__func__);
+       if(headset_impedanceL && headset_impedanceR) {
+           headset_impedance= (headset_impedanceL + headset_impedanceR)/2;
+           dev_dbg(codec->dev, "%s:[SND] headset Impedance mean:%dl\n",
+				__func__,headset_impedance);
+       } else {
+           if(headset_impedanceL) {
+               headset_impedance = headset_impedanceL;
+               dev_dbg(codec->dev, "%s:[SND] headset Impedance Left:%dl\n",
+				__func__,headset_impedance);
+           } else if (headset_impedanceR) {
+               headset_impedance = headset_impedanceR;
+               dev_dbg(codec->dev, "%s:[SND] headset Impedance Right:%dl\n",
+				__func__,headset_impedance);
+           } else {
+               headset_impedance = HEADSET_IMPEDANCE_DEFAULT;
+               dev_dbg(codec->dev, "%s:[SND] HEADSET_IMPEDANCE_DEFAULT:%dl\n",
+				__func__,headset_impedance);
+           }
+       }
+#endif              
 		goto zdet_complete;
 	}
 	if ((*zl == TASHA_ZDET_FLOATING_IMPEDANCE) ||
@@ -1873,6 +1950,29 @@ right_ch_impedance:
 			"%s: Mono plug type with one ch floating or shorted to GND\n",
 			__func__);
 		mbhc->hph_type = WCD_MBHC_HPH_MONO;
+ #ifdef CONFIG_PANTECH_SND //check headset impedance        
+       dev_dbg(codec->dev, "%s:[SND] headset Impedance cal\n",
+				__func__);
+       if(headset_impedanceL && headset_impedanceR) {
+           headset_impedance= (headset_impedanceL + headset_impedanceR)/2;
+           dev_dbg(codec->dev, "%s:[SND] headset Impedance mean:%dl\n",
+				__func__,headset_impedance);
+       } else {
+           if(headset_impedanceL) {
+               headset_impedance = headset_impedanceL;
+               dev_dbg(codec->dev, "%s:[SND] headset Impedance Left:%dl\n",
+				__func__,headset_impedance);
+           } else if (headset_impedanceR) {
+               headset_impedance = headset_impedanceR;
+               dev_dbg(codec->dev, "%s:[SND] headset Impedance Right:%dl\n",
+				__func__,headset_impedance);
+           } else {
+               headset_impedance = HEADSET_IMPEDANCE_DEFAULT;
+               dev_dbg(codec->dev, "%s:[SND] HEADSET_IMPEDANCE_DEFAULT:%dl\n",
+				__func__,headset_impedance);
+           }
+       }
+#endif                     
 		goto zdet_complete;
 	}
 	snd_soc_update_bits(codec, WCD9335_HPH_R_ATEST, 0x02, 0x02);
@@ -1898,7 +1998,29 @@ right_ch_impedance:
 			 __func__);
 		mbhc->hph_type = WCD_MBHC_HPH_MONO;
 	}
-
+#ifdef CONFIG_PANTECH_SND //check headset impedance        
+       dev_dbg(codec->dev, "%s:[SND] headset Impedance cal\n",
+				__func__);
+       if(headset_impedanceL && headset_impedanceR) {
+           headset_impedance= (headset_impedanceL + headset_impedanceR)/2;
+           dev_dbg(codec->dev, "%s:[SND] headset Impedance mean:%dl\n",
+				__func__,headset_impedance);
+       } else {
+           if(headset_impedanceL) {
+               headset_impedance = headset_impedanceL;
+               dev_dbg(codec->dev, "%s:[SND] headset Impedance Left:%dl\n",
+				__func__,headset_impedance);
+           } else if (headset_impedanceR) {
+               headset_impedance = headset_impedanceR;
+               dev_dbg(codec->dev, "%s:[SND] headset Impedance Right:%dl\n",
+				__func__,headset_impedance);
+           } else {
+               headset_impedance = HEADSET_IMPEDANCE_DEFAULT;
+               dev_dbg(codec->dev, "%s:[SND] HEADSET_IMPEDANCE_DEFAULT:%dl\n",
+				__func__,headset_impedance);
+           }
+       }
+#endif      
 zdet_complete:
 	snd_soc_write(codec, WCD9335_ANA_MBHC_BTN5, reg0);
 	snd_soc_write(codec, WCD9335_ANA_MBHC_BTN6, reg1);
@@ -5376,6 +5498,14 @@ static int tasha_codec_enable_dec(struct snd_soc_dapm_widget *w,
 		break;
 	case SND_SOC_DAPM_POST_PMU:
 		snd_soc_update_bits(codec, hpf_gate_reg, 0x01, 0x00);
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH//20160808 hdj fix headset tx mute when you hand on the call using headset longkey.
+		if (decimator == 0) {
+			snd_soc_write(codec, WCD9335_MBHC_ZDET_RAMP_CTL, 0x83);
+			snd_soc_write(codec, WCD9335_MBHC_ZDET_RAMP_CTL, 0xA3);
+			snd_soc_write(codec, WCD9335_MBHC_ZDET_RAMP_CTL, 0x83);
+			snd_soc_write(codec, WCD9335_MBHC_ZDET_RAMP_CTL, 0x03);
+		}
+ #endif       
 		/* schedule work queue to Remove Mute */
 		schedule_delayed_work(&tasha->tx_mute_dwork[decimator].dwork,
 				      msecs_to_jiffies(tx_unmute_delay));
@@ -11462,7 +11592,11 @@ static const struct tasha_reg_mask_val tasha_codec_reg_init_common_val[] = {
 	{WCD9335_CDC_CLSH_K2_MSB, 0x0F, 0x00},
 	{WCD9335_CDC_CLSH_K2_LSB, 0xFF, 0x60},
 	{WCD9335_CPE_SS_DMIC_CFG, 0x80, 0x00},
+#ifdef CONFIG_PANTECH_SND //20160201 hdj [BST_SPKR_GAIN set 01] 
+       {WCD9335_CDC_BOOST0_BOOST_CTL, 0x70, 0x10},
+#else
 	{WCD9335_CDC_BOOST0_BOOST_CTL, 0x70, 0x50},
+#endif
 	{WCD9335_CDC_BOOST1_BOOST_CTL, 0x70, 0x50},
 	{WCD9335_CDC_RX7_RX_PATH_CFG1, 0x08, 0x08},
 	{WCD9335_CDC_RX8_RX_PATH_CFG1, 0x08, 0x08},
@@ -13080,7 +13214,7 @@ void tasha_get_codec_ver(struct tasha_priv *tasha)
 	}
 	codec_ver = WCD9326;
 ret:
-	pr_debug("%s: codec is %d\n", __func__, codec_ver);
+	pr_err("%s: codec is %d\n", __func__, codec_ver);
 }
 EXPORT_SYMBOL(tasha_get_codec_ver);
 

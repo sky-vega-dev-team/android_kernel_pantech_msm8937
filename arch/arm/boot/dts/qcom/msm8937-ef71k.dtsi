@@ -1,0 +1,262 @@
+/*
+ * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "msm-pmi8950.dtsi"
+#include "msm8937-mtp.dtsi"
+
+&soc {
+	led_flash0: qcom,camera-flash {
+		cell-index = <0>;
+		compatible = "qcom,camera-flash";
+		qcom,flash-type = <1>;
+		qcom,flash-source = <&pmi8950_flash0>; // &pmi8950_flash1>;
+		qcom,torch-source = <&pmi8950_torch0>; // &pmi8950_torch1>;
+		qcom,switch-source = <&pmi8950_switch>;
+	};
+
+	gpio_wheel_alps_ec05e {
+		compatible = "gpio-wheel-alps-ec05e";
+		input-name = "gpio-wheel-alps-ec05e";
+		pinctrl-names = "tlmm_gpio_wheel_alps_ec05e_active","tlmm_gpio_wheel_alps_ec05e_suspend";
+		pinctrl-0 = <&gpio_wheel_alps_ec05e_active>;
+		pinctrl-1 = <&gpio_wheel_alps_ec05e_suspend>;
+		
+		terminal_a { // Wheel down
+			label = "terminal_a";
+			gpios = <&tlmm 128 0x1>;
+		};
+		
+		terminal_b { // Wheel up
+			label = "terminal_b";
+			gpios = <&tlmm 127 0x1>;
+		};
+	};
+	
+  /*PN548 NFC */
+	i2c@7af5000 { /* BLSP2 QUP1 */
+		pn548@28 {
+			compatible = "nxp,pn548";
+			reg = <0x28>;
+			nxp,irq-gpio = <&tlmm 17 0x00>; /* NFC_INT */
+			nxp,ven-gpio = <&tlmm 16 0x00>; /* NFC_EXT_EN_MSM */
+			nxp,firm-gpio = <&tlmm 130 0x00>; /* NFC_F/W_D/L_2 */
+			interrupt-parent = <&tlmm>;
+			interrupts = <17 0x00>;
+			interrupt-names = "irq_qpio";
+			pinctrl-names = "nfc_gpio_active","nfc_gpio_suspend";
+			pinctrl-0 = <&nfc_int_active &nfc_ven_active &nfc_firm_active>;
+			pinctrl-1 = <&nfc_int_suspend &nfc_ven_suspend &nfc_firm_suspend>;
+			nxp,clk-gpio = <&pm8937_gpios 5 0x00>;
+			clocks = <&clock_gcc clk_bb_clk2_pin>;
+			clock-names = "ref_clk";
+		};
+	};
+i2c@78b6000{/* BLSP2 QUP2 */
+	pt_wc@6c {
+		compatible = "ti,pt_bq51221-i2c";
+                reg = <0x6c>;
+                pt_wc,irq-gpio = <&tlmm 61 0x00>; /*wlc_int_pin*/
+                pt_usbin,irq-gpio = <&tlmm 63 0x00>; /*usbin_int_pin*/
+                pt_max,p-connect = <&tlmm 59 0x00>;
+                pt_ti,wl-pg = <&tlmm 12 0x00>;
+                pt_ti,wl-paddet = <&tlmm 62 0x00>;
+                pt_max,otg-en = <&tlmm 8 0x00>;
+                pt_max,ovp-en = <&tlmm 125 0x00>;
+                //interrupts = <61 0x00>;
+                //interrupt-names = "wlc_irq_qpio";
+                pinctrl-names = "wlc_gpio_active","wlc_gpio_suspend";
+		pinctrl-0 = <&wlc_pad_det_active &otg_pcon_ovp_ctrl_active>;
+		pinctrl-1 = <&wlc_pad_det_suspend &otg_pcon_ovp_ctrl_suspend>;
+                //pinctrl-names = "wlc_gpio_active";
+		//pinctrl-0 = <&wlc_pad_det_active >;
+		//pinctrl-1 = <&wlc_pad_det_suspend >;
+	};
+   };
+};
+
+/{
+	mtp_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+		#include "batterydata_ef71ie_2950mah.dtsi"
+		/* #include "batterydata-itech-3000mah.dtsi" */
+		/* #include "batterydata-ascent-3450mAh.dtsi" */
+	};
+};
+
+&pmi8950_fg {
+	qcom,battery-data = <&mtp_batterydata>;
+};
+
+&pmi8950_charger {
+	qcom,battery-data = <&mtp_batterydata>;
+	qcom,chg-temp-vadc = <&pm8937_vadc>;	/* CONFIG_PANTECH_PMIC_JEITA_SW */
+	qcom,mpp-batt-vadc = <&pmi8950_vadc>; /* mpp1_batt_id */
+};
+
+&mdss_dsi0 {
+	lab-supply = <&lab_regulator>;
+	ibb-supply = <&ibb_regulator>;
+};
+
+&mdss_dsi1 {
+	lab-supply = <&lab_regulator>;
+	ibb-supply = <&ibb_regulator>;
+};
+
+&labibb {
+	status = "ok";
+	qpnp,qpnp-labibb-mode = "lcd";
+};
+
+&ibb_regulator {
+	qcom,qpnp-ibb-discharge-resistor = <64>; /* modified 32 to 64 in LCD mode & 47nF */
+};
+
+&dsi_panel_pwr_supply {
+	qcom,panel-supply-entry@2 {
+		reg = <2>;
+		qcom,supply-name = "lab";
+		qcom,supply-min-voltage = <4600000>;
+		qcom,supply-max-voltage = <6000000>;
+		qcom,supply-enable-load = <100000>;
+		qcom,supply-disable-load = <100>;
+	};
+
+	qcom,panel-supply-entry@3 {
+		reg = <3>;
+		qcom,supply-name = "ibb";
+		qcom,supply-min-voltage = <4600000>;
+		qcom,supply-max-voltage = <6000000>;
+		qcom,supply-enable-load = <100000>;
+		qcom,supply-disable-load = <100>;
+		qcom,supply-post-on-sleep = <20>;
+	};
+};
+
+	
+&i2c_3 { /* BLSP1 QUP3 */
+	status = "ok";
+	atmel@0 {
+		compatible = "atmel,atmel_mxt_641t";
+		reg = <0x4a>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <65 0x2008>;
+
+		atmel,reset-gpio = <&tlmm 64 0x00>;
+		atmel,irq-gpio = <&tlmm 65 0x2008>;
+		atmel,iovdd-gpio = <&tlmm 39 0x00>;
+
+	};
+};
+&usb_otg { /* BS2 USB part */
+	qcom,otg_en_gpio = <&tlmm 8 0x1>;
+
+};
+
+
+&i2c_2 { /* BLSP1 QUP2 */ /* BS2 USB part */
+	pericom-type-c@1d {
+		status = "disabled";
+	};
+};
+
+/* GPIO INIT (BS1)*/
+/* PM8937 GPIO configuration */
+&pm8937_gpios {
+	gpio@c100 { /* GPIO 2 */
+		/* LED(LP5523) externel clk */
+		qcom,mode = <1>;
+		qcom,output-type = <0>;
+		qcom,invert = <0>;
+		qcom,vin-sel = <2>;
+		qcom,src-sel = <2>;
+		qcom,out-strength = <2>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
+	gpio@c300 { /* GPIO 4 */
+		qcom,mode = <0>;
+		qcom,pull = <4>;
+		qcom,master-en = <0>;
+		status = "okay";
+	};
+
+	gpio@c400 { /* GPIO 5 */
+		/* NFC clk request */
+		qcom,mode = <0>;		/* QPNP_PIN_MODE_DIG_IN */
+		qcom,pull = <5>;		/* QPNP_PIN_PULL_NO */
+		qcom,vin-sel = <2>;		/* QPNP_PIN_VIN2 */
+		qcom,src-sel = <2>;		/* QPNP_PIN_SEL_FUNC_1 */
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
+	gpio@c500 { /* GPIO 6 */
+		qcom,mode = <0>;
+		qcom,pull = <4>;
+		qcom,master-en = <0>;
+		status = "okay";
+	};
+
+	gpio@c700 { /* GPIO 8 */
+		qcom,mode = <0>;
+		qcom,pull = <4>;
+		qcom,master-en = <0>;
+		status = "okay";
+	};
+};
+
+&pmi8950_gpios {
+		gpio@c000 { /*GPIO 1*/
+			qcom,mode = <0>;
+			qcom,pull = <4>;
+			qcom,master-en = <0>;
+			status = "okay";
+		};
+};
+
+&adv_vreg {
+	status = "disabled";
+};
+
+/* GPIO INIT Setting*/
+&tlmm {
+	pinctrl-names ="default";
+	pinctrl-0=<&gpio_pull_down_default &gpio_pull_up_default>;
+	
+	gpio_pull_down_default:gpio_pull_down_default{
+		mux {
+				pins = "gpio45";
+				function = "gpio";
+		};
+		config {
+				pins = "gpio45";
+				drive-strength = <2>;
+				bias-pull-down;
+		};
+
+	};
+	gpio_pull_up_default:gpio_pull_up_default{
+		mux {
+				pins ="gpio1", "gpio65";
+				function = "gpio";
+		};
+		config {
+				pins = "gpio1","gpio65";
+				drive-strength = <2>;
+				bias-pull-up;
+		};
+	};
+};
+/* GPIO INIT (BS1)*/

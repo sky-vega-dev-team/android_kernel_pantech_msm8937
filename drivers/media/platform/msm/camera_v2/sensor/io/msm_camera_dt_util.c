@@ -34,7 +34,7 @@ int msm_camera_fill_vreg_params(struct camera_vreg_t *cam_vreg,
 
 	/* Validate input parameters */
 	if (!cam_vreg || !power_setting) {
-		pr_err("%s:%d failed: cam_vreg %p power_setting %p", __func__,
+		pr_err("%s:%d failed: cam_vreg %pK power_setting %pK", __func__,
 			__LINE__,  cam_vreg, power_setting);
 		return -EINVAL;
 	}
@@ -557,6 +557,16 @@ int msm_camera_get_dt_power_setting_data(struct device_node *of_node,
 				ps[i].seq_val = SENSOR_GPIO_CUSTOM1;
 			else if (!strcmp(seq_name, "sensor_gpio_custom2"))
 				ps[i].seq_val = SENSOR_GPIO_CUSTOM2;
+#ifdef CONFIG_PANTECH_CAMERA
+			else if (!strcmp(seq_name, "sensor_gpio_dvdd_en"))
+				ps[i].seq_val = SENSOR_GPIO_DVDD_EN;
+            else if (!strcmp(seq_name, "sensor_gpio_iovdd_en"))
+				ps[i].seq_val = SENSOR_GPIO_IOVDD_EN;
+            else if (!strcmp(seq_name, "sensor_gpio_avdd_en"))
+				ps[i].seq_val = SENSOR_GPIO_AVDD_EN;
+            else if (!strcmp(seq_name, "sensor_gpio_vddio_en"))
+				ps[i].seq_val = SENSOR_GPIO_VDDIO_EN;
+#endif
 			else
 				rc = -EILSEQ;
 			break;
@@ -1012,7 +1022,91 @@ int msm_camera_init_gpio_pin_tbl(struct device_node *of_node,
 	} else {
 		rc = 0;
 	}
+#ifdef CONFIG_PANTECH_CAMERA
+    rc = of_property_read_u32(of_node, "qcom,gpio-dvdd-en", &val);
+    if (rc != -EINVAL) {
+        if (rc < 0) {
+            pr_err("%s:%d read qcom,gpio-dvdd-en failed rc %d\n",
+                __func__, __LINE__, rc);
+            goto ERROR;
+        } else if (val >= gpio_array_size) {
+            pr_err("%s:%d qcom,gpio-dvdd-en invalid %d\n",
+                __func__, __LINE__, val);
+            rc = -EINVAL;
+            goto ERROR;
+        }
+        gconf->gpio_num_info->gpio_num[SENSOR_GPIO_DVDD_EN] =
+            gpio_array[val];
+        gconf->gpio_num_info->valid[SENSOR_GPIO_DVDD_EN] = 1;
+        CDBG("%s qcom,gpio-dvdd-en %d\n", __func__,
+            gconf->gpio_num_info->gpio_num[SENSOR_GPIO_DVDD_EN]);
+    } else {
+        rc = 0;
+    }
 
+    rc = of_property_read_u32(of_node, "qcom,gpio-iovdd-en", &val);
+    if (rc != -EINVAL) {
+        if (rc < 0) {
+            pr_err("%s:%d read qcom,gpio-iovdd-en failed rc %d\n",
+                __func__, __LINE__, rc);
+            goto ERROR;
+        } else if (val >= gpio_array_size) {
+            pr_err("%s:%d qcom,gpio-iovdd-en invalid %d\n",
+                __func__, __LINE__, val);
+            rc = -EINVAL;
+            goto ERROR;
+        }
+        gconf->gpio_num_info->gpio_num[SENSOR_GPIO_IOVDD_EN] =
+            gpio_array[val];
+        gconf->gpio_num_info->valid[SENSOR_GPIO_IOVDD_EN] = 1;
+        CDBG("%s qcom,gpio-iovdd-en %d\n", __func__,
+            gconf->gpio_num_info->gpio_num[SENSOR_GPIO_IOVDD_EN]);
+    } else {
+        rc = 0;
+    }
+
+    rc = of_property_read_u32(of_node, "qcom,gpio-avdd-en", &val);
+    if (rc != -EINVAL) {
+        if (rc < 0) {
+            pr_err("%s:%d read qcom,gpio-avdd-en failed rc %d\n",
+                __func__, __LINE__, rc);
+            goto ERROR;
+        } else if (val >= gpio_array_size) {
+            pr_err("%s:%d qcom,gpio-avdd-en invalid %d\n",
+                __func__, __LINE__, val);
+            rc = -EINVAL;
+            goto ERROR;
+        }
+        gconf->gpio_num_info->gpio_num[SENSOR_GPIO_AVDD_EN] =
+            gpio_array[val];
+        gconf->gpio_num_info->valid[SENSOR_GPIO_AVDD_EN] = 1;
+        CDBG("%s qcom,gpio-avdd-en %d\n", __func__,
+            gconf->gpio_num_info->gpio_num[SENSOR_GPIO_AVDD_EN]);
+    } else {
+        rc = 0;
+    }
+    
+    rc = of_property_read_u32(of_node, "qcom,gpio-vddio-en", &val);
+    if (rc != -EINVAL) {
+        if (rc < 0) {
+            pr_err("%s:%d read qcom,gpio-vddio-en failed rc %d\n",
+                __func__, __LINE__, rc);
+            goto ERROR;
+        } else if (val >= gpio_array_size) {
+            pr_err("%s:%d qcom,gpio-vddio-en invalid %d\n",
+                __func__, __LINE__, val);
+            rc = -EINVAL;
+            goto ERROR;
+        }
+        gconf->gpio_num_info->gpio_num[SENSOR_GPIO_VDDIO_EN] =
+            gpio_array[val];
+        gconf->gpio_num_info->valid[SENSOR_GPIO_VDDIO_EN] = 1;
+        CDBG("%s qcom,gpio-vddio-en %d\n", __func__,
+            gconf->gpio_num_info->gpio_num[SENSOR_GPIO_VDDIO_EN]);
+    } else {
+        rc = 0;
+    }    
+#endif
 	return rc;
 
 ERROR:
@@ -1229,7 +1323,7 @@ int msm_camera_power_up(struct msm_camera_power_ctrl_t *ctrl,
 
 	CDBG("%s:%d\n", __func__, __LINE__);
 	if (!ctrl || !sensor_i2c_client) {
-		pr_err("failed ctrl %p sensor_i2c_client %p\n", ctrl,
+		pr_err("failed ctrl %pK sensor_i2c_client %pK\n", ctrl,
 			sensor_i2c_client);
 		return -EINVAL;
 	}
@@ -1454,7 +1548,7 @@ int msm_camera_power_down(struct msm_camera_power_ctrl_t *ctrl,
 
 	CDBG("%s:%d\n", __func__, __LINE__);
 	if (!ctrl || !sensor_i2c_client) {
-		pr_err("failed ctrl %p sensor_i2c_client %p\n", ctrl,
+		pr_err("failed ctrl %pK sensor_i2c_client %pK\n", ctrl,
 			sensor_i2c_client);
 		return -EINVAL;
 	}

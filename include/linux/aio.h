@@ -43,6 +43,7 @@ struct kiocb {
 	__u64			ki_user_data;	/* user's data for completion */
 	loff_t			ki_pos;
 	size_t			ki_nbytes;	/* copy of iocb->aio_nbytes */
+	size_t			ki_left; 	/* remaining bytes */
 
 	struct list_head	ki_list;	/* the aio core uses this
 						 * for cancellation */

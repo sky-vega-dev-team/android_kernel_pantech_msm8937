@@ -1202,11 +1202,19 @@ static int proc_getdriver(struct usb_dev_state *ps, void __user *arg)
 
 static int proc_connectinfo(struct usb_dev_state *ps, void __user *arg)
 {
+#ifdef CONFIG_PANTECH_SIO_BUG_FIX //Android security CVE-2016-4482
+	struct usbdevfs_connectinfo ci;
+
+	memset(&ci, 0, sizeof(ci));
+	ci.devnum = ps->dev->devnum;
+	ci.slow = ps->dev->speed == USB_SPEED_LOW;
+#else
 	struct usbdevfs_connectinfo ci = {
 		.devnum = ps->dev->devnum,
 		.slow = ps->dev->speed == USB_SPEED_LOW
 	};
 
+#endif
 	if (copy_to_user(arg, &ci, sizeof(ci)))
 		return -EFAULT;
 	return 0;

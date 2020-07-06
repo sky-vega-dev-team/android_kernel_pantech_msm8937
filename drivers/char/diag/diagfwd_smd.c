@@ -726,14 +726,20 @@ static int diag_smd_read(void *ctxt, unsigned char *buf, int buf_len)
 	if (!smd_info->hdl || !smd_info->inited ||
 	    !atomic_read(&smd_info->opened))
 		return -EIO;
-
+#ifdef CONFIG_PANTECH_SIO_BUG_FIX
 	/*
 	 * Always try to read the data if notification is received from smd
 	 * In case if packet size is 0 release the wake source hold earlier
 	 */
 	err = wait_event_interruptible(smd_info->read_wait_q,
+					(smd_info->hdl != NULL) &&
+					(atomic_read(&smd_info->opened) == 1));
+#else
+	err = wait_event_interruptible(smd_info->read_wait_q,
 				       (smd_info->hdl != NULL) &&
 				       (atomic_read(&smd_info->opened) == 1));
+#endif	
+
 	if (err) {
 		diagfwd_channel_read_done(smd_info->fwd_ctxt, buf, 0);
 		return -ERESTARTSYS;

@@ -1,0 +1,69 @@
+if CUST_PANTECH_H
+
+###################################################
+# PANTECH FS Feature Section         
+#                                                 
+###################################################
+if MACH_MSM8937_EF71S
+config DEFINE_LIST_EF71S
+        bool
+        default y
+        select PANTECH_FS_AUTO_REPAIR
+        select PANTECH_SDXC_EXFAT
+        select NLS_UTF8
+endif
+
+if MACH_MSM8937_EF71K
+config DEFINE_LIST_EF71K
+        bool
+        default y
+        select PANTECH_FS_AUTO_REPAIR
+        select PANTECH_SDXC_EXFAT
+        select NLS_UTF8
+endif
+
+if MACH_MSM8937_EF71L
+config DEFINE_LIST_EF71L
+        bool
+        default y
+        select PANTECH_FS_AUTO_REPAIR
+        select PANTECH_SDXC_EXFAT
+        select NLS_UTF8
+
+endif
+
+if MACH_MSM8937_EF71IE
+config DEFINE_LIST_EF71IE
+        bool
+        default y
+        select PANTECH_FS_AUTO_REPAIR
+        select PANTECH_SDXC_EXFAT
+        select NLS_UTF8
+
+endif
+
+
+
+##############################################################
+# owner  : unknown        
+# date    : unknown
+# PLM    : 
+# Case  :  
+# Description : auto refair function		
+##############################################################
+
+config PANTECH_FS_AUTO_REPAIR
+	bool
+
+##############################################################
+# owner  : unknown        
+# date    : unknown
+# PLM    : 
+# Case  :  
+# Description : exfet in kernel porting	
+##############################################################
+config PANTECH_SDXC_EXFAT
+	bool	
+
+endif
+

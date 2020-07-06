@@ -5,6 +5,7 @@ snd-soc-qdsp6v2-objs += msm-dai-q6-v2.o msm-pcm-q6-v2.o msm-pcm-routing-v2.o \
 			msm-pcm-voice-v2.o msm-dai-q6-hdmi-v2.o \
 			msm-lsm-client.o msm-pcm-host-voice-v2.o \
 			msm-audio-effects-q6-v2.o msm-pcm-loopback-v2.o \
+                        sky-direct-adsp.o \
 			adsp_err.o
 obj-$(CONFIG_SLIMBUS) += msm-dai-slim.o audio_slimslave.o
 obj-$(CONFIG_SND_SOC_QDSP6V2) += snd-soc-qdsp6v2.o msm-pcm-dtmf-v2.o \

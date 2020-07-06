@@ -1022,6 +1022,8 @@ restart:
 	if (unix_peer(sk)) {
 		struct sock *old_peer = unix_peer(sk);
 		unix_peer(sk) = other;
+		unix_dgram_peer_wake_disconnect_wakeup(sk, old_peer);
+
 		unix_state_double_unlock(sk, other);
 
 		if (other != old_peer)
@@ -1029,6 +1031,7 @@ restart:
 		sock_put(old_peer);
 	} else {
 		unix_peer(sk) = other;
+
 		unix_state_double_unlock(sk, other);
 	}
 	return 0;

@@ -397,6 +397,11 @@ static long rtc_dev_ioctl(struct file *file,
 		if (copy_to_user(uarg, &alarm, sizeof(alarm)))
 			err = -EFAULT;
 		return err;
+#ifdef CONFIG_PANTECH_PMIC_RTC_ALM_OFF
+	case RTC_F_ALM_OFF:
+		qpnp_force_alarm_irq_disable();
+		break;
+#endif /* CONFIG_PANTECH_PMIC_RTC_ALM_OFF */
 
 	default:
 		/* Finally try the driver's ioctl interface */

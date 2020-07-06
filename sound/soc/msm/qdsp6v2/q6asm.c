@@ -1299,7 +1299,14 @@ int q6asm_audio_client_buf_alloc_contiguous(unsigned int dir,
 	}
 
 	ac->port[dir].buf = buf;
-
+#ifdef CONFIG_PANTECH_SND //Google Security Patch 2016.06 Elevation of Privilege Vulnerability in Qualcomm Sound Driver (CVE-2016-2068)
+	/* check for integer overflow */
+   if ((bufcnt > 0) && ((INT_MAX / bufcnt) < bufsz)) {
+        pr_err("%s: integer overflow\n", __func__);
+        mutex_unlock(&ac->cmd_lock);
+       goto fail;
+ }
+#endif
 	bytes_to_alloc = bufsz * bufcnt;
 
 	/* The size to allocate should be multiple of 4K bytes */

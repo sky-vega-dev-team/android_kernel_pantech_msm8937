@@ -754,8 +754,11 @@ country KN: DFS-ETSI
 country KR: DFS-ETSI
 	(2402 - 2482 @ 40), (20)
 	(5170 - 5250 @ 80), (20), AUTO-BW
-	(5250 - 5330 @ 80), (20), DFS, AUTO-BW
-	(5490 - 5630 @ 80), (30), DFS
+# Pantech, lee.eunsuk 20160414,  DFS delete for 5GHz priority access that request from PS3 team
+#	(5250 - 5330 @ 80), (20), DFS, AUTO-BW
+# 	(5490 - 5630 @ 80), (30), DFS
+	(5250 - 5330 @ 80), (20), AUTO-BW
+	(5490 - 5630 @ 80), (30)
 	(5735 - 5815 @ 80), (30)
 
 country KP: DFS-ETSI

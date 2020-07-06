@@ -42,6 +42,10 @@
 
 #include <trace/events/exception.h>
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#include <mach/pantech_sys.h>
+#endif
+
 static const char *handler[]= {
 	"Synchronous Abort",
 	"IRQ",
@@ -205,6 +209,11 @@ static int __die(const char *str, int err, struct thread_info *thread,
 
 	print_modules();
 	__show_regs(regs);
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	__save_regs_and_mmu(regs, true);
+#endif
+
 	pr_emerg("Process %.*s (pid: %d, stack limit = 0x%p)\n",
 		 TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk), thread + 1);
 
@@ -240,6 +249,9 @@ static unsigned long oops_begin(void)
 	die_owner = cpu;
 	console_verbose();
 	bust_spinlocks(1);
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	pantech_sys_reset_reason_set(SYS_RESET_REASON_LINUX);
+#endif
 	return flags;
 }
 

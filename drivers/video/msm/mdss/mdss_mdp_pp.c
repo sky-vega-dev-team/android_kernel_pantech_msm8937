@@ -1127,6 +1127,18 @@ static int pp_dma_pipe_setup(struct mdss_mdp_pipe *pipe, u32 *op)
 	return 0;
 }
 
+#ifdef CONFIG_F_SKYDISP_SHARPNESS_CTRL
+unsigned int sharpness_count = SHARP_STRENGTH_DEFAULT;
+void sharpness_control(struct msm_fb_data_type *mfd, int count)
+{
+	if(count == 0)
+		sharpness_count = SHARP_STRENGTH_DEFAULT;
+	else
+       sharpness_count = count;
+	   pr_debug("[kkCHO_DEBUG] *************** count = %d\n",count);
+}
+#endif
+
 static int mdss_mdp_scale_setup(struct mdss_mdp_pipe *pipe)
 {
 	u32 scale_config = 0;

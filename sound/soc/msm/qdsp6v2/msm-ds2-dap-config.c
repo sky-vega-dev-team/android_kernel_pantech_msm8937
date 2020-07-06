@@ -1356,7 +1356,15 @@ static int msm_ds2_dap_handle_commands(u32 cmd, void *arg)
 	int ret  = 0, port_id = 0;
 	int32_t data;
 	struct dolby_param_data *dolby_data = (struct dolby_param_data *)arg;
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //20160906 hdj Google Security patch CR 997025
+	if (get_user(data, &dolby_data->data[0])) {
+		pr_debug("%s error getting data\n", __func__);
+		ret = -EFAULT;
+		goto end;
+	}
+#else
 	get_user(data, &dolby_data->data[0]);
+#endif
 
 	pr_debug("%s: param_id %d,be_id %d,device_id 0x%x,length %d,data %d\n",
 		 __func__, dolby_data->param_id, dolby_data->be_id,
@@ -1470,12 +1478,29 @@ static int msm_ds2_dap_set_param(u32 cmd, void *arg)
 			rc = -EINVAL;
 			goto end;
 		}
-
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //20160906 hdj Google Security patch CR 997025
+            off = ds2_dap_params_offset[idx];
+            if ((dolby_data->length <= 0) ||
+                        (dolby_data->length > TOTAL_LENGTH_DS2_PARAM - off)) {
+                        pr_err("%s: invalid length %d at idx %d\n",
+                                     __func__, dolby_data->length, idx);
+                        rc = -EINVAL;
+                        goto end;
+            }
+#endif
 		/* cache the parameters */
 		ds2_dap_params[cdev].dap_params_modified[idx] += 1;
 		for (j = 0; j <  dolby_data->length; j++) {
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //20160906 hdj Google Security patch CR 997025
+			if (get_user(data, &dolby_data->data[j])) {
+				pr_debug("%s:error getting data\n", __func__);
+				rc = -EFAULT;
+				goto end;
+			}
+#else
 			off = ds2_dap_params_offset[idx];
 			get_user(data, &dolby_data->data[j]);
+#endif            
 			ds2_dap_params[cdev].params_val[off + j] = data;
 				pr_debug("%s:off %d,val[i/p:o/p]-[%d / %d]\n",
 					 __func__, off, data,

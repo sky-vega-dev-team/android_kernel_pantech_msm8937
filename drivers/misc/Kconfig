@@ -572,6 +572,13 @@ config TI_DRV2667
 	  To compile this driver as a module, choose M here: the
 	  module will be called ti_drv2667.
 
+config NFC_NXP_PN5XX
+	bool "NXP PN548 NFC Controller Driver"
+	depends on I2C
+	default y
+	help
+	  NXP PN548 Near Field Communication controller support.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

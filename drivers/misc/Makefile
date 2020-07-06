@@ -67,3 +67,7 @@ obj-y				+= qcom/
 obj-$(CONFIG_TI_DRV2667) += ti_drv2667.o
 obj-$(CONFIG_USB_EXT_TYPE_C_PERICOM)	+= type-c-pericom.o
 obj-$(CONFIG_USB_EXT_TYPE_C_TI)		+= type-c-ti.o
+# CONFIG_PN548
+obj-$(CONFIG_NFC_NXP_PN5XX) += pn5xx_i2c.o
+#CONFIG_PANTECH_PS_WIFI_COM_PREF_LOGGING
+obj-$(CONFIG_PANTECH_PS_WIFI_COM_PREF_LOGGING) += wifi_log.o

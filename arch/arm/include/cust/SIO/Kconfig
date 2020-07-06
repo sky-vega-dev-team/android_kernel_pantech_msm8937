@@ -1,0 +1,183 @@
+if CUST_PANTECH_H
+
+###################################################
+#           PANTECH USB part Feature              #
+###################################################
+
+config DEFINE_PANTECH_USB_COMMON
+	bool
+	default y
+	select HID_SONY
+	select HID_LOGITECH
+	select HID_SAMSUNG
+	select ANDROID_PANTECH_USB_ABNORMAL_CHARGER_INFO
+#	select PANTECH_SIO_TEMP
+	select PANTECH_SIO_BUG_FIX
+#	select PANTECH_USB_DEBUG
+#	select PANTECH_USB_STATE_DEBUG
+	select ANDROID_PANTECH_USB_OTG_INTENT
+	select PANTECH_USB_TUNE_SIGNALING_PARAM
+
+if MACH_MSM8937_EF71IE
+config DEFINE_LIST_EF71IE
+	bool
+	default y
+#	select PANTECH_USB_QXDM_ONOFF
+	select PANTECH_USB_BUG_FIX
+	select PANTECH_USB_OTG_EN_CONTROL
+	select PANTECH_OTG_LOW_BATTERY
+	select PANTECH_USB_CHARGER_WIRELESS
+# add the feature
+
+endif
+if MACH_MSM8937_EF71S
+config DEFINE_LIST_EF71S
+	bool
+	default y
+	select PANTECH_USB_BUG_FIX
+	select PANTECH_USB_OTG_EN_CONTROL
+	select PANTECH_OTG_LOW_BATTERY
+	select PANTECH_USB_BLOCKING_MDMSTATE
+	select PANTECH_USB_CHARGER_WIRELESS
+# add the feature
+
+endif
+
+if MACH_MSM8937_EF71K
+config DEFINE_LIST_EF71K
+	bool
+	default y
+	select PANTECH_USB_BUG_FIX
+	select PANTECH_USB_OTG_EN_CONTROL
+	select PANTECH_OTG_LOW_BATTERY
+	select PANTECH_USB_BLOCKING_MDMSTATE
+	select PANTECH_USB_CHARGER_WIRELESS
+#add the feature
+endif
+
+comment "PANTECH USB Driver"
+
+config PANTECH_CONSOLE_UART1
+  bool
+
+config PANTECH_CONSOLE_UART10
+  bool
+  
+config ANDROID_PANTECH_USB
+  bool "PANTECH USB"
+  default y
+	 help
+     Support Pantech USB
+
+config ANDROID_PANTECH_USB_MANAGER
+  depends on ANDROID_PANTECH_USB
+  bool "PANTECH USB Manager"
+  default y
+	  help
+     Support Pantech USB Manager
+
+config ANDROID_PANTECH_USB_CDFREE
+  depends on ANDROID_PANTECH_USB
+  bool "PANTECH USB Cdfree"
+  default n
+	 help
+     Support Pantech USB Cdfree 
+
+config ANDROID_PANTECH_USB_FACTORY_CABLE
+  depends on ANDROID_PANTECH_USB
+  bool "PANTECH USB FACTORY CABLE"
+  default y
+	 help
+     Support Pantech USB
+
+config ANDROID_PANTECH_USB_OTG
+  bool "PANTECH USB OTG"
+  default y
+	 help
+     Support Pantech USB OTG
+
+config ANDROID_PANTECH_USB_OTG_INTENT
+  depends on ANDROID_PANTECH_USB_OTG
+  bool "PANTECH USB OTG Intent"
+  default n
+	 help
+     Support Pantech USB OTG Intent
+
+config PANTECH_USB_OTG_EN_CONTROL
+  depends on ANDROID_PANTECH_USB_OTG
+  bool "OTG_EN GPIO control "
+  default n
+	 help
+     Support Pantech USB OTG Intent
+
+config ANDROID_PANTECH_USB_ABNORMAL_CHARGER_INFO
+ depends on ANDROID_PANTECH_USB
+  bool "PANTECH USB Charger cable abnormal case"
+  default n
+	 help
+     Support Pantech USB
+
+config ANDROID_PANTECH_USB_SUPER_SPEED
+  depends on ANDROID_PANTECH_USB
+  bool "PANTECH USB SUPER SPEED DEVICE"
+  default n
+
+config PANTECH_SIO_BUG_FIX
+  depends on ANDROID_PANTECH_USB
+  bool "Debug feature for qualcomm bugs"
+  default n
+  
+config PANTECH_USB_BUG_FIX
+  bool "Pantech USB BSP bug fix"
+  default n  
+	
+config PANTECH_SIO_TEMP
+  depends on ANDROID_PANTECH_USB
+  bool "Temporary feature for development"
+  default n
+  
+config PANTECH_USB_DEBUG
+  depends on ANDROID_PANTECH_USB
+  bool "DWC3 core debug feature"
+  default n
+
+config PANTECH_USB_STATE_DEBUG
+  depends on ANDROID_PANTECH_USB
+  bool "DWC3 core debug feature"
+  default n
+ 
+config PANTECH_USB_BLOCKING_MDMSTATE
+  depends on ANDROID_PANTECH_USB
+  bool "Mobile device management code feature"
+  default n
+
+config PANTECH_USB_TUNE_SIGNALING_PARAM
+  depends on ANDROID_PANTECH_USB
+  bool "USB core line signaling tune feature"
+  default n
+
+config PANTECH_OTG_LOW_BATTERY
+  depends on ANDROID_PANTECH_USB_OTG
+  bool "OTG device electrical source manage for charger IC"
+  default n
+
+config PANTECH_USB_VER_SWITCH
+  depends on ANDROID_PANTECH_USB
+  bool "USB2 to USB3 dynamic change feature"
+  default n
+  
+config PANTECH_USB_EXTERNAL_ID_PULLUP
+  depends on ANDROID_PANTECH_USB
+  bool "Use external USB_ID pull-up without internal USB_ID"
+  default n
+  
+config PANTECH_USB_QXDM_ONOFF
+  depends on ANDROID_PANTECH_USB
+  bool "qxdm message on/off function"
+  default n
+
+config PANTECH_USB_CHARGER_WIRELESS
+  depends on ANDROID_PANTECH_USB
+  bool "Wireless charger feature"
+  default n
+endif

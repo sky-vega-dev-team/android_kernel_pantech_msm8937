@@ -18,7 +18,11 @@
 
 #include "pmic-voter.h"
 
+#ifdef CONFIG_PANTECH_PMIC_LCD_ICL
+#define NUM_MAX_CLIENTS	9
+#else
 #define NUM_MAX_CLIENTS	8
+#endif
 
 struct client_vote {
 	int	state;

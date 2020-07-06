@@ -260,9 +260,15 @@
 	rpm-regulator-ldoa22 {
 		status = "okay";
 		pm8950_l22: regulator-l22 {
+			regulator-min-microvolt = <2850000>;
+			regulator-max-microvolt = <2850000>;
+			qcom,init-voltage = <2850000>;
+/*
+//CONFIG_PANTECH_CAMERA
 			regulator-min-microvolt = <2800000>;
 			regulator-max-microvolt = <2800000>;
 			qcom,init-voltage = <2800000>;
+*/
 			status = "okay";
 		};
 	};

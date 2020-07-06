@@ -45,6 +45,10 @@
 #include <asm/tls.h>
 #include "reboot.h"
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#include <mach/pantech_sys.h>
+#endif
+
 #ifdef CONFIG_CC_STACKPROTECTOR
 #include <linux/stackprotector.h>
 unsigned long __stack_chk_guard __read_mostly;
@@ -370,6 +374,97 @@ static void show_extra_register_data(struct pt_regs *regs, int nbytes)
 	show_data(regs->ARM_r9 - nbytes, nbytes * 2, "R9");
 	show_data(regs->ARM_r10 - nbytes, nbytes * 2, "R10");
 }
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+
+#define MAX_CORES 8
+#define LINUX_SAVE_INFO_MAGIC 0xBADC0257
+/*
+struct mmu_type {
+	unsigned int control;
+	unsigned int transbase0;
+	unsigned int dac;
+	unsigned int transbase1;
+	unsigned int prrr;
+	unsigned int nmrr;
+};
+struct save_info_type {
+	unsigned int magic_num;
+	struct pt_regs regs[4];
+	struct mmu_type mmu[4];
+	unsigned int die_cpu;
+};
+*/
+typedef unsigned int mmu_t;
+
+struct pt_mmu {
+    mmu_t cp15_sctlr;
+    mmu_t cp15_ttb0;
+    mmu_t cp15_ttb1;    
+    mmu_t cp15_dacr;
+    mmu_t cp15_prrr;
+    mmu_t cp15_nmrr;
+};
+
+struct cores_info {
+    unsigned int magic_num;
+    struct pt_regs core_info[MAX_CORES];
+    struct pt_mmu mmu_info[MAX_CORES];
+    unsigned int die_cpu;
+};
+
+//static struct save_info_type smp_save_info;
+static struct cores_info multi_core_info;
+
+void __save_regs_and_mmu(struct pt_regs *regs, int is_die)
+{
+    int cpu = smp_processor_id();
+	
+	memset((unsigned char *)&multi_core_info.core_info[cpu], 0, sizeof(struct pt_regs));
+	memcpy((unsigned char *)&multi_core_info.core_info[cpu], (unsigned char *)regs, sizeof(struct pt_regs));
+
+    asm("mrc p15,0,%0,c1,c0,0" : "=r" (multi_core_info.mmu_info[cpu].cp15_sctlr));
+    asm("mrc p15,0,%0,c2,c0,0" : "=r" (multi_core_info.mmu_info[cpu].cp15_ttb0));
+    asm("mrc p15,0,%0,c3,c0,0" : "=r" (multi_core_info.mmu_info[cpu].cp15_dacr));
+    asm("mrc p15,0,%0,c2,c0,1" : "=r" (multi_core_info.mmu_info[cpu].cp15_ttb1));
+    asm("mrc p15,0,%0,c10,c2,0" : "=r" (multi_core_info.mmu_info[cpu].cp15_prrr));
+    asm("mrc p15,0,%0,c10,c2,1" : "=r" (multi_core_info.mmu_info[cpu].cp15_nmrr));
+    
+    if(is_die){
+		multi_core_info.die_cpu = cpu;
+    }
+	
+	multi_core_info.magic_num = LINUX_SAVE_INFO_MAGIC;
+}
+
+void __save_regs_and_mmu_in_panic(void)
+{
+    int cpu = smp_processor_id();
+	
+    if(multi_core_info.magic_num == LINUX_SAVE_INFO_MAGIC)
+		return;
+
+	memset((unsigned char *)&multi_core_info.core_info[cpu], 0, sizeof(struct pt_regs));
+	
+	asm volatile("\
+	stmia	%0, {r0-r12,sp,lr,pc}"	
+	:
+	: "r" (&multi_core_info.core_info[cpu]));
+	
+	__asm__ volatile("mrs	%0, cpsr" : "=r" (multi_core_info.core_info[cpu].uregs[16]));
+
+    asm("mrc p15,0,%0,c1,c0,0" : "=r" (multi_core_info.mmu_info[cpu].cp15_sctlr));
+    asm("mrc p15,0,%0,c2,c0,0" : "=r" (multi_core_info.mmu_info[cpu].cp15_ttb0));
+    asm("mrc p15,0,%0,c3,c0,0" : "=r" (multi_core_info.mmu_info[cpu].cp15_dacr));
+    asm("mrc p15,0,%0,c2,c0,1" : "=r" (multi_core_info.mmu_info[cpu].cp15_ttb1));
+    asm("mrc p15,0,%0,c10,c2,0" : "=r" (multi_core_info.mmu_info[cpu].cp15_prrr));
+    asm("mrc p15,0,%0,c10,c2,1" : "=r" (multi_core_info.mmu_info[cpu].cp15_nmrr));
+
+	multi_core_info.die_cpu = cpu;
+	
+	multi_core_info.magic_num = LINUX_SAVE_INFO_MAGIC;
+}
+#endif
 
 void __show_regs(struct pt_regs *regs)
 {

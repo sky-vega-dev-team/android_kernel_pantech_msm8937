@@ -1320,10 +1320,6 @@ static int qpnp_labibb_regulator_enable(struct qpnp_labibb *labibb)
 		goto err_out;
 	}
 
-	pr_debug("soft=%d %d up=%d dly=%d\n",
-		labibb->lab_vreg.soft_start, labibb->ibb_vreg.soft_start,
-				labibb->ibb_vreg.pwrup_dly, dly);
-
 	if (!(val & LAB_STATUS1_VREG_OK)) {
 		pr_err("failed for LAB %x\n", val);
 		goto err_out;
@@ -1331,7 +1327,10 @@ static int qpnp_labibb_regulator_enable(struct qpnp_labibb *labibb)
 
 	/* poll IBB_STATUS to make sure ibb had been enabled */
 	dly = labibb->ibb_vreg.soft_start + labibb->ibb_vreg.pwrup_dly;
-	retries = 10;
+
+	//FEATURE : DISPLAY_SKYDISP_LABIBB retries 10 ->50
+	retries = 50;
+
 	while (retries--) {
 		rc = qpnp_labibb_read(labibb, &val,
 				labibb->ibb_base + REG_IBB_STATUS1, 1);
@@ -1345,7 +1344,10 @@ static int qpnp_labibb_regulator_enable(struct qpnp_labibb *labibb)
 			enabled = true;
 			break;
 		}
-		usleep_range(dly, dly + 100);
+		 //FEATURE : DISPLAY_SKYDISP_LABIBB dly +10, +1000
+		usleep_range(dly+10, dly + 1000);
+		//FEATURE : DISPLAY_SKYDISP_LABIBB add msleep(10)
+		msleep(10);
 	}
 
 	if (!enabled) {

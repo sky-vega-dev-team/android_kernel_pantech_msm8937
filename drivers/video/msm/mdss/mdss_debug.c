@@ -1233,7 +1233,10 @@ static inline struct mdss_mdp_misr_map *mdss_misr_get_map(u32 block_id,
 	char *ctrl_reg = NULL, *value_reg = NULL;
 	char *intf_base = NULL;
 
-	if (block_id > DISPLAY_MISR_MDP) {
+	/* Secure-Patch, CR#1001224, Correct block id check for mdss_mdp_misr_table
+	 * deleted: if (block_id > DISPLAY_MISR_MDP) {
+	 */
+	if (block_id > DISPLAY_MISR_HDMI && block_id != DISPLAY_MISR_MDP) {
 		pr_err("MISR Block id (%d) out of range\n", block_id);
 		return NULL;
 	}
@@ -1294,7 +1297,7 @@ static inline struct mdss_mdp_misr_map *mdss_misr_get_map(u32 block_id,
 		return NULL;
 	}
 
-	pr_debug("MISR Module(%d) CTRL(0x%x) SIG(0x%x) intf_base(0x%p)\n",
+	pr_debug("MISR Module(%d) CTRL(0x%x) SIG(0x%x) intf_base(0x%pK)\n",
 			block_id, map->ctrl_reg, map->value_reg, intf_base);
 	return map;
 }
@@ -1335,6 +1338,13 @@ int mdss_misr_set(struct mdss_data_type *mdata,
 	u32 mixer_num = 0;
 	bool is_valid_wb_mixer = true;
 	bool use_mdp_up_misr = false;
+
+	/* Secure-Patch, CR#1001224, Correct block id check for mdss_mdp_misr_table */
+	if (!mdata || !req || !ctl) {
+		pr_err("Invalid input params: mdata = %p req = %p ctl = %p",
+			mdata, req, ctl);
+		return -EINVAL;
+	}
 
 	map = mdss_misr_get_map(req->block_id, ctl, mdata);
 

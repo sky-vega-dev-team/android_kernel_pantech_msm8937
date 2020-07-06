@@ -746,4 +746,14 @@ config INPUT_DRV2667_HAPTICS
 	  To compile this driver as a module, choose M here: the
 	  module will be called drv260x-haptics.
 
+config INPUT_GPIO_WHEEL_ALPS_EC05E
+	tristate "GPIO wheel APLS EC05E"
+	depends on GPIOLIB
+	help
+	  Say Y to enable support for the APLS EC05E wheel driver connected
+	  to GPIO pins of various CPUs.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called gpio_wheel_alps_ec05e.
+
 endif

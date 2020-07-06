@@ -1,0 +1,11 @@
+if CUST_PANTECH_H
+
+###################################################
+#           PANTECH PSWIFI part Feature              #
+###################################################
+
+config PANTECH_PS_WIFI_COM_PREF_LOGGING
+       bool "PANTECH PS WIFI COM PREF LOGGING"
+       default y
+
+endif

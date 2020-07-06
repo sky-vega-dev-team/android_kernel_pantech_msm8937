@@ -30,6 +30,9 @@
 #define TASHA_ZDET_VAL_32	32000
 #define TASHA_ZDET_VAL_400	400000
 #define TASHA_ZDET_VAL_1200	1200000
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //[PATCH] ASoC: wcd-mbhc: high impedance detection
+#define TASHA_ZDET_VAL_10k	10000000
+#endif
 #define TASHA_ZDET_VAL_100K	100000000
 /* z floating defined in ohms */
 #define TASHA_ZDET_FLOATING_IMPEDANCE 0x0FFFFFFE
@@ -160,4 +163,7 @@ extern int tasha_codec_enable_standalone_micbias(struct snd_soc_codec *codec,
 extern int tasha_set_spkr_mode(struct snd_soc_codec *codec, int mode);
 extern int tasha_set_spkr_gain_offset(struct snd_soc_codec *codec, int offset);
 extern enum codec_variant tasha_codec_ver(void);
+#ifdef CONFIG_PANTECH_SND //check headset impedance    
+int wcd9xxx_headsetImpedanceGet(void);
+#endif
 #endif

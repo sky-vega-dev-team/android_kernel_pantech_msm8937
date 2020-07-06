@@ -36,6 +36,7 @@
 #define VOIP_MAX_VOC_PKT_SIZE 4096
 #define VOIP_MIN_VOC_PKT_SIZE 320
 
+#define USE_SKY_DIRECT_ADSP //kkc - add for SKY MVS dummy driver
 /* Length of the DSP frame info header added to the voc packet. */
 #define DSP_FRAME_HDR_LEN 1
 
@@ -190,7 +191,38 @@ static int msm_voip_evrc_min_max_rate_config_put(struct snd_kcontrol *kcontrol,
 static int msm_voip_evrc_min_max_rate_config_get(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol);
 
+#ifdef USE_SKY_DIRECT_ADSP
+/*static*/ struct voip_drv_info voip_info;
+EXPORT_SYMBOL(voip_info);
+
+#ifndef FEATURE_RV_VEGA_VOLTE_TICK_NOISE
+#define FEATURE_RV_VEGA_VOLTE_TICK_NOISE
+#endif
+
+#ifdef FEATURE_RV_VEGA_VOLTE_TICK_NOISE
+int q_cnt = 0; //p11276 - 2013.10.17 - for VoLTE fix delay
+#endif//FEATURE_RV_VEGA_VOLTE_TICK_NOISE
+
+#if 0
+//navan - 2012.09.27 - for VoLTE Recording
+char rx_temp[640] = {0,};
+/*static */int record_size = 0;
+EXPORT_SYMBOL(rx_temp);
+EXPORT_SYMBOL(record_size);
+
+ //-->20130214 jhsong : volte rec tx buffer too small
+char tx_temp[640] = {0,};
+/*static */int tx_record_size = 0;
+EXPORT_SYMBOL(tx_temp);
+EXPORT_SYMBOL(tx_record_size);
+ //<--20130214 jhsong : volte rec tx buffer too small
+#endif
+
+bool bUseSKYDirectADSP = false;//kkc 2012.08.15 - change variable name "bUseMVSVoip" to "bUseSKYDirectADSP"
+EXPORT_SYMBOL(bUseSKYDirectADSP);
+#else
 static struct voip_drv_info voip_info;
+#endif
 
 static struct snd_pcm_hardware msm_pcm_hardware = {
 	.info =                 (SNDRV_PCM_INFO_MMAP |
@@ -366,7 +398,14 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
 	if (!list_empty(&prtd->free_out_queue) && prtd->capture_start) {
 		buf_node = list_first_entry(&prtd->free_out_queue,
 					struct voip_buf_node, list);
+/* 2013-12-10 LS3@SND CASE#01308603 [MSM8974] Kernel reset is occured during field test (CS / VOIP call) */
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH
+		if (!(&buf_node->list == NULL)) {
+			list_del(&buf_node->list);
+		}
+#else /* QCOM_original */
 		list_del(&buf_node->list);
+#endif /* CONFIG_PANTECH_SND_QCOM_PATCH */
 		switch (prtd->mode) {
 		case MODE_AMR_WB:
 		case MODE_AMR: {
@@ -487,6 +526,16 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
 			memcpy(&buf_node->frame.voc_pkt[0],
 			       voc_pkt,
 			       buf_node->frame.pktlen);
+#if 0
+ //-->20130214 jhsong : volte rec tx buffer too small
+#ifdef USE_SKY_DIRECT_ADSP
+			memcpy(tx_temp,
+				&buf_node->frame.voc_pkt[0],
+				buf_node->frame.pktlen);
+				tx_record_size = buf_node->frame.pktlen;
+#endif
+ //<--20130214 jhsong : volte rec tx buffer too small
+#endif
 			list_add_tail(&buf_node->list, &prtd->out_queue);
 		}
 		}
@@ -502,7 +551,9 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
 		snd_pcm_period_elapsed(prtd->capture_substream);
 	} else {
 		spin_unlock_irqrestore(&prtd->dsp_ul_lock, dsp_flags);
+#if !defined(CONFIG_PANTECH_SND) // LS3SND reset occurs due to too many log during the VT
 		pr_err("UL data dropped\n");
+#endif
 	}
 
 	wake_up(&prtd->out_wait);
@@ -527,7 +578,14 @@ static void voip_process_dl_pkt(uint8_t *voc_pkt, void *private_data)
 	if (!list_empty(&prtd->in_queue) && prtd->playback_start) {
 		buf_node = list_first_entry(&prtd->in_queue,
 				struct voip_buf_node, list);
+/* 2013-12-10 LS3@SND CASE#01308603 [MSM8974] Kernel reset is occured during field test (CS / VOIP call) */
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH
+		if (!(&buf_node->list == NULL)) {
+			list_del(&buf_node->list);
+		}
+#else /* QCOM_original */
 		list_del(&buf_node->list);
+#endif /* CONFIG_PANTECH_SND_QCOM_PATCH */
 		switch (prtd->mode) {
 		case MODE_AMR:
 		case MODE_AMR_WB: {
@@ -650,14 +708,24 @@ static void voip_process_dl_pkt(uint8_t *voc_pkt, void *private_data)
 		default: {
 			*((uint32_t *)voc_pkt) = buf_node->frame.pktlen;
 			voc_pkt = voc_pkt + sizeof(uint32_t);
+#ifdef FEATURE_RV_VEGA_VOLTE_TICK_NOISE
+			q_cnt--;	//p11276 - 2013.10.17 - for VoLTE fix delay
+#endif//FEATURE_RV_VEGA_VOLTE_TICK_NOISE
 			memcpy(voc_pkt,
 			       &buf_node->frame.voc_pkt[0],
 			       buf_node->frame.pktlen);
+#if 0
+#ifdef USE_SKY_DIRECT_ADSP
+			memcpy(rx_temp,
+				&buf_node->frame.voc_pkt[0],
+				buf_node->frame.pktlen);
+				record_size = buf_node->frame.pktlen;
+#endif
+#endif
 			list_add_tail(&buf_node->list, &prtd->free_in_queue);
 		}
 		}
-		pr_debug("%s: frame.pktlen=%d\n", __func__,
-			 buf_node->frame.pktlen);
+		pr_debug("%s: frame.pktlen=%d\n", __func__, buf_node->frame.pktlen);
 
 		if (prtd->mode == MODE_PCM)
 			prtd->pcm_playback_irq_pos += buf_node->frame.pktlen;
@@ -669,7 +737,9 @@ static void voip_process_dl_pkt(uint8_t *voc_pkt, void *private_data)
 	} else {
 		*((uint32_t *)voc_pkt) = 0;
 		spin_unlock_irqrestore(&prtd->dsp_lock, dsp_flags);
+#if !defined(CONFIG_PANTECH_SND) // LS3@SND reset occurs due to too many log during the VT
 		pr_err("DL data not available\n");
+#endif
 	}
 	wake_up(&prtd->in_wait);
 }
@@ -776,8 +846,13 @@ err:
 	return ret;
 }
 
+#ifdef USE_SKY_DIRECT_ADSP
+/*static*/ int msm_pcm_playback_copy(struct snd_pcm_substream *substream, int a,
+	snd_pcm_uframes_t hwoff, void __user *buf, snd_pcm_uframes_t frames)
+#else
 static int msm_pcm_playback_copy(struct snd_pcm_substream *substream, int a,
 	snd_pcm_uframes_t hwoff, void __user *buf, snd_pcm_uframes_t frames)
+#endif
 {
 	int ret = 0;
 	struct voip_buf_node *buf_node = NULL;
@@ -804,11 +879,25 @@ static int msm_pcm_playback_copy(struct snd_pcm_substream *substream, int a,
 
 	if (ret > 0) {
 		if (count <= VOIP_MAX_VOC_PKT_SIZE) {
+#ifdef FEATURE_RV_VEGA_VOLTE_TICK_NOISE
+			if (bUseSKYDirectADSP && q_cnt > 1 && a == -1)
+			{
+				pr_err("VoLTE dl q_cnt %d", q_cnt);
+				return  -EFAULT;
+			}
+#endif//FEATURE_RV_VEGA_VOLTE_TICK_NOISE
 			spin_lock_irqsave(&prtd->dsp_lock, dsp_flags);
 			buf_node =
 				list_first_entry(&prtd->free_in_queue,
 						struct voip_buf_node, list);
+/* 2013-12-10 LS3@SND CASE#01308603 [MSM8974] Kernel reset is occured during field test (CS / VOIP call) */
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH
+			if (!(&buf_node->list == NULL)) {
+				list_del(&buf_node->list);
+			}
+#else /* QCOM_original */
 			list_del(&buf_node->list);
+#endif /* CONFIG_PANTECH_SND_QCOM_PATCH */
 			spin_unlock_irqrestore(&prtd->dsp_lock, dsp_flags);
 			if (prtd->mode == MODE_PCM) {
 				ret = copy_from_user(&buf_node->frame.voc_pkt,
@@ -825,6 +914,10 @@ static int msm_pcm_playback_copy(struct snd_pcm_substream *substream, int a,
 			spin_lock_irqsave(&prtd->dsp_lock, dsp_flags);
 			list_add_tail(&buf_node->list, &prtd->in_queue);
 			spin_unlock_irqrestore(&prtd->dsp_lock, dsp_flags);
+#ifdef FEATURE_RV_VEGA_VOLTE_TICK_NOISE
+			if (bUseSKYDirectADSP)
+				q_cnt++; 
+#endif//FEATURE_RV_VEGA_VOLTE_TICK_NOISE
 		} else {
 			pr_err("%s: Write cnt %d is > VOIP_MAX_VOC_PKT_SIZE\n",
 				__func__, count);
@@ -840,9 +933,16 @@ static int msm_pcm_playback_copy(struct snd_pcm_substream *substream, int a,
 
 	return  ret;
 }
+#ifdef USE_SKY_DIRECT_ADSP
+EXPORT_SYMBOL(msm_pcm_playback_copy);
+/*static*/ int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
+		int channel, snd_pcm_uframes_t hwoff, void __user *buf,
+						snd_pcm_uframes_t frames)
+#else
 static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 		int channel, snd_pcm_uframes_t hwoff, void __user *buf,
 						snd_pcm_uframes_t frames)
+#endif
 {
 	int ret = 0;
 	int count = 0;
@@ -871,13 +971,27 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 		return -ENETRESET;
 	}
 
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH //20160601 BS1@SND - Defense code for avoiding kernel panic when Media server was died in VoLTE / VT call
+    if (prtd->state == VOIP_STOPPED) {
+        pr_err("%s: [SND]VOIP state is VOIP_STOPPED, avoid kernel panic! \n", __func__);
+        return -ERESTARTSYS;
+    }
+#endif       
+
 	if (ret > 0) {
 
 		if (count <= VOIP_MAX_VOC_PKT_SIZE) {
 			spin_lock_irqsave(&prtd->dsp_ul_lock, dsp_flags);
 			buf_node = list_first_entry(&prtd->out_queue,
 					struct voip_buf_node, list);
+/* 2013-12-10 LS3@SND CASE#01308603 [MSM8974] Kernel reset is occured during field test (CS / VOIP call) */
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH
+			if (!(&buf_node->list == NULL)) {
+				list_del(&buf_node->list);
+			}
+#else /* QCOM_original */
 			list_del(&buf_node->list);
+#endif /* CONFIG_PANTECH_SND_QCOM_PATCH */
 			spin_unlock_irqrestore(&prtd->dsp_ul_lock, dsp_flags);
 			if (prtd->mode == MODE_PCM) {
 				ret = copy_to_user(buf,
@@ -917,15 +1031,28 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 	}
 	return ret;
 }
+#ifdef USE_SKY_DIRECT_ADSP
+EXPORT_SYMBOL(msm_pcm_capture_copy);
+#endif
 static int msm_pcm_copy(struct snd_pcm_substream *substream, int a,
 	 snd_pcm_uframes_t hwoff, void __user *buf, snd_pcm_uframes_t frames)
 {
 	int ret = 0;
 
+#ifdef USE_SKY_DIRECT_ADSP
+    if(!bUseSKYDirectADSP)
+    {
+        if(substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		ret = msm_pcm_playback_copy(substream, a, hwoff, buf, frames);
+        else if(substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+      		ret = msm_pcm_capture_copy(substream, a, hwoff, buf, frames);
+    }
+#else
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		ret = msm_pcm_playback_copy(substream, a, hwoff, buf, frames);
 	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 		ret = msm_pcm_capture_copy(substream, a, hwoff, buf, frames);
+#endif
 
 	return ret;
 }
@@ -941,6 +1068,18 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime;
 	struct voip_drv_info *prtd;
 	unsigned long dsp_flags;
+#ifdef USE_SKY_DIRECT_ADSP//kkc 2012.08.15 - change the flag disable timing for closing process
+    bUseSKYDirectADSP = false;
+#if 0
+    memset(rx_temp,0x00,sizeof(rx_temp));
+    record_size = 0;
+    memset(tx_temp,0x00,sizeof(tx_temp));
+    tx_record_size = 0;
+#endif
+#ifdef FEATURE_RV_VEGA_VOLTE_TICK_NOISE
+    q_cnt = 0; //p11276 - 2013.10.17 - for VoLTE fix delay
+#endif//FEATURE_RV_VEGA_VOLTE_TICK_NOISE
+#endif
 
 	if (substream == NULL) {
 		pr_err("substream is NULL\n");
@@ -984,12 +1123,26 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 			list_for_each_safe(ptr, next, &prtd->in_queue) {
 				buf_node = list_entry(ptr,
 						struct voip_buf_node, list);
+/* 2013-12-10 LS3@SND CASE#01308603 [MSM8974] Kernel reset is occured during field test (CS / VOIP call) */
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH
+				if (!(&buf_node->list == NULL)) {
+					list_del(&buf_node->list);
+				}
+#else /* QCOM_original */
 				list_del(&buf_node->list);
+#endif /* CONFIG_PANTECH_SND_QCOM_PATCH */
 			}
 			list_for_each_safe(ptr, next, &prtd->free_in_queue) {
 				buf_node = list_entry(ptr,
 						struct voip_buf_node, list);
+/* 2013-12-10 LS3@SND CASE#01308603 [MSM8974] Kernel reset is occured during field test (CS / VOIP call) */
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH
+				if (!(&buf_node->list == NULL)) {
+					list_del(&buf_node->list);
+				}
+#else /* QCOM_original */
 				list_del(&buf_node->list);
+#endif /* CONFIG_PANTECH_SND_QCOM_PATCH */
 			}
 			spin_unlock_irqrestore(&prtd->dsp_lock, dsp_flags);
 			dma_free_coherent(p_substream->pcm->card->dev,
@@ -1013,12 +1166,26 @@ capt:		c_substream = prtd->capture_substream;
 			list_for_each_safe(ptr, next, &prtd->out_queue) {
 				buf_node = list_entry(ptr,
 						struct voip_buf_node, list);
+/* 2013-12-10 LS3@SND CASE#01308603 [MSM8974] Kernel reset is occured during field test (CS / VOIP call) */
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH
+				if (!(&buf_node->list == NULL)) {
+					list_del(&buf_node->list);
+				}
+#else /* QCOM_original */
 				list_del(&buf_node->list);
+#endif /* CONFIG_PANTECH_SND_QCOM_PATCH */
 			}
 			list_for_each_safe(ptr, next, &prtd->free_out_queue) {
 				buf_node = list_entry(ptr,
 						struct voip_buf_node, list);
+/* 2013-12-10 LS3@SND CASE#01308603 [MSM8974] Kernel reset is occured during field test (CS / VOIP call) */
+#ifdef CONFIG_PANTECH_SND_QCOM_PATCH
+				if (!(&buf_node->list == NULL)) {
+					list_del(&buf_node->list);
+				}
+#else /* QCOM_original */
 				list_del(&buf_node->list);
+#endif /* CONFIG_PANTECH_SND_QCOM_PATCH */
 			}
 			spin_unlock_irqrestore(&prtd->dsp_ul_lock, dsp_flags);
 			dma_free_coherent(c_substream->pcm->card->dev,

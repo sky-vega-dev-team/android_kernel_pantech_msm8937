@@ -21,7 +21,9 @@
 
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
-
+#ifdef CONFIG_PANTECH_CAMERA
+#define FEATURE_FLASH_USER_MODIFY
+#endif
 DEFINE_MSM_MUTEX(msm_flash_mutex);
 
 static struct v4l2_file_operations msm_flash_v4l2_subdev_fops;
@@ -99,7 +101,7 @@ static int32_t msm_torch_create_classdev(struct platform_device *pdev,
 	for (i = 0; i < fctrl->torch_num_sources; i++) {
 		if (fctrl->torch_trigger[i]) {
 			torch_trigger = fctrl->torch_trigger[i];
-			CDBG("%s:%d msm_torch_brightness_set for torch %d",
+			CDBG("%s:%d msm_torch_brightness_set for torch %d\n",
 				__func__, __LINE__, i);
 			msm_torch_brightness_set(&msm_torch_led[i],
 				LED_OFF);
@@ -124,7 +126,7 @@ static int32_t msm_flash_get_subdev_id(
 	struct msm_flash_ctrl_t *flash_ctrl, void *arg)
 {
 	uint32_t *subdev_id = (uint32_t *)arg;
-	CDBG("Enter\n");
+	CDBG("Enter type %d \n",flash_ctrl->flash_device_type);
 	if (!subdev_id) {
 		pr_err("failed\n");
 		return -EINVAL;
@@ -150,7 +152,6 @@ static int32_t msm_flash_i2c_write_table(
 	conf_array.delay = settings->delay;
 	conf_array.reg_setting = settings->reg_setting_a;
 	conf_array.size = settings->size;
-
 	return flash_ctrl->flash_i2c_client.i2c_func_tbl->i2c_write_table(
 		&flash_ctrl->flash_i2c_client, &conf_array);
 }
@@ -183,6 +184,7 @@ static int32_t msm_flash_i2c_init(
 #ifdef CONFIG_COMPAT
 	struct msm_sensor_power_setting_array32 *power_setting_array32 = NULL;
 #endif
+
 	if (!flash_init_info || !flash_init_info->power_setting_array) {
 		pr_err("%s:%d failed: Null pointer\n", __func__, __LINE__);
 		return -EFAULT;
@@ -293,6 +295,18 @@ static int32_t msm_flash_i2c_init(
 				__func__, __LINE__);
 			return -EFAULT;
 		}
+		
+#ifdef CONFIG_PANTECH_CAMERA
+		flash_ctrl->flash_i2c_client.addr_type = MSM_CAMERA_I2C_BYTE_ADDR;
+#endif
+#ifdef CONFIG_PANTECH_CAMERA
+      {
+        int i;
+        for(i=0; i<settings->size; i++)
+          pr_err("Flash init set %d  reg %x  data %x\n", settings->size,
+            settings->reg_setting_a[i].reg_addr,settings->reg_setting_a[i].reg_data);
+      }
+#endif
 
 		rc = msm_flash_i2c_write_table(flash_ctrl, settings);
 		kfree(settings);
@@ -345,9 +359,9 @@ static int32_t msm_flash_i2c_release(
 	struct msm_flash_ctrl_t *flash_ctrl)
 {
 	int32_t rc = 0;
-
+	CDBG("Enter\n");
 	if (!(&flash_ctrl->power_info) || !(&flash_ctrl->flash_i2c_client)) {
-		pr_err("%s:%d failed: %p %p\n",
+		pr_err("%s:%d failed: %pK %pK\n",
 			__func__, __LINE__, &flash_ctrl->power_info,
 			&flash_ctrl->flash_i2c_client);
 		return -EINVAL;
@@ -361,6 +375,12 @@ static int32_t msm_flash_i2c_release(
 			__func__, __LINE__);
 		return -EINVAL;
 	}
+
+#ifdef CONFIG_PANTECH_CAMERA
+	flash_ctrl->flash_state = MSM_CAMERA_FLASH_RELEASE;
+	CDBG("exit %d\n",flash_ctrl->flash_state);
+#endif
+
 	return 0;
 }
 
@@ -391,7 +411,11 @@ static int32_t msm_flash_i2c_write_setting_array(
 {
 	int32_t rc = 0;
 	struct msm_camera_i2c_reg_setting_array *settings = NULL;
-
+#if defined(CONFIG_PANTECH_CAMERA) && defined(FEATURE_FLASH_USER_MODIFY)
+	int32_t i=0;
+	unsigned short flash_torch_setting[2][2] = {{0x10, 0x1A},{0xA0, 0x1B}}; //torch brightness Reg : 0xA0, Value : 0x00, 0x09, 0x1B, 0x2D, 0x3F
+	unsigned short flash_fire_setting[2][2] = {{0x10, 0x1B},{0xB0, 0X55}}; //flash brightness Reg : 0xB0, Value : 0x00, 0x55, 0x88, 0xCC, 0xFF
+#endif
 	if (!flash_data->cfg.settings) {
 		pr_err("%s:%d failed: Null pointer\n", __func__, __LINE__);
 		return -EFAULT;
@@ -411,6 +435,35 @@ static int32_t msm_flash_i2c_write_setting_array(
 		return -EFAULT;
 	}
 
+#if defined(CONFIG_PANTECH_CAMERA) && defined(FEATURE_FLASH_USER_MODIFY)
+	if(flash_data->cfg_type == CFG_FLASH_LOW)
+	{
+	  for(i=0; i<ARRAY_SIZE(flash_torch_setting); i++)
+	  {
+	    settings->reg_setting_a[i].reg_addr = flash_torch_setting[i][0];
+	    settings->reg_setting_a[i].reg_data = flash_torch_setting[i][1];
+	  }
+	}
+	else if(flash_data->cfg_type == CFG_FLASH_HIGH)
+	{
+	  for(i=0; i<ARRAY_SIZE(flash_fire_setting); i++)
+	  {
+	    settings->reg_setting_a[i].reg_addr = flash_fire_setting[i][0];
+	    settings->reg_setting_a[i].reg_data = flash_fire_setting[i][1];
+	  }
+	}
+#endif
+
+#ifdef CONFIG_PANTECH_CAMERA
+  {
+    int i;
+    pr_err("Flash type %d\n",flash_data->cfg_type);
+    for(i=0; i<settings->size; i++)
+      pr_err("Flash I2C size %d reg %x  data %x\n", settings->size,
+        settings->reg_setting_a[i].reg_addr,settings->reg_setting_a[i].reg_data);
+  }
+#endif
+
 	rc = msm_flash_i2c_write_table(flash_ctrl, settings);
 	kfree(settings);
 
@@ -429,10 +482,10 @@ static int32_t msm_flash_init(
 	int32_t rc = -EFAULT;
 	enum msm_flash_driver_type flash_driver_type = FLASH_DRIVER_DEFAULT;
 
-	CDBG("Enter");
+	CDBG("Enter\n");
 
 	if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_INIT) {
-		pr_err("%s:%d Invalid flash state = %d",
+		pr_err("%s:%d Invalid flash state = %d\n",
 			__func__, __LINE__, flash_ctrl->flash_state);
 		return 0;
 	}
@@ -466,6 +519,7 @@ static int32_t msm_flash_init(
 		if (flash_driver_type == flash_table[i]->flash_driver_type) {
 			flash_ctrl->func_tbl = &flash_table[i]->func_tbl;
 			rc = 0;
+			pr_err("Flash type %d\n",flash_table[i]->flash_driver_type);
 		}
 	}
 
@@ -479,7 +533,7 @@ static int32_t msm_flash_init(
 		rc = flash_ctrl->func_tbl->camera_flash_init(
 				flash_ctrl, flash_data);
 		if (rc < 0) {
-			pr_err("%s:%d camera_flash_init failed rc = %d",
+			pr_err("%s:%d camera_flash_init failed rc = %d\n",
 				__func__, __LINE__, rc);
 			return rc;
 		}
@@ -487,7 +541,7 @@ static int32_t msm_flash_init(
 
 	flash_ctrl->flash_state = MSM_CAMERA_FLASH_INIT;
 
-	CDBG("Exit");
+	CDBG("Exit\n");
 	return 0;
 }
 
@@ -517,7 +571,7 @@ static int32_t msm_flash_low(
 				pr_debug("LED current clamped to %d\n",
 					curr);
 			}
-			CDBG("low_flash_current[%d] = %d", i, curr);
+			CDBG("low_flash_current[%d] = %d\n", i, curr);
 			led_trigger_event(flash_ctrl->torch_trigger[i],
 				curr);
 		}
@@ -554,7 +608,7 @@ static int32_t msm_flash_high(
 				pr_debug("LED flash_current[%d] clamped %d\n",
 					i, curr);
 			}
-			CDBG("high_flash_current[%d] = %d", i, curr);
+			CDBG("high_flash_current[%d] = %d\n", i, curr);
 			led_trigger_event(flash_ctrl->flash_trigger[i],
 				curr);
 		}
@@ -568,6 +622,7 @@ static int32_t msm_flash_release(
 	struct msm_flash_ctrl_t *flash_ctrl)
 {
 	int32_t rc = 0;
+CDBG("enter\n");
 	if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_RELEASE) {
 		pr_err("%s:%d Invalid flash state = %d",
 			__func__, __LINE__, flash_ctrl->flash_state);
@@ -581,6 +636,7 @@ static int32_t msm_flash_release(
 		return rc;
 	}
 	flash_ctrl->flash_state = MSM_CAMERA_FLASH_RELEASE;
+CDBG("exit  stat %d\n",flash_ctrl->flash_state);
 	return 0;
 }
 
@@ -593,7 +649,7 @@ static int32_t msm_flash_config(struct msm_flash_ctrl_t *flash_ctrl,
 
 	mutex_lock(flash_ctrl->flash_mutex);
 
-	CDBG("Enter %s type %d\n", __func__, flash_data->cfg_type);
+	CDBG("Enter %s type %d state %d\n", __func__, flash_data->cfg_type,flash_ctrl->flash_state);
 
 	switch (flash_data->cfg_type) {
 	case CFG_FLASH_INIT:
@@ -936,7 +992,6 @@ static int32_t msm_flash_get_pmic_source_info(
 		CDBG("%s:%d fctrl->flash_driver_type = %d", __func__, __LINE__,
 			fctrl->flash_driver_type);
 	}
-
 	return 0;
 }
 
@@ -1007,7 +1062,7 @@ static long msm_flash_subdev_do_ioctl(
 	struct msm_flash_init_info_t32 flash_init_info32;
 	struct msm_flash_init_info_t flash_init_info;
 
-	CDBG("Enter");
+	CDBG("Enter\n");
 
 	if (!file || !arg) {
 		pr_err("%s:failed NULL parameter\n", __func__);
@@ -1137,7 +1192,7 @@ static int32_t msm_flash_platform_probe(struct platform_device *pdev)
 	flash_ctrl->msm_sd.close_seq = MSM_SD_CLOSE_2ND_CATEGORY | 0x1;
 	msm_sd_register(&flash_ctrl->msm_sd);
 
-	CDBG("%s:%d flash sd name = %s", __func__, __LINE__,
+	CDBG("%s:%d flash sd name = %s\n", __func__, __LINE__,
 		flash_ctrl->msm_sd.sd.entity.name);
 	msm_cam_copy_v4l2_subdev_fops(&msm_flash_v4l2_subdev_fops);
 #ifdef CONFIG_COMPAT

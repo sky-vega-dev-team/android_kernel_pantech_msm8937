@@ -26,6 +26,12 @@
 #include <linux/qpnp/qpnp-haptic.h>
 #include "../../staging/android/timed_output.h"
 
+#define PAN_QPNP_HAP_PATCH
+#ifdef PAN_QPNP_HAP_PATCH
+#define PAN_QPNP_HAP_STRENGTH_MAX 31
+#define PAN_QPNP_HAP_STRENGTH_MIN 11
+#endif // End PAN_QPNP_HAP_PATCH
+
 #define QPNP_IRQ_FLAGS	(IRQF_TRIGGER_RISING | \
 			IRQF_TRIGGER_FALLING | \
 			IRQF_ONESHOT)
@@ -319,7 +325,11 @@ struct qpnp_hap {
 	u8 lra_res_cal_period;
 	u8 sc_duration;
 	u8 ext_pwm_dtest_line;
+#ifdef PAN_QPNP_HAP_PATCH
+	int state;
+#else // Original PAN_QPNP_HAP_PATCH
 	bool state;
+#endif // End PAN_QPNP_HAP_PATCH
 	bool use_play_irq;
 	bool use_sc_irq;
 	bool manage_pon_supply;
@@ -1473,6 +1483,33 @@ static void correct_auto_res_error(struct work_struct *auto_res_err_work)
 	}
 }
 
+#ifdef PAN_QPNP_HAP_PATCH
+static int pan_qpnp_hap_set_vmax(struct qpnp_hap *hap, int value)
+{
+	u8 reg = 0;
+	int rc;
+
+	if (value > PAN_QPNP_HAP_STRENGTH_MAX)
+		value = PAN_QPNP_HAP_STRENGTH_MAX;
+       else if(value < PAN_QPNP_HAP_STRENGTH_MIN)
+		value = PAN_QPNP_HAP_STRENGTH_MIN;
+
+       pr_debug("%s: Set vmax to %dmV(Strength: %d)\n", __func__, value*QPNP_HAP_VMAX_MIN_MV, value);
+
+	rc = qpnp_hap_read_reg(hap, &reg, QPNP_HAP_VMAX_REG(hap->base));
+	if (rc < 0)
+		return rc;
+
+	reg &= QPNP_HAP_VMAX_MASK;
+	reg |= (value << QPNP_HAP_VMAX_SHIFT);
+	rc = qpnp_hap_write_reg(hap, &reg, QPNP_HAP_VMAX_REG(hap->base));
+	if (rc)
+		return rc;
+
+	return 0;
+}
+#endif // End PAN_QPNP_HAP_PATCH
+
 /* set api for haptics */
 static int qpnp_hap_set(struct qpnp_hap *hap, int on)
 {
@@ -1491,7 +1528,11 @@ static int qpnp_hap_set(struct qpnp_hap *hap, int on)
 			if (hap->correct_lra_drive_freq ||
 				hap->auto_res_mode == QPNP_HAP_AUTO_RES_QWD)
 				qpnp_hap_auto_res_enable(hap, 0);
-
+#ifdef PAN_QPNP_HAP_PATCH
+			rc = pan_qpnp_hap_set_vmax(hap, on);
+			if (rc)
+				return rc;
+#endif // End PAN_QPNP_HAP_PATCH
 			rc = qpnp_hap_mod_enable(hap, on);
 			if (rc < 0)
 				return rc;
@@ -1543,11 +1584,48 @@ static int qpnp_hap_set(struct qpnp_hap *hap, int on)
 	return rc;
 }
 
+#ifdef PAN_QPNP_HAP_PATCH
+static void pan_qpnp_hap_worker(struct qpnp_hap *hap)
+{
+	u8 val = 0x00;
+	int rc, reg_en;
+
+	if (hap->vcc_pon) {
+		reg_en = regulator_enable(hap->vcc_pon);
+		if (reg_en)
+			pr_err("%s: could not enable vcc_pon regulator\n",
+				 __func__);
+	}
+
+	if (hap->sc_duration == SC_MAX_DURATION) {
+		rc = qpnp_hap_write_reg(hap, &val,
+				QPNP_HAP_EN_CTL_REG(hap->base));
+	} else {
+		if (hap->play_mode == QPNP_HAP_PWM)
+			qpnp_hap_mod_enable(hap, hap->state);
+		qpnp_hap_set(hap, hap->state);
+	}
+
+	if (hap->vcc_pon && !reg_en) {
+		rc = regulator_disable(hap->vcc_pon);
+		if (rc)
+			pr_err("%s: could not disable vcc_pon regulator\n",
+				 __func__);
+	}
+}
+#endif // End PAN_QPNP_HAP_PATCH
+
 /* enable interface from timed output class */
 static void qpnp_hap_td_enable(struct timed_output_dev *dev, int value)
 {
 	struct qpnp_hap *hap = container_of(dev, struct qpnp_hap,
 					 timed_dev);
+
+#ifdef PAN_QPNP_HAP_PATCH
+	int pan_strength = ((value & 0xFFFF0000) >> 16);
+	int pan_timeout_ms = (value & 0x0000FFFF);
+	pr_debug("%s: Got value = %d, Strength = %d, Timeout = %dms\n", __func__, value, pan_strength, pan_timeout_ms);
+#endif // End PAN_QPNP_HAP_PATCH
 
 	mutex_lock(&hap->lock);
 
@@ -1557,6 +1635,23 @@ static void qpnp_hap_td_enable(struct timed_output_dev *dev, int value)
 
 	hrtimer_cancel(&hap->hap_timer);
 
+#ifdef PAN_QPNP_HAP_PATCH
+	if(value == 0) {
+		if (hap->state == 0) {
+			mutex_unlock(&hap->lock);
+			pr_debug("%s: Already stopped\n", __func__);
+			return;
+		}
+		hap->state = 0;
+       } else {
+		pan_timeout_ms = (pan_timeout_ms > hap->timeout_ms ?
+				0x7FFFFFFF : pan_timeout_ms);
+		hap->state = pan_strength;
+		hrtimer_start(&hap->hap_timer, 
+				ktime_set(pan_timeout_ms / 1000, (pan_timeout_ms % 1000) * 1000000), 
+				HRTIMER_MODE_REL);
+        }
+#else // Original PAN_QPNP_HAP_PATCH
 	if (value == 0) {
 		if (hap->state == 0) {
 			mutex_unlock(&hap->lock);
@@ -1571,8 +1666,14 @@ static void qpnp_hap_td_enable(struct timed_output_dev *dev, int value)
 			      ktime_set(value / 1000, (value % 1000) * 1000000),
 			      HRTIMER_MODE_REL);
 	}
+#endif // End PAN_QPNP_HAP_PATCH
+
 	mutex_unlock(&hap->lock);
+#ifdef PAN_QPNP_HAP_PATCH
+	pan_qpnp_hap_worker(hap);
+#else // Original PAN_QPNP_HAP_PATCH
 	schedule_work(&hap->work);
+#endif // End PAN_QPNP_HAP_PATCH
 }
 
 /* play pwm bytes */

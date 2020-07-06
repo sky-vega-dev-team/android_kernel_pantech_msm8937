@@ -55,6 +55,9 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ipi.h>
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#include <asm/system_misc.h>
+#endif
 
 /*
  * as from 2.5, kernels no longer have an init_tasks structure
@@ -695,6 +698,9 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 		break;
 
 	case IPI_CPU_STOP:
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+		__save_regs_and_mmu(regs, false);
+#endif
 		irq_enter();
 		ipi_cpu_stop(cpu, regs);
 		irq_exit();

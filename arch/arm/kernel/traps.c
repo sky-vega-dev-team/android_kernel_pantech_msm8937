@@ -42,6 +42,16 @@
 
 #include <trace/events/exception.h>
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#if defined(CONFIG_PANTECH_DEBUG_SCHED_LOG) //p14291_pantech_dbg
+#include <mach/pantech_debug.h>
+#endif
+#endif
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#include <mach/pantech_sys.h>
+#endif
+
 static const char *handler[]= {
 	"prefetch abort",
 	"data abort",
@@ -253,6 +263,10 @@ static int __die(const char *str, int err, struct pt_regs *regs)
 
 	print_modules();
 	__show_regs(regs);
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	__save_regs_and_mmu(regs, true);
+#endif
+
 	printk(KERN_EMERG "Process %.*s (pid: %d, stack limit = 0x%p)\n",
 		TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk), end_of_stack(tsk));
 
@@ -275,6 +289,10 @@ static unsigned long oops_begin(void)
 	int cpu;
 	unsigned long flags;
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+    pantech_sys_reset_reason_set(SYS_RESET_REASON_LINUX);
+#endif
+
 	oops_enter();
 
 	/* racy, but better than risking deadlock. */
@@ -286,6 +304,13 @@ static unsigned long oops_begin(void)
 		else
 			arch_spin_lock(&die_lock);
 	}
+
+#if defined(CONFIG_PANTECH_DEBUG)
+#if defined(CONFIG_PANTECH_DEBUG_SCHED_LOG)  //p14291_121102
+    pantechdbg_sched_msg("!!die!!");
+#endif
+#endif
+    
 	die_nest_count++;
 	die_owner = cpu;
 	console_verbose();

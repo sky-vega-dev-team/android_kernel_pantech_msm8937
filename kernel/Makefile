@@ -195,9 +195,9 @@ x509.genkey:
 	@echo >>x509.genkey "x509_extensions = myexts"
 	@echo >>x509.genkey
 	@echo >>x509.genkey "[ req_distinguished_name ]"
-	@echo >>x509.genkey "O = Magrathea"
-	@echo >>x509.genkey "CN = Glacier signing key"
-	@echo >>x509.genkey "emailAddress = slartibartfast@magrathea.h2g2"
+	@echo >>x509.genkey "O = Release"
+	@echo >>x509.genkey "CN = Pantech Signing Key"
+	@echo >>x509.genkey "emailAddress = ef71@pantech.com"
 	@echo >>x509.genkey
 	@echo >>x509.genkey "[ myexts ]"
 	@echo >>x509.genkey "basicConstraints=critical,CA:FALSE"

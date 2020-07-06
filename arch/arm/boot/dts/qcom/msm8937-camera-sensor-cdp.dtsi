@@ -217,7 +217,7 @@
 				&cam_sensor_front_sleep>;
 		gpios = <&tlmm 27 0>,
 			<&tlmm 38 0>,
-			<&tlmm 50 0>;
+			<&tlmm 37 0>;
 		qcom,gpio-reset = <1>;
 		qcom,gpio-standby = <2>;
 		qcom,gpio-req-tbl-num = <0 1 2>;

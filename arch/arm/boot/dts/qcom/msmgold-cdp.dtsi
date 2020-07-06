@@ -115,8 +115,8 @@
 	pinctrl-0 = <&uart_console_active>;
 };
 
-#include "msm8937-mdss-panels.dtsi"
-
+// #include "msm8937-mdss-panels.dtsi" // build err
+/*
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
 };
@@ -139,6 +139,7 @@
 &dsi_truly_720_vid {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
+*/
 
 &tlmm {
 	tlmm_gpio_key {
