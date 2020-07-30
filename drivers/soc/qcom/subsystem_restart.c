@@ -38,8 +38,32 @@
 #include <soc/qcom/sysmon.h>
 
 #include <asm/current.h>
-
 #include "peripheral-loader.h"
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#include <mach/pantech_sys.h>
+#include <mach/pantech_sys_info.h>
+#include <mach/pantech_restart.h> //p11014
+
+#include <linux/syscalls.h>
+#include <linux/kmod.h>
+#include <linux/workqueue.h>
+#include <linux/kobject.h> //20160105 added for noti to UI
+#include <linux/sky_rawdata.h>
+#include <linux/logsystem_ssr.h>
+
+extern int pantech_is_usbdump_enabled(void);
+static int start_ssr_app = 0;
+module_param( start_ssr_app, int, 0660 );
+
+//static int ssr_modem_enable = 0;
+static int ssr_modem_dump_enable = 0;
+//static int ssr_wifi_enable = 0;
+//static int ssr_wifi_dump_enable = 0;
+
+int rawdata_read_func(unsigned int offset, unsigned int read_size, char* read_buf);
+int rawdata_write_func(unsigned int offset, unsigned int write_size, char* write_buf);
+#endif     // CONFIG_PANTECH_ERR_CRASH_LOGGING
 
 #define DISABLE_SSR 0x9889deed
 /* If set to 0x9889deed, call to subsystem_restart_dev() returns immediately */
@@ -177,6 +201,11 @@ struct subsys_device {
 	bool crashed;
 	int notif_state;
 	struct list_head list;
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	struct work_struct lognoti_work; //20160105 added for noti to UI
+	struct work_struct excute_ssr_app;
+#endif
 };
 
 static struct subsys_device *to_subsys(struct device *d)
@@ -887,6 +916,36 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 	unsigned count;
 	unsigned long flags;
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+    int i;
+    int maxcount = 0;
+
+    if( ( !strncmp(desc->name, "modem", 5) ||
+          !strncmp(desc->name, "wcnss", 5) || !strncmp(desc->name, "riva", 4) ) )
+    {
+        if( 1 == ssr_modem_dump_enable )
+        {
+            maxcount = 60;
+        }
+        else
+        {
+            maxcount = 10;
+        }
+
+        for( i = 0; i < maxcount; i++ )
+        {
+            if( 1 == start_ssr_app )
+            {
+                pr_info( "subsystem_ramdump excuted.\n" );
+                break;
+            }
+            msleep( 200 );
+        }
+    }
+
+    msleep( 1000 );
+#endif
+
 	/*
 	 * It's OK to not take the registration lock at this point.
 	 * This is because the subsystem list inside the relevant
@@ -1010,6 +1069,266 @@ static void device_restart_work_hdlr(struct work_struct *work)
 							dev->desc->name);
 }
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+void excute_ssr_app( struct work_struct *_work )
+{
+	char *argv[5] = { NULL, NULL, NULL, NULL, NULL };
+	char *envp[4] = { NULL, NULL, NULL, NULL };
+
+	argv[0] = "/system/bin/subsystem_ramdump";
+	argv[1] = "1";
+	argv[2] = "0";
+	argv[3] = "0";
+
+	envp[0] = "HOME=/";
+	envp[1] = "TERM=vt100";
+	envp[2] = "PATH=/system/bin";
+
+	call_usermodehelper( argv[0], argv, envp, UMH_WAIT_EXEC );
+}
+struct excute_work {
+	struct work_struct work;
+};
+struct excute_work *work;
+
+static char ssr_reason[16];
+
+void excute_ssr_notification( struct work_struct *_work )
+{
+#if 0 //20160105 changed to forced selinux policy 
+	char reason[16];
+	char *argv[4] = { NULL, NULL, reason, NULL };
+	char *envp[4] = { NULL, NULL, NULL, NULL };
+
+	argv[0] = "/system/bin/setprop";
+	argv[1] = "ssr.noti.start";
+	//    argv[2] = "1";
+
+	memset( argv[2], 0, sizeof(reason) );
+	strcpy( argv[2], ssr_reason );
+
+	envp[0] = "HOME=/";
+	envp[1] = "TERM=vt100";
+	envp[2] = "PATH=/system/bin";
+
+	call_usermodehelper( argv[0], argv, envp, UMH_WAIT_EXEC );
+#else
+	static char reason[80];
+	char *msg[2] = { reason, NULL };
+	char **envp = NULL;
+	int ret = 0;
+
+	struct subsys_device *dev = container_of(_work, struct subsys_device, lognoti_work);
+	snprintf( reason, sizeof(reason), "%s%s", SSR_UEVENT_IDEN, ssr_reason ); 
+	strcpy( msg[0], reason);
+
+	envp = msg;
+	if(dev == NULL) {
+		pr_err("%s: failed to send uevent. becasue subsys_dev or envp is null.\n",__func__);
+    	}
+	else {
+		dev_set_uevent_suppress(&dev->dev, false);
+		if(envp) {
+			ret = kobject_uevent_env(&dev->dev.kobj, KOBJ_CHANGE, envp);
+			pr_info("pantech ssr uevent send ret =  [%d]\n", ret);
+		}
+    	}
+#endif
+
+}
+struct excute_work *ssr_noti_work;
+
+int rawdata_write_func(unsigned int offset, unsigned int write_size, char* write_buf)
+{
+	struct file *rawdata_filp;
+	mm_segment_t oldfs;
+	int rc;
+
+	oldfs = get_fs();
+ 	set_fs(KERNEL_DS);
+
+    // always have to check rawdata partition, check /dev/block/platform/msm_sdcc.1/by-name
+    // GP : /dev/block/platform/7824900.sdhci/by-name -> /dev/block/mmcblk0p13
+	rawdata_filp = filp_open("/dev/block/mmcblk0p14", O_WRONLY | O_SYNC, 0);
+	if( IS_ERR(rawdata_filp) )
+	{
+		set_fs(oldfs);
+		pr_err("%s: filp_open error\n",__func__);
+		return -1;
+	}
+	set_fs(oldfs);
+	pr_info("%s: file open OK\n", __func__);
+
+	rawdata_filp->f_pos = offset;
+	if(((rawdata_filp->f_flags & O_ACCMODE) & O_RDONLY) != 0)
+	{
+		pr_err("%s: rawdata read - permission denied!\n", __func__);
+		filp_close(rawdata_filp, NULL);
+		return -1;
+	}
+
+	oldfs = get_fs();
+	set_fs(KERNEL_DS);
+	rc = rawdata_filp->f_op->write(rawdata_filp, write_buf, write_size, &rawdata_filp->f_pos);
+	if (rc < 0)
+	{
+		set_fs(oldfs);
+		pr_err("%s: write fail to rawdata = %d \n",__func__,rc);
+		filp_close(rawdata_filp, NULL);
+		return -1;
+	}
+	set_fs(oldfs);
+	filp_close(rawdata_filp, NULL);
+
+	return 0;
+}
+int rawdata_read_func(unsigned int offset, unsigned int read_size, char* read_buf)
+{
+	struct file *rawdata_filp;
+	mm_segment_t oldfs;
+	int rc;
+
+	oldfs = get_fs();
+	set_fs(KERNEL_DS);
+
+    // always have to check rawdata partition, check /dev/block/platform/msm_sdcc.1/by-name
+    // GP : /dev/block/platform/7824900.sdhci/by-name -> /dev/block/mmcblk0p13
+	rawdata_filp = filp_open("/dev/block/mmcblk0p14", O_RDONLY | O_SYNC, 0);
+	if( IS_ERR(rawdata_filp) )
+	{
+		set_fs(oldfs);
+		pr_err("%s: filp_open error\n",__func__);
+		return -1;
+	}
+	set_fs(oldfs);
+	pr_info("%s: file open OK\n", __func__);
+
+	rawdata_filp->f_pos = offset;
+	if(((rawdata_filp->f_flags & O_ACCMODE) & O_RDONLY) != 0)
+	{
+		pr_err("%s: rawdata read - permission denied!\n", __func__);
+		filp_close(rawdata_filp, NULL);
+		return -1;
+	}
+
+	oldfs = get_fs();
+	set_fs(KERNEL_DS);
+	rc = rawdata_filp->f_op->read(rawdata_filp, read_buf, read_size, &rawdata_filp->f_pos);
+	if (rc < 0)
+	{
+		set_fs(oldfs);
+		pr_err("%s: read fail from rawdata = %d \n",__func__,rc);
+		filp_close(rawdata_filp, NULL);
+		return -1;
+	}
+	set_fs(oldfs);
+	filp_close(rawdata_filp, NULL);
+
+	return 0;
+}
+
+void ssr_subsys_coupled_action( const char *name, struct subsys_device *dev )
+{
+    if( NULL == name )
+    {
+        pr_err( "ssr_app_action() fail. subsystem name is NULL.\n" );
+        return;
+    }
+
+    memset( ssr_reason, 0, sizeof(ssr_reason) );
+
+#if 0  //20160105 changed to forced selinux policy 
+    if(!strncmp(name, "lpass", 5)) 
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "0x%X", SYS_RESET_REASON_LPASS );
+    }
+    else if(!strncmp(name, "dsps", 4) || !strncmp(name, "adsp", 4)) 
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "0x%X", SYS_RESET_REASON_ADSPS );
+    }
+    else if(!strncmp(name, "wcnss", 5) || !strncmp(name, "riva", 4))      // pronto
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "0x%X", SYS_RESET_REASON_WIFI );
+    }
+    else if(!strncmp(name, "venus", 5))
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "0x%X", SYS_RESET_REASON_VENUS );
+    }
+    else if(!strncmp(name, "modem", 5)) 
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "0x%XR", SYS_RESET_REASON_MODEM );   // post fix : "R"
+    }
+    else if(!strncmp(name, "external_modem", 14))
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "0x%X", SYS_RESET_REASON_MDM );
+    }
+    else
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "0x0" );
+    }
+#else
+/* vendor/pantech/app/LogNotificatinActivity 와 string 맞추어야 됨. */
+/* 수정 추가 사항 없음 그대로 진행 */
+    if(!strncmp(name, "lpass", 5)) 
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "LPASS" );
+    }
+    else if(!strncmp(name, "dsps", 4) || !strncmp(name, "adsp", 4)) 
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "ADSP" );
+    }
+    else if(!strncmp(name, "wcnss", 5) || !strncmp(name, "riva", 4))      // pronto
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "WIFI" );
+    }
+    else if(!strncmp(name, "venus", 5))
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "VENUS" );
+    }
+    else if(!strncmp(name, "modem", 5)) 
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "MODEM" );   //reset 됨.
+    }
+    else if(!strncmp(name, "external_modem", 14))
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "MDM" );
+    }
+    else
+    {
+        snprintf( ssr_reason, sizeof(ssr_reason), "UNKNOWN" );
+    }
+#endif
+
+	pr_info("ssr_subsys_coupled_action 11\n");
+
+#if 0 //20160105 changed to forced selinux policy 
+    ssr_noti_work = kmalloc(sizeof *ssr_noti_work, GFP_KERNEL);
+    INIT_WORK(&ssr_noti_work->work, excute_ssr_notification);
+    schedule_work( &ssr_noti_work->work );
+#else
+    schedule_work( &dev->lognoti_work );
+#endif
+
+	pr_info("ssr_subsys_coupled_action 22 name [%s]\n", name);
+    if( ((!strncmp(name, "modem", 5)) && (GET_SYS_RESET_IMEM_FLAG(SYS_SSR_MDM_DUMP_FLAG)))
+	   ||( !strncmp(name, "wcnss", 5) || !strncmp(name, "riva", 4) )) 
+    {
+	pr_info("ssr_subsys_coupled_action 33\n");
+/*
+	   //work = kmalloc(sizeof *work, GFP_KERNEL);
+	work = kzalloc(sizeof(*work), GFP_KERNEL);
+		
+        INIT_WORK(&work->work, excute_ssr_app);
+        schedule_work( &work->work );
+*/
+       schedule_work( &dev->excute_ssr_app );
+    }
+	pr_info("ssr_subsys_coupled_action 44\n");
+
+
+}
+#endif     // CONFIG_PANTECH_ERR_CRASH_LOGGING
+
 int subsystem_restart_dev(struct subsys_device *dev)
 {
 	const char *name;
@@ -1035,6 +1354,39 @@ int subsystem_restart_dev(struct subsys_device *dev)
 		return -EBUSY;
 	}
 
+// p15060
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+    if( !strncmp(name, "modem", 5) )
+    {
+      //  pr_info( "dev->restart_level = RESET_SOC\n" );
+      //  dev->restart_level = RESET_SOC;
+        if(GET_SYS_RESET_IMEM_FLAG(SYS_SSR_MDM_FLAG))
+        {
+            pr_info( "dev->restart_level = RESET_SUBSYS_COUPLED\n" );
+            dev->restart_level = RESET_SUBSYS_COUPLED;
+        }
+        else
+        {
+            pr_info( "dev->restart_level = RESET_SOC\n" );
+            dev->restart_level = RESET_SOC;
+        }
+    }
+
+    if( !strncmp(name, "wcnss", 5) || !strncmp(name, "riva", 4))
+    {
+        if( !pantech_is_usbdump_enabled() )
+        {
+            pr_info( "dev->restart_level = RESET_SUBSYS_COUPLED\n" );
+            dev->restart_level = RESET_SUBSYS_COUPLED;
+        }
+        else
+        {
+            pr_info( "dev->restart_level = RESET_SOC\n" );
+            dev->restart_level = RESET_SOC;
+        }
+    }
+#endif     // CONFIG_PANTECH_ERR_CRASH_LOGGING
+
 	pr_info("Restart sequence requested for %s, restart_level = %s.\n",
 		name, restart_levels[dev->restart_level]);
 
@@ -1047,9 +1399,38 @@ int subsystem_restart_dev(struct subsys_device *dev)
 	switch (dev->restart_level) {
 
 	case RESET_SUBSYS_COUPLED:
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+		ssr_subsys_coupled_action( name, dev );
+#endif //CONFIG_PANTECH_ERR_CRASH_LOGGING
+
 		__subsystem_restart_dev(dev);
 		break;
 	case RESET_SOC:
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+		if(!strncmp(name, "lpass", 5)) 
+		{
+			pantech_sys_reset_reason_set(SYS_RESET_REASON_LPASS);
+		}
+		else if(!strncmp(name, "dsps", 4) || !strncmp(name, "adsp", 4)) 
+		{
+			pantech_sys_reset_reason_set(SYS_RESET_REASON_ADSPS);
+		}
+		else if(!strncmp(name, "wcnss", 5) || !strncmp(name, "riva", 4)) 
+		{
+			pantech_sys_reset_reason_set(SYS_RESET_REASON_WIFI);
+		}
+		else if(!strncmp(name, "modem", 5)) 
+		{
+			pantech_sys_reset_reason_set(SYS_RESET_REASON_MODEM);
+
+		}
+		else if(!strncmp(name, "external_modem", 14))
+		{
+			pantech_sys_reset_reason_set(SYS_RESET_REASON_MDM);
+		}
+#endif    
 		__pm_stay_awake(&dev->ssr_wlock);
 		schedule_work(&dev->device_restart_work);
 		return 0;
@@ -1565,6 +1946,12 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 	wakeup_source_init(&subsys->ssr_wlock, subsys->wlname);
 	INIT_WORK(&subsys->work, subsystem_restart_wq_func);
 	INIT_WORK(&subsys->device_restart_work, device_restart_work_hdlr);
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+ 	//20160105 changed to forced selinux policy 
+	INIT_WORK(&subsys->lognoti_work, excute_ssr_notification);
+      	INIT_WORK(&subsys->excute_ssr_app, excute_ssr_app);
+#endif
 	spin_lock_init(&subsys->track.s_lock);
 
 	subsys->id = ida_simple_get(&subsys_ida, 0, 0, GFP_KERNEL);

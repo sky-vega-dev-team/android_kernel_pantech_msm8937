@@ -870,6 +870,13 @@ ipv6_add_addr(struct inet6_dev *idev, const struct in6_addr *addr,
 	ifa->scope = scope;
 	ifa->prefix_len = pfxlen;
 	ifa->flags = flags | IFA_F_TENTATIVE;
+#ifdef CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT
+	if(strncmp( idev->dev->name, "rmnet",5) == 0 
+		&& !(addr_type & IPV6_ADDR_LINKLOCAL) )
+	{
+		ifa->flags |= IFA_F_NODAD; 
+	}
+#endif /* CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT */
 	ifa->valid_lft = valid_lft;
 	ifa->prefered_lft = prefered_lft;
 	ifa->cstamp = ifa->tstamp = jiffies;
@@ -886,7 +893,9 @@ ipv6_add_addr(struct inet6_dev *idev, const struct in6_addr *addr,
 	hash = inet6_addr_hash(addr);
 
 	hlist_add_head_rcu(&ifa->addr_lst, &inet6_addr_lst[hash]);
+#ifndef CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX
 	spin_unlock(&addrconf_hash_lock);
+#endif /* CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX */
 
 	write_lock(&idev->lock);
 	/* Add to inet6_dev unicast addr list. */
@@ -899,6 +908,9 @@ ipv6_add_addr(struct inet6_dev *idev, const struct in6_addr *addr,
 
 	in6_ifa_hold(ifa);
 	write_unlock(&idev->lock);
+#ifdef CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX  
+	spin_unlock(&addrconf_hash_lock);
+#endif /* CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX */	
 out2:
 	rcu_read_unlock_bh();
 
@@ -1017,8 +1029,9 @@ static void ipv6_del_addr(struct inet6_ifaddr *ifp)
 
 	spin_lock_bh(&addrconf_hash_lock);
 	hlist_del_init_rcu(&ifp->addr_lst);
+#ifndef CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX  
 	spin_unlock_bh(&addrconf_hash_lock);
-
+#endif /* CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX */
 	write_lock_bh(&ifp->idev->lock);
 
 	if (ifp->flags&IFA_F_TEMPORARY) {
@@ -1037,7 +1050,9 @@ static void ipv6_del_addr(struct inet6_ifaddr *ifp)
 	__in6_ifa_put(ifp);
 
 	write_unlock_bh(&ifp->idev->lock);
-
+#ifdef CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX  
+	spin_unlock_bh(&addrconf_hash_lock);
+#endif /* CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX */
 	addrconf_del_dad_work(ifp);
 
 	ipv6_ifa_notify(RTM_DELADDR, ifp);
@@ -3140,12 +3155,15 @@ static int addrconf_ifdown(struct net_device *dev, int how)
 		snmp6_unregister_dev(idev);
 
 	}
-
+#ifdef CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX
+	spin_lock_bh(&addrconf_hash_lock);
+#endif /* CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX */
 	/* Step 2: clear hash table */
 	for (i = 0; i < IN6_ADDR_HSIZE; i++) {
 		struct hlist_head *h = &inet6_addr_lst[i];
-
+#ifndef CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX
 		spin_lock_bh(&addrconf_hash_lock);
+#endif /* CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX */
 restart:
 		hlist_for_each_entry_rcu(ifa, h, addr_lst) {
 			if (ifa->idev == idev) {
@@ -3154,7 +3172,9 @@ restart:
 				goto restart;
 			}
 		}
+#ifndef CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX    
 		spin_unlock_bh(&addrconf_hash_lock);
+#endif /* CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX */
 	}
 
 	write_lock_bh(&idev->lock);
@@ -3209,6 +3229,10 @@ restart:
 	}
 
 	write_unlock_bh(&idev->lock);
+	
+#ifdef CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX
+	spin_unlock_bh(&addrconf_hash_lock);
+#endif /* CONFIG_SKY_DS_OPTIMIZE_IPV6_ASSIGNMENT_CRASH_FIX */
 
 	/* Step 5: Discard anycast and multicast list */
 	if (how) {

@@ -19,6 +19,7 @@
 #include <linux/irqreturn.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/gpio.h>
+#include <linux/mutex.h>
 
 #include "mdss_panel.h"
 #include "mdss_dsi_cmd.h"
@@ -432,6 +433,17 @@ struct mdss_dsi_ctrl_pdata {
 	int disp_en_gpio;
 	int bklt_en_gpio;
 	int mode_gpio;
+	struct mutex		bklt_dsc_mutex;
+#if defined (CONFIG_F_SKYDISP_EF71_SS)
+	int bl_en_gpio;
+#if (CONFIG_BOARD_VER < CONFIG_TP10)//DISPLAY_SKYDISP_LABIBB
+	int lcd_vcip_reg_en_gpio;
+	//int lcd_vcin_reg_en_gpio;
+	int lcd_vcip_reg_en_mpps;   // LCD_USED_VCIP_MPPS
+#endif
+	int lcd_vddio_reg_en_gpio;
+	int lcd_vddio_switch_en_gpio;	
+#endif	
 	int bklt_ctrl;	/* backlight ctrl */
 	bool pwm_pmi;
 	int pwm_period;
@@ -470,6 +482,18 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds status_cmds;
 	u32 *status_valid_params;
 	u32 *status_cmds_rlen;
+#ifdef CONFIG_F_SKYDISP_CABC_CONTROL
+	struct dsi_panel_cmds cabc_cmds;
+#endif
+		
+#ifdef CONFIG_F_SKYDISP_GAMMA_CONTROL
+	struct dsi_panel_cmds gamma_cmds_20;
+        struct dsi_panel_cmds gamma_cmds_22;
+        struct dsi_panel_cmds gamma_cmds_24;
+#endif
+
+
+		
 	u32 *status_value;
 	unsigned char *return_buf;
 	u32 groups; /* several alternative values to compare */
@@ -480,7 +504,7 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds cmd2video;
 
 	char pps_buf[DSC_PPS_LEN];	/* dsc pps */
-
+	
 	struct dcs_cmd_list cmdlist;
 	struct completion dma_comp;
 	struct completion mdp_comp;
@@ -880,5 +904,47 @@ static inline bool mdss_dsi_cmp_panel_reg(struct dsi_buf status_buf,
 {
 	return status_buf.data[i] == status_val[i];
 }
+
+#ifdef CONFIG_F_SKYDISP_SILENT_BOOT
+static inline void mdss_dsi_set_silentreboot_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int flag)
+{
+	ctrl_pdata->panel_data.silent_flag = flag;
+}
+
+static inline int mdss_dsi_get_silentreboot_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	return ctrl_pdata->panel_data.silent_flag;
+}
+
+static inline void mdss_dsi_set_silent_backlight_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int flag)
+{
+	ctrl_pdata->panel_data.silent_backlight = flag;
+}
+
+static inline int mdss_dsi_get_silent_backlight_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	return ctrl_pdata->panel_data.silent_backlight;
+}
+#else
+static inline void mdss_dsi_set_silentreboot_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int flag)
+{
+	
+}
+
+static inline int mdss_dsi_get_silentreboot_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	return 0;
+}
+
+static inline void mdss_dsi_set_silent_backlight_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int flag)
+{
+	
+}
+
+static inline int mdss_dsi_get_silent_backlight_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	return 0;
+}
+#endif /* CONFIG_F_SKYDISP_SILENT_BOOT */
 
 #endif /* MDSS_DSI_H */

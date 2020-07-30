@@ -479,6 +479,26 @@ static ssize_t mdss_mdp_show_blank_event(struct device *dev,
 	return ret;
 }
 
+#ifdef CONFIG_F_SKYDISP_FACTORY_SLEEP_ENABLE
+static ssize_t msm_fb_panel_show(struct device *dev,
+                                          struct device_attribute *attr, char *buf)
+{
+        struct fb_info *fbi = dev_get_drvdata(dev);
+        struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	int ret =0;
+
+	if(mdss_panel_is_power_on(mfd->panel_power_state)) //on
+		ret = 1;
+
+        /* 0 - off ; 1 - on */
+        printk("msm_fb_panel_show : %d \n",ret);
+        return sprintf(buf, "%d\n", ret);
+}
+
+static DEVICE_ATTR(panel_power_on, S_IRUGO | S_IWUSR, msm_fb_panel_show, NULL);
+#endif
+
+
 static void __mdss_fb_idle_notify_work(struct work_struct *work)
 {
 	struct delayed_work *dw = to_delayed_work(work);
@@ -782,6 +802,106 @@ static ssize_t mdss_fb_get_dfps_mode(struct device *dev,
 	return ret;
 }
 
+#ifdef CONFIG_F_SKYDISP_GAMMA_CONTROL
+extern void gamma_control(struct mdss_panel_data *pdata, int level);
+char gamma_level_ret[3];
+static ssize_t msm_fb_gamma_store(struct device *dev, struct device_attribute *attr,
+                        const char *buf,size_t count)
+{
+	int gammalevel=-1;
+        struct fb_info *fbi = dev_get_drvdata(dev);
+        struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+        struct mdss_panel_info *pdata = mfd->panel_info;
+        struct mdss_panel_data * ctrl_pdata =NULL;
+        strcpy(gamma_level_ret,buf);
+        if(strncmp(gamma_level_ret,"20",2) == 0)
+                gammalevel = 20;
+        else if(strncmp(gamma_level_ret,"22",2) == 0)
+                gammalevel = 22;
+        else if (strncmp(gamma_level_ret,"24",2) == 0)
+		gammalevel = 24;
+	else
+                printk("msm_fb_gamma_store err\n");
+
+        if( !(mfd) || !(mfd->op_enable) || gammalevel<0  )
+        {
+                printk(KERN_ERR "msm_fb_cabc_store+, do not store gamma level. op_enable=%d \n", mfd->op_enable );
+		printk(KERN_ERR "get gamma level = %d (must be in 0~2)\n", gammalevel);
+                return count;
+        }
+
+        ctrl_pdata = container_of(pdata, struct mdss_panel_data,
+                                panel_info);
+        
+        gamma_control(ctrl_pdata,gammalevel);
+
+        return count;
+}
+static ssize_t msm_fb_gamma_show(struct device *dev,
+                                          struct device_attribute *attr, char *buf)
+{
+        printk("msm_fb_gamma_show : %s \n",gamma_level_ret);
+
+        return sprintf(buf, "%s\n", gamma_level_ret);
+
+}
+
+static DEVICE_ATTR(gamma_level_ctl, S_IRUGO | S_IWUSR, msm_fb_gamma_show, msm_fb_gamma_store);
+#endif
+
+
+
+#ifdef CONFIG_F_SKYDISP_CABC_CONTROL
+extern void cabc_control(struct mdss_panel_data *pdata, int state);
+char cabc_state_ret[5];
+static bool prev_cabc=0;
+static ssize_t msm_fb_cabc_store(struct device *dev, struct device_attribute *attr, 
+			const char *buf,size_t count)
+{
+	bool cabc = 0;
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct mdss_panel_info *pdata = mfd->panel_info;
+	struct mdss_panel_data * ctrl_pdata =NULL;
+ 	strcpy(cabc_state_ret,buf);
+ 	if(strncmp(cabc_state_ret,"on",2) == 0)
+		cabc = true;
+	else if(strncmp(cabc_state_ret,"off",3) == 0) 
+		cabc = false;
+ 	else
+ 		printk("msm_fb_cabc_store err\n");
+
+	if( !(mfd) || !(mfd->op_enable) || (cabc && prev_cabc)  )
+	{
+		printk(KERN_ERR "msm_fb_cabc_store+, do not store cabc. op_enable=%d, cabc=%d, prev_cabc=%d\n", mfd->op_enable, cabc, prev_cabc);
+		return count;
+	}
+	
+	ctrl_pdata = container_of(pdata, struct mdss_panel_data,
+				panel_info);
+
+	if(cabc)
+		cabc_control(ctrl_pdata,1);
+	else
+		cabc_control(ctrl_pdata,0);
+
+
+	prev_cabc = cabc;
+	printk("msm_fb_cabc_store : %s\n",buf);
+	return count;
+}
+static ssize_t msm_fb_cabc_show(struct device *dev,
+					  struct device_attribute *attr, char *buf)
+{
+	printk("msm_fb_cabc_show : %s \n",cabc_state_ret);
+	
+	return sprintf(buf, "%s\n", cabc_state_ret);
+
+}
+
+static DEVICE_ATTR(cabc_ctl, S_IRUGO | S_IWUSR, msm_fb_cabc_show, msm_fb_cabc_store);
+#endif
+
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -804,11 +924,20 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_show_blank_event.attr,
 	&dev_attr_idle_time.attr,
 	&dev_attr_idle_notify.attr,
+#ifdef CONFIG_F_SKYDISP_FACTORY_SLEEP_ENABLE
+        &dev_attr_panel_power_on.attr,
+#endif
 	&dev_attr_msm_fb_panel_info.attr,
 	&dev_attr_msm_fb_src_split_info.attr,
 	&dev_attr_msm_fb_thermal_level.attr,
 	&dev_attr_msm_fb_panel_status.attr,
 	&dev_attr_msm_fb_dfps_mode.attr,
+#ifdef CONFIG_F_SKYDISP_CABC_CONTROL
+	&dev_attr_cabc_ctl.attr,
+#endif
+#ifdef CONFIG_F_SKYDISP_GAMMA_CONTROL
+	&dev_attr_gamma_level_ctl.attr,
+#endif
 	NULL,
 };
 
@@ -2385,8 +2514,13 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	var->grayscale = 0,	/* No graylevels */
 	var->nonstd = 0,	/* standard pixel format */
 	var->activate = FB_ACTIVATE_VBL,	/* activate it at vsync */
+#if defined (CONFIG_F_SKYDISP_EF71_SS) 
+	var->height = 130,	/* height of picture in mm */
+	var->width = 73,	/* width of picture in mm */
+#else
 	var->height = -1,	/* height of picture in mm */
 	var->width = -1,	/* width of picture in mm */
+#endif	
 	var->accel_flags = 0,	/* acceleration flags */
 	var->sync = 0,	/* see FB_SYNC_* */
 	var->rotate = 0,	/* angle we rotate counter clockwise */

@@ -2362,6 +2362,7 @@ static int msm_cpp_cfg_frame(struct cpp_device *cpp_dev,
 		return -EINVAL;
 	}
 
+
 	if (cpp_dev->iommu_state != CPP_IOMMU_STATE_ATTACHED) {
 		pr_err("IOMMU is not attached\n");
 		return -EAGAIN;
@@ -2727,6 +2728,7 @@ static int32_t msm_cpp_fw_version(struct cpp_device *cpp_dev)
 
 	cpp_dev->fw_version = msm_cpp_read(cpp_dev->base);
 	pr_debug("CPP FW Version: 0x%08x\n", cpp_dev->fw_version);
+//pr_err("[wsyang_debug] CPP FW Version: 0x%08x\n", cpp_dev->fw_version);    
 
 	rc = msm_cpp_poll(cpp_dev->base, MSM_CPP_MSG_ID_TRAILER);
 	if (rc) {
@@ -2784,7 +2786,6 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 		pr_err("cpp_dev is null\n");
 		return -EINVAL;
 	}
-
 	if (_IOC_DIR(cmd) == _IOC_NONE) {
 		pr_err("Invalid ioctl/subdev cmd %u", cmd);
 		return -EINVAL;

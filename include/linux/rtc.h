@@ -174,6 +174,11 @@ extern int rtc_dev_update_irq_enable_emul(struct rtc_device *rtc,
 void rtc_handle_legacy_irq(struct rtc_device *rtc, int num, int mode);
 void rtc_aie_update_irq(void *private);
 void rtc_uie_update_irq(void *private);
+
+#ifdef CONFIG_PANTECH_PMIC_RTC_ALM_OFF
+extern int qpnp_force_alarm_irq_disable(void);
+#endif /* CONFIG_PANTECH_PMIC_RTC_ALM_OFF */
+
 enum hrtimer_restart rtc_pie_update_irq(struct hrtimer *timer);
 
 int rtc_register(rtc_task_t *task);

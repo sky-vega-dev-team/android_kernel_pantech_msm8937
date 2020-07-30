@@ -407,7 +407,11 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
 		   -std=gnu89
-
+# 20120105, albatros, imei 
+ifeq ($(OEM_PRODUCT_MANUFACTURER),PANTECH)
+LINUXINCLUDE += -I$(srctree)/../vendor/pantech/frameworks/pantechserver/include/sky_rawdata
+LINUXINCLUDE += -I$(srctree)/../vendor/pantech/frameworks/pantechserver/include/server/cmd/logsystem
+endif
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__

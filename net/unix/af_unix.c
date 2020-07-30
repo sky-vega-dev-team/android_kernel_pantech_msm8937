@@ -1146,6 +1146,7 @@ restart:
 		sock_put(old_peer);
 	} else {
 		unix_peer(sk) = other;
+
 		unix_state_double_unlock(sk, other);
 	}
 	return 0;

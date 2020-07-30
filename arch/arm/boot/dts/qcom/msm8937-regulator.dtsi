@@ -32,7 +32,7 @@
 			regulator-min-microvolt =
 				<RPM_SMD_REGULATOR_LEVEL_RETENTION>;
 			regulator-max-microvolt =
-				<RPM_SMD_REGULATOR_LEVEL_BINNING>;
+				<RPM_SMD_REGULATOR_LEVEL_TURBO>;
 			qcom,use-voltage-level;
 		};
 
@@ -43,7 +43,7 @@
 			regulator-min-microvolt =
 				<RPM_SMD_REGULATOR_LEVEL_RETENTION>;
 			regulator-max-microvolt =
-				<RPM_SMD_REGULATOR_LEVEL_BINNING>;
+				<RPM_SMD_REGULATOR_LEVEL_TURBO>;
 			qcom,use-voltage-floor-level;
 			qcom,always-send-voltage;
 		};
@@ -55,7 +55,7 @@
 			regulator-min-microvolt =
 				<RPM_SMD_REGULATOR_LEVEL_RETENTION>;
 			regulator-max-microvolt =
-				<RPM_SMD_REGULATOR_LEVEL_BINNING>;
+				<RPM_SMD_REGULATOR_LEVEL_TURBO>;
 			qcom,use-voltage-level;
 		};
 	};
@@ -271,9 +271,15 @@
 	rpm-regulator-ldoa22 {
 		status = "okay";
 		pm8937_l22: regulator-l22 {
+			regulator-min-microvolt = <2850000>;
+			regulator-max-microvolt = <2850000>;
+			qcom,init-voltage = <2850000>;
+/*
+//CONFIG_PANTECH_CAMERA
 			regulator-min-microvolt = <2800000>;
 			regulator-max-microvolt = <2800000>;
 			qcom,init-voltage = <2800000>;
+*/
 			status = "okay";
 		};
 	};

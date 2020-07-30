@@ -402,7 +402,11 @@ static const struct reg_default wsa881x_pre_pmu_pa[] = {
 };
 
 static const struct reg_default wsa881x_pre_pmu_pa_2_0[] = {
+#ifdef CONFIG_PANTECH_SND //20160128 hdj [WSA8810 DRE Enable ]
+	{WSA881X_SPKR_DRV_GAIN, 0xC1},
+#else
 	{WSA881X_SPKR_DRV_GAIN, 0x41},
+#endif
 	{WSA881X_SPKR_MISC_CTL1, 0x87},
 };
 

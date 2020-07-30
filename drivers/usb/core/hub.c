@@ -104,6 +104,13 @@ EXPORT_SYMBOL_GPL(ehci_cf_port_reset_rwsem);
 #define HUB_DEBOUNCE_STEP	  25
 #define HUB_DEBOUNCE_STABLE	 100
 
+#ifdef CONFIG_ANDROID_PANTECH_USB_OTG_INTENT
+extern int set_otg_dev_state(int mode);
+#endif
+#ifdef CONFIG_PANTECH_OTG_LOW_BATTERY
+extern void pantech_otg_uvlo_notify(int uvlo);
+extern int get_percentage_of_battery(void);
+#endif
 static void hub_release(struct kref *kref);
 static int usb_reset_and_verify_device(struct usb_device *udev);
 
@@ -2160,6 +2167,27 @@ void usb_disconnect(struct usb_device **pdev)
 	usb_set_device_state(udev, USB_STATE_NOTATTACHED);
 	dev_info(&udev->dev, "USB disconnect, device number %d\n",
 			udev->devnum);
+#ifdef CONFIG_ANDROID_PANTECH_USB_OTG_INTENT
+	if(udev->product != NULL){
+		if ((strcmp(udev->product, "EHCI Host Controller") != 0)
+			&& (strncmp(udev->product, "QHSUSB", strlen("QHSUSB")) != 0)	
+			&& (strncmp(udev->product, "Qualcomm", strlen("Qualcomm")) != 0) ) {
+			set_otg_dev_state(0);
+#ifdef CONFIG_PANTECH_OTG_LOW_BATTERY
+			{
+				int level = get_percentage_of_battery();
+				if(level < 10){
+					printk(KERN_ERR "batt level < 10 \n");
+					pantech_otg_uvlo_notify(0);
+				}
+			}
+#endif
+		}
+	} else {
+		printk(KERN_ERR "%s udev->product is NULL \n", __func__);
+		set_otg_dev_state(0);
+	}
+#endif
 
 	usb_lock_device(udev);
 
@@ -2469,6 +2497,28 @@ int usb_new_device(struct usb_device *udev)
 
 	/* Tell the world! */
 	announce_device(udev);
+
+#ifdef CONFIG_ANDROID_PANTECH_USB_OTG_INTENT
+	printk(KERN_ERR "^^^^ bDeviceClass %d\n", udev->descriptor.bDeviceClass);
+	printk(KERN_ERR "^^^^ bDeviceSubClass %d\n", udev->descriptor.bDeviceSubClass);
+	printk(KERN_ERR "^^^^ bDeviceProtocol %d\n", udev->descriptor.bDeviceProtocol);
+
+	if(udev->product != NULL){
+		if (strcmp(udev->product, "EHCI Host Controller")) {			
+			set_otg_dev_state(1);
+		}
+	}else{
+		if(udev->descriptor.bDeviceClass == 0x09 && udev->descriptor.bDeviceSubClass == 0x00 && 
+				udev->descriptor.bDeviceProtocol == 0x01){
+			//printk("^^^^ it's hub\n");
+			err = 1;
+			goto fail;
+		}else{
+			set_otg_dev_state(1);
+			//printk("^^^^ it's not hub\n");
+		}
+	}
+#endif
 
 	if (udev->serial)
 		add_device_randomness(udev->serial, strlen(udev->serial));

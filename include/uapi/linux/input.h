@@ -481,6 +481,9 @@ struct input_keymap_entry {
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
 
+#define KEY_PAN_WHEEL		250 // BS2 Touch/HS - Add pantech wheel key
+#define KEY_VT_CALL  252
+
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
 #define BTN_MISC		0x100

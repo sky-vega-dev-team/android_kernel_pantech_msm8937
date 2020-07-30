@@ -70,6 +70,13 @@
 
 #include "ci13xxx_udc.h"
 
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+extern void pantech_init_device_mode_change(void);
+extern bool b_pantech_usb_module;
+extern int pantech_vbus_connect(void);
+extern int pantech_vbus_disconnect(void);
+#endif
+
 /******************************************************************************
  * DEFINE
  *****************************************************************************/
@@ -3427,6 +3434,17 @@ static int ci13xxx_vbus_session(struct usb_gadget *_gadget, int is_active)
 		gadget_ready = 1;
 	spin_unlock_irqrestore(udc->lock, flags);
 
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+        printk(KERN_ERR "vbus_gadget %s!!!\n", is_active ? "connect" : "disconnect");
+#endif
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+			if(b_pantech_usb_module && udc->softconnect)
+				pantech_vbus_connect();
+#endif
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+			if(b_pantech_usb_module)
+				pantech_vbus_disconnect();
+#endif
 	if (!gadget_ready)
 		return 0;
 
@@ -3483,6 +3501,9 @@ static int ci13xxx_pullup(struct usb_gadget *_gadget, int is_active)
 {
 	struct ci13xxx *udc = container_of(_gadget, struct ci13xxx, gadget);
 	unsigned long flags;
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+	pantech_init_device_mode_change();
+#endif
 
 	spin_lock_irqsave(udc->lock, flags);
 	udc->softconnect = is_active;

@@ -1,0 +1,18 @@
+if CUST_PANTECH_H
+
+###################################################
+# PANTECH Secure Boot Section                     #
+#                                                 #
+config PANTECH_SECBOOT
+  bool
+  default n #PANTECH_SECBOOT
+
+###################################################
+# FEATURE_PANTECH_DXHDCP_PROVISIONING Section     #
+#                                                 #
+config PANTECH_DXHDCP_PROVISIONING
+  bool
+  default n #PANTECH_DXHDCP_PROVISIONING
+
+endif
+

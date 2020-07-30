@@ -45,7 +45,9 @@
 			qcom,pon_2 {
 				qcom,pon-type = <1>;
 				qcom,pull-up = <1>;
-				linux,code = <114>;
+				/*PANTECH_PMIC_VOLUME_KEY_DISABLE*/
+				#linux,code = <114>;
+				/*PANTECH_PMIC_VOLUME_KEY_DISABLE*/
 			};
 		};
 
@@ -156,7 +158,10 @@
 			gpio@c300 {
 				reg = <0xc300 0x100>;
 				qcom,pin-num = <4>;
-				status = "disabled";
+				//status = "disabled";
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				qcom,master-en = <0>;
 			};
 
 			gpio@c400 {
@@ -168,7 +173,10 @@
 			gpio@c500 {
 				reg = <0xc500 0x100>;
 				qcom,pin-num = <6>;
-				status = "disabled";
+				//status = "disabled";
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				qcom,master-en = <0>;
 			};
 
 			gpio@c600 {
@@ -278,7 +286,7 @@
 				qcom,decimation = <0>;
 				qcom,pre-div-channel-scaling = <0>;
 				qcom,calibration-type = "ratiometric";
-				qcom,scale-function = <2>;
+				qcom,scale-function = <20>;	/* CONFIG_PANTECH_PMIC_JEITA_SW */
 				qcom,hw-settle-time = <2>;
 				qcom,fast-avg-setup = <0>;
 				qcom,vadc-thermal-node;

@@ -34,6 +34,16 @@
 		status = "okay";
 	};
 
+	gpio@c400 { /* GPIO 5 */
+		/* NFC clk request */
+		qcom,mode = <0>;		/* QPNP_PIN_MODE_DIG_IN */
+		qcom,pull = <5>;		/* QPNP_PIN_PULL_NO */
+		qcom,vin-sel = <2>;		/* QPNP_PIN_VIN2 */
+		qcom,src-sel = <2>;		/* QPNP_PIN_SEL_FUNC_1 */
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
 	gpio@c700 {
 		status = "ok";
 		qcom,mode = <1>;
@@ -251,6 +261,7 @@
 	};
 };
 
+/* 
 #include "msm8937-mdss-panels.dtsi"
 
 &mdss_mdp {
@@ -305,3 +316,5 @@
 	qcom,mdss-dsi-pan-enable-dynamic-fps;
 	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
 };
+*/
+

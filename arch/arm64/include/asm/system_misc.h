@@ -53,4 +53,9 @@ extern char* (*arch_read_hardware_id)(void);
 
 #endif	/* __ASSEMBLY__ */
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+extern void __save_regs_and_mmu_in_panic(void);
+extern void __save_regs_and_mmu(struct pt_regs *regs, int is_die);
+#endif
+
 #endif	/* __ASM_SYSTEM_MISC_H */

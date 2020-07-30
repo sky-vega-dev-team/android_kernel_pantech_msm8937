@@ -37,6 +37,14 @@
 #define ULL_SUPPORTED_BITS_PER_SAMPLE 16
 #define ULL_SUPPORTED_SAMPLE_RATE 48000
 
+#ifdef CONFIG_PANTECH_SND //NXP VOICE Solution.
+#define LVVE
+#if defined(LVVE)
+#define VPM_TX_SM_LVVEFQ    (0x1000BFF0)  // 268484592
+#define VPM_TX_DM_LVVEFQ    (0x1000BFF1)  // 268484593
+#endif 
+#endif
+
 /* ENUM for adm_status */
 enum adm_cal_status {
 	ADM_STATUS_CALIBRATION_REQUIRED = 0,
@@ -2148,7 +2156,13 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 
 	if ((topology == VPM_TX_SM_ECNS_COPP_TOPOLOGY) ||
 	    (topology == VPM_TX_DM_FLUENCE_COPP_TOPOLOGY) ||
-	    (topology == VPM_TX_DM_RFECNS_COPP_TOPOLOGY))
+#ifdef CONFIG_PANTECH_SND //NXP VOICE Solution.		
+#if defined(LVVE)	    
+	    (topology == VPM_TX_SM_LVVEFQ) ||
+	    (topology == VPM_TX_DM_LVVEFQ) ||
+#endif
+#endif	    
+	    (topology == VPM_TX_DM_RFECNS_COPP_TOPOLOGY))   
 		rate = 16000;
 
 	copp_idx = adm_get_idx_if_copp_exists(port_idx, topology, perf_mode,

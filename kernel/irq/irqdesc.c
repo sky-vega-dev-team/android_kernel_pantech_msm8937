@@ -15,6 +15,11 @@
 #include <linux/radix-tree.h>
 #include <linux/bitmap.h>
 #include <linux/irqdomain.h>
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_IRQ_LOG  //p14291_pantech_dbg
+#include <mach/pantech_debug.h>
+#endif
+#endif
 
 #include "internals.h"
 
@@ -349,6 +354,19 @@ int generic_handle_irq(unsigned int irq)
 	if (!desc)
 		return -EINVAL;
 	generic_handle_irq_desc(irq, desc);
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_IRQ_LOG  //p14291_pantech_dbg
+    if(pantech_debug_enable)
+    {
+        int cpu_temp = smp_processor_id();
+        unsigned long long start_time = cpu_clock(cpu_temp);
+        if (desc->action)
+            pantech_debug_irq_sched_log(irq, (void *)desc->action->handler, irqs_disabled(), start_time);
+        else
+            pantech_debug_irq_sched_log(irq, (void *)desc->handle_irq,irqs_disabled(), start_time);
+    }
+#endif
+#endif
 	return 0;
 }
 EXPORT_SYMBOL_GPL(generic_handle_irq);

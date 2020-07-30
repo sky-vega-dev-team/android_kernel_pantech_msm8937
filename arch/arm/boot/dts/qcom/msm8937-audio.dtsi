@@ -80,8 +80,8 @@
 	qcom,model = "msm8952-tasha-snd-card";
 
 	qcom,cdc-us-euro-gpios = <&tlmm 63 0>;
-	qcom,msm-mbhc-hphl-swh = <0>;
-	qcom,msm-mbhc-gnd-swh = <0>;
+	//qcom,msm-mbhc-hphl-swh = <0>; //FEATURE_PANTECH_SND [20160106 SND hdj] NO-type set from msm-audio.dtsi
+	//qcom,msm-mbhc-gnd-swh = <0>; //FEATURE_PANTECH_SND [20160106 SND hdj] NO-type set from msm-audio.dtsi
 
 	qcom,hdmi-dba-codec-rx;
 
@@ -107,11 +107,11 @@
 	pinctrl-3 = <&pri_tlmm_lines_act &pri_tlmm_ws_act
 						&cross_conn_det_act>;
 
-	qcom,wsa-max-devs = <2>;
+	qcom,wsa-max-devs = <1>;  //FEATURE_PANTECH_SND
 	qcom,wsa-devs = <&wsa881x_211>, <&wsa881x_212>,
 			<&wsa881x_213>, <&wsa881x_214>;
-	qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrRight",
-				"SpkrLeft", "SpkrRight";
+	qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrLeft",  //FEATURE_PANTECH_SND
+				"SpkrLeft", "SpkrLeft";  //FEATURE_PANTECH_SND
 
 	asoc-codec = <&stub_codec>, <&hdmi_dba>;
 	asoc-codec-names = "msm-stub-codec.1", "msm-hdmi-dba-codec-rx";

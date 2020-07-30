@@ -723,7 +723,7 @@ int32_t msm_sensor_driver_probe(void *setting,
 			goto free_slave_info;
 		}
 	}
-
+	pr_err("sensor [%s]  flash [%s]  eeprom[%s]\n",slave_info->sensor_name, slave_info->flash_name, slave_info->eeprom_name);
 	/* Print slave info */
 	CDBG("camera id %d Slave addr 0x%X addr_type %d\n",
 		slave_info->camera_id, slave_info->slave_addr,
@@ -894,7 +894,7 @@ CSID_TG:
 		goto free_camera_info;
 	}
 
-	pr_err("%s probe succeeded", slave_info->sensor_name);
+	pr_err("%s probe succeeded\n", slave_info->sensor_name);
 
 	/*
 	  Set probe succeeded flag to 1 so that no other camera shall

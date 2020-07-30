@@ -117,6 +117,17 @@
 				qcom,vadc-thermal-node;
 			};
 
+			chan@10 {
+				label = "mpp1_batt_id";
+				reg = <0x10>;
+				qcom,decimation = <0>;
+				qcom,pre-div-channel-scaling = <0>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0>;
+				qcom,hw-settle-time = <2>;
+				qcom,fast-avg-setup = <0>;				
+			};
+			
 			chan@43 {
 				label = "usb_dp";
 				reg = <0x43>;
@@ -158,7 +169,10 @@
 			gpio@c100 {
 				reg = <0xc100 0x100>;
 				qcom,pin-num = <2>;
-				status = "disabled";
+				//status = "disabled";
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				qcom,master-en = <0>;
 			};
 		};
 
@@ -172,15 +186,21 @@
 			label = "pmi8950-mpp";
 
 			mpp@a000 {
+				/* MPP1 - mpp1_batt_id config */
 				reg = <0xa000 0x100>;
 				qcom,pin-num = <1>;
-				status = "disabled";
+				qcom,mode = <4>; /* AIN input */
+				qcom,invert = <1>; /* Enable MPP */
+				qcom,ain-route = <0>; /* AMUX 5 */
+				qcom,master-en = <1>;
+				qcom,src-sel = <0>; /* Function constant */
 			};
 
 			mpp@a100 {
 				reg = <0xa100 0x100>;
 				qcom,pin-num = <2>;
-				status = "disabled";
+				#status = "disabled";
+				qcom,master-en = <0>;
 			};
 
 			mpp@a200 {
@@ -202,20 +222,16 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
-			qcom,iterm-ma = <100>;
-			qcom,float-voltage-mv = <4200>;
+			qcom,iterm-ma = <200>;
+			qcom,float-voltage-mv = <4420>;
 			qcom,resume-delta-mv = <200>;
 			qcom,chg-inhibit-fg;
 			qcom,rparasitic-uohm = <100000>;
 			qcom,bms-psy-name = "bms";
 			qcom,thermal-mitigation = <1500 700 600 0>;
-			qcom,parallel-usb-min-current-ma = <1400>;
-			qcom,parallel-usb-9v-min-current-ma = <900>;
-			qcom,parallel-allowed-lowering-ma = <500>;
 			qcom,pmic-revid = <&pmi8950_revid>;
-			qcom,force-aicl-rerun;
+			/* qcom,force-aicl-rerun; */
 			qcom,aicl-rerun-period-s = <180>;
-			qcom,autoadjust-vfloat;
 
 			qcom,chgr@1000 {
 				reg = <0x1000 0x100>;
@@ -429,7 +445,9 @@
 		};
 
 		labibb: qpnp-labibb-regulator {
-			status = "disabled";
+		       /* DISPLAY_SKYDISP_LABIBB *///can not change this. (msm8937-ef71s-tp10.dts) hohi
+			//status = "okay"; 
+			status = "disabled"; 
 			spmi-dev-container;
 			compatible = "qcom,qpnp-labibb-regulator";
 			#address-cells = <1>;
@@ -448,9 +466,9 @@
 				qcom,qpnp-ibb-step-size = <100000>;
 				qcom,qpnp-ibb-slew-rate = <2000000>;
 				qcom,qpnp-ibb-use-default-voltage;
-				qcom,qpnp-ibb-init-voltage = <5500000>;
+				qcom,qpnp-ibb-init-voltage = <5700000>;
 				qcom,qpnp-ibb-init-amoled-voltage = <4000000>;
-				qcom,qpnp-ibb-init-lcd-voltage = <5500000>;
+				qcom,qpnp-ibb-init-lcd-voltage = <5700000>;
 
 				qcom,qpnp-ibb-soft-start = <1000>;
 
@@ -480,9 +498,9 @@
 				qcom,qpnp-lab-step-size = <100000>;
 				qcom,qpnp-lab-slew-rate = <5000>;
 				qcom,qpnp-lab-use-default-voltage;
-				qcom,qpnp-lab-init-voltage = <5500000>;
+				qcom,qpnp-lab-init-voltage = <5700000>;
 				qcom,qpnp-lab-init-amoled-voltage = <4600000>;
-				qcom,qpnp-lab-init-lcd-voltage = <5500000>;
+				qcom,qpnp-lab-init-lcd-voltage = <5700000>;
 
 				qcom,qpnp-lab-soft-start = <800>;
 
@@ -567,6 +585,7 @@
 				qcom,current = <625>;
 			};
 
+/*  EF71 use only flash_0
 			pmi8950_flash1: qcom,flash_1 {
 				label = "flash";
 				qcom,led-name = "led:flash_1";
@@ -577,7 +596,7 @@
 				qcom,id = <1>;
 				qcom,current = <625>;
 			};
-
+*/
 			pmi8950_torch0: qcom,torch_0 {
 				label = "torch";
 				qcom,led-name = "led:torch_0";
@@ -588,6 +607,7 @@
 				qcom,current = <120>;
 			};
 
+/* EF71 use only torch_0
 			pmi8950_torch1: qcom,torch_1 {
 				label = "torch";
 				qcom,led-name = "led:torch_1";
@@ -597,7 +617,7 @@
 				qcom,id = <1>;
 				qcom,current = <120>;
 			};
-
+*/
 			pmi8950_switch: qcom,switch {
 				label = "switch";
 				qcom,led-name = "led:switch";
@@ -621,14 +641,14 @@
 			interrupt-names = "sc-irq", "play-irq";
 			vcc_pon-supply = <&pon_perph_reg>;
 			qcom,play-mode = "direct";
-			qcom,wave-play-rate-us = <5263>;
+			qcom,wave-play-rate-us = <0>;
 			qcom,actuator-type = "erm";
 			qcom,wave-shape = "square";
 			qcom,vmax-mv = <2000>;
 			qcom,ilim-ma = <800>;
 			qcom,sc-deb-cycles = <8>;
 			qcom,int-pwm-freq-khz = <505>;
-			qcom,en-brake;
+			//qcom,en-brake;
 			qcom,brake-pattern = [03 03 00 00];
 			qcom,use-play-irq;
 			qcom,use-sc-irq;

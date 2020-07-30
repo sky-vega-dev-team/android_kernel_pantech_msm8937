@@ -637,6 +637,7 @@ int radio_hci_unregister_dev(void)
 		FMDERR("hdev is null");
 		return -EINVAL;
 	}
+	hdev = radio->fm_hdev;
 
 	tasklet_kill(&hdev->rx_task);
 	tasklet_kill(&hdev->cmd_task);

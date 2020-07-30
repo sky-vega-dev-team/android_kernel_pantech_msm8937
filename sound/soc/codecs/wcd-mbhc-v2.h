@@ -525,5 +525,7 @@ static inline void wcd_mbhc_deinit(struct wcd_mbhc *mbhc)
 {
 }
 #endif
-
+#ifdef CONFIG_PANTECH_SND_BOOTUP_HEADSET_INFO
+int wcd9xxx_headsetJackStatusGet(void);
+#endif
 #endif /* __WCD_MBHC_V2_H__ */

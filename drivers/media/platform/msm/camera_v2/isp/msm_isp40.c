@@ -580,7 +580,9 @@ static void msm_vfe40_read_irq_status(struct vfe_device *vfe_dev,
 	msm_camera_io_w(*irq_status1, vfe_dev->vfe_base + 0x34);
 	msm_camera_io_w_mb(1, vfe_dev->vfe_base + 0x24);
 	if (*irq_status0 & 0x18000000) {
-		pr_err_ratelimited("%s: Protection triggered\n", __func__);
+#if 0 //CONFIG_PANTECH_CAMERA
+	pr_err_ratelimited("%s: Protection triggered\n", __func__);
+#endif
 		*irq_status0 &= ~(0x18000000);
 	}
 
@@ -768,6 +770,9 @@ static long msm_vfe40_reset_hardware(struct vfe_device *vfe_dev,
 		rc = wait_for_completion_timeout(
 			&vfe_dev->reset_complete, msecs_to_jiffies(50));
 	}
+#ifdef CONFIG_PANTECH_CAMERA//F_PANTECH_CAMERA_QCOM_PATCH_CTS_BURSTREPROCESSING//r00320.2.53165.1
+    pr_err("msm_vfe40_reset_hardware isp reset done\n");
+#endif
 	return rc;
 }
 

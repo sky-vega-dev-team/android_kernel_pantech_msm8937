@@ -42,6 +42,11 @@
 
 #include <trace/events/exception.h>
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#include <mach/pantech_restart.h>
+int user_fault = 0;
+#endif
+
 static const char *fault_name(unsigned int esr);
 
 /*
@@ -110,6 +115,31 @@ static void __do_kernel_fault(struct mm_struct *mm, unsigned long addr,
 	do_exit(SIGKILL);
 }
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+//p14291_userdump --[
+//return 1: it's capable of causing framework reset.
+static int __check_critical_process(struct task_struct *tsk)
+{
+	int ret;
+	char *tsk_name;
+	char *group_leader_name;
+
+	tsk_name=tsk->comm;
+	group_leader_name=tsk->group_leader->comm;
+
+	if(!strcmp(tsk_name, "init") || !strcmp(tsk_name, "system_server") || !strcmp(tsk_name, "zygote"))
+		ret=1;
+	else if(!strcmp(group_leader_name, "system_server"))
+		ret=1;
+	else
+		ret=0;
+	
+	return ret;
+}
+// --]
+#endif
+
+
 /*
  * Something tried to access memory that isn't in our memory map. User mode
  * accesses just cause a SIGSEGV
@@ -137,6 +167,25 @@ static void __do_user_fault(struct task_struct *tsk, unsigned long addr,
 	si.si_errno = 0;
 	si.si_code = code;
 	si.si_addr = (void __user *)addr;
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+		//p14291_userdump -- [
+		if(userdump==LOGSET_USERDUMP_USER_RAMDUMP)
+		{
+			user_fault = 1;
+			BUG();
+		}
+		else if(userdump==LOGSET_USERDUMP_FRAME_RAMDUMP)
+		{
+			if(__check_critical_process(tsk))		
+			{
+				user_fault = 2;
+				BUG();
+			}
+		}
+		// --]
+#endif
+	
 	force_sig_info(sig, &si, tsk);
 }
 

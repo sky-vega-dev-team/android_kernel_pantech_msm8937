@@ -43,6 +43,10 @@
 #define AUDIO_NUM_INTERFACES	2
 #define MAX_INST_NAME_LEN     40
 
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+#include "../f_pantech_android.h"
+#endif
+
 /* B.3.1  Standard AC Interface Descriptor */
 static struct usb_interface_descriptor ac_interface_desc = {
 	.bLength =		USB_DT_INTERFACE_SIZE,
@@ -612,6 +616,9 @@ static int audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 			audio->audio_ep_enabled = false;
 		}
 	}
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+	usb_interface_enum_cb(AUDIO_TYPE_FLAG);
+#endif
 	return 0;
 }
 

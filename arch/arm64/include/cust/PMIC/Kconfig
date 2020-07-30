@@ -1,0 +1,67 @@
+if CUST_PANTECH_H
+###################################################
+#           PANTECH PMIC PART MODEL Feature       #
+###################################################
+config MACH_MSM8937_PMIC_COMMON
+  bool
+    default y
+    select PANTECH_PMIC_RTC_ALM_OFF
+    select PANTECH_PMIC_MONITOR_TEST
+	select PANTECH_PMIC_JEITA_SW
+	select PANTECH_PMIC_CHARGER_AUTO_PWR_ON
+	select PANTECH_PMIC_NONSTANDARD_CHARGER
+	select PANTECH_PMIC_CHARGER_WIRELESS
+	select PANTECH_PMIC_SHARED_DATA
+	select PANTECH_PMIC_HW_CHIP_REVISION
+	select PANTECH_PMIC_CABLE_REMOVAL_WORKAROUND
+	select PANTECH_PMIC_CHARGING_COUNT
+	select PANTECH_PMIC_LCD_ICL
+###################################################
+#           PANTECH PMIC PART ALL Feature         #
+###################################################
+
+# this is used in rtc.h, rtc-dev.c, qpnp-rtc.c
+config PANTECH_PMIC_RTC_ALM_OFF
+    bool
+    
+# for test menu and pcdt.
+config PANTECH_PMIC_MONITOR_TEST    
+    bool
+	
+# SW JEITA control
+config PANTECH_PMIC_JEITA_SW
+	bool
+	
+# auto pwr on
+config PANTECH_PMIC_CHARGER_AUTO_PWR_ON
+	bool
+
+# charging flow for abnormal charger.
+config PANTECH_PMIC_NONSTANDARD_CHARGER
+	bool
+	
+# Shared Memory
+config PANTECH_PMIC_SHARED_DATA
+	bool
+	
+# Wireless charging, Automatic Path Control
+config PANTECH_PMIC_CHARGER_WIRELESS
+	bool
+
+# FACTORY_DEVICE_ID_I for pcdt tool. FEATURE_PANTECH_PMIC_HW_CHIP_REVISION
+config PANTECH_PMIC_HW_CHIP_REVISION
+	bool
+
+# Wireless charging, fake cable insertion and removal
+config PANTECH_PMIC_CABLE_REMOVAL_WORKAROUND
+	bool
+
+# Charging Count
+config PANTECH_PMIC_CHARGING_COUNT
+	bool
+
+# Charging current limit by LCD on/off.
+config PANTECH_PMIC_LCD_ICL
+	bool
+	
+endif

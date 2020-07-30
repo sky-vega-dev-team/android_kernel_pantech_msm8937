@@ -1,0 +1,138 @@
+if CUST_PANTECH_H
+#
+# CUST PANTECH CONFIG SECTION
+#
+
+menu "CUST PANTECH CONFIG SECTION"
+
+config PANTECH
+	bool "PANTECH Common Configuration"
+	default y
+	help
+		Support PANTECH
+
+config PANTECH_DOMESTIC
+	depends on (MACH_MSM8937_EF71IE || MACH_MSM8937_EF71S || MACH_MSM8937_EF71K )
+	bool
+	default y
+	help
+		Pantech Domestic Configuration
+
+config EV10
+	int "Pantech Board Version EV10 Value"
+	default 0
+
+config PT10
+	int "Pantech Board Version PT10 Value"
+	default 10
+
+config PT20
+	int "Pantech Board Version PT20 Value"
+	default 12
+
+config WS10
+	int "Pantech Board Version WS10 Value"
+	default 20
+
+config WS20
+	int "Pantech Board Version WS20 Value"
+	default 22
+
+config TP10
+	int "Pantech Board Version TP10 Value"
+	default 30
+
+config TP20
+	int "Pantech Board Version TP20 Value"
+	default 32
+
+config BOARD_VER
+	int "Pantech Board Version Build Target"
+	default 0
+        help
+          The BOARD_VER is your build target's board version.
+
+config PANTECH_USER_BUILD
+	bool "Pantech User Build Target"
+	default n
+	help
+		The PANTECH_USER_BUILD is true if you configure build to user.
+		
+endmenu
+
+config PANTECH_PDL_DLOAD
+	bool "pantech pdl dload"
+	default y
+		help 
+		  We use the "FEATURE_PANTECH_PDL_DLOAD".
+
+source "arch/arm/include/cust/SIO/Kconfig"
+source "arch/arm/include/cust/LCD/Kconfig"
+source "arch/arm/include/cust/PMIC/Kconfig"
+source "arch/arm/include/cust/FS/Kconfig"
+source "arch/arm/include/cust/SecureBoot/Kconfig"
+source "arch/arm/include/cust/PSWIFI/Kconfig"
+############################
+# PANTECH DEBUG LOGGING & DUMP START
+############################
+
+#############
+# ALLWAYS ON #
+#############
+
+config PANTECH_ERR_CRASH_LOGGING
+    bool
+    default y
+
+config PANTECH_DEBUG_ON
+  bool
+  default n
+  select PANTECH_DEBUG
+
+config PANTECH_DEBUG
+  bool
+  default n
+  select PANTECH_DEBUG_SCHED_LOG
+  select PANTECH_DEBUG_IRQ_LOG
+  select PANTECH_DEBUG_DCVS_LOG
+  select PANTECH_DEBUG_RPM_LOG
+
+config PANTECH_DEBUG_SCHED_LOG
+  bool
+  default n
+
+config PANTECH_DEBUG_IRQ_LOG
+  bool
+  default n
+
+config PANTECH_DEBUG_DCVS_LOG
+  bool
+  default n
+
+config PANTECH_DEBUG_RPM_LOG
+  bool
+  default n
+
+############################
+# PANTECH DEBUG LOGGING & DUMP END
+############################
+
+############################
+# PANTECH SOUND START
+############################
+config PANTECH_SND
+  bool
+  default y
+
+config PANTECH_SND_QCOM_PATCH
+  bool
+  default y
+  
+config PANTECH_SND_BOOTUP_HEADSET_INFO
+  bool
+  default y  
+  
+############################
+# PANTECH SOUND END
+############################  
+endif

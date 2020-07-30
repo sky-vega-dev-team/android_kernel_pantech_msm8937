@@ -32,7 +32,7 @@
 #include <linux/usb/audio.h>
 #include <linux/usb/midi.h>
 
-#include "u_f.h"
+#include "../u_f.h"
 
 MODULE_AUTHOR("Ben Williamson");
 MODULE_LICENSE("GPL v2");
@@ -375,6 +375,9 @@ static int f_midi_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 				    midi->out_ep->name, err);
 		}
 	}
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+	usb_interface_enum_cb(MIDI_TYPE_FLAG);
+#endif
 
 	return 0;
 }

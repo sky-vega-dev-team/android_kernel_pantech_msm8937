@@ -131,6 +131,12 @@
 #define FLASH_SUBTYPE_DUAL					0x01
 #define FLASH_SUBTYPE_SINGLE					0x02
 
+#ifdef CONFIG_PANTECH_CAMERA//for EF71 flash open-fault workaround
+extern int get_batt_temp_fg(void);
+//extern int get_batt_soc_fg(void);
+extern int get_batt_voltage_fg(void);
+#endif
+
 /*
  * ID represents physical LEDs for individual control purpose.
  */
@@ -1243,6 +1249,11 @@ static void qpnp_flash_led_work(struct work_struct *work)
 	int total_curr_ma = 0;
 	int i;
 	u8 val;
+#ifdef CONFIG_PANTECH_CAMERA//for EF71 flash open-fault workaround
+    int batt_temp = 0;
+    //int batt_soc = 0;
+    int batt_voltage = 0;
+#endif
 
 	/* Global lock is to synchronize between the flash leds and torch */
 	mutex_lock(&led->flash_led_lock);
@@ -1252,6 +1263,22 @@ static void qpnp_flash_led_work(struct work_struct *work)
 	brightness = flash_node->cdev.brightness;
 	if (!brightness)
 		goto turn_off;
+    
+#ifdef CONFIG_PANTECH_CAMERA//for EF71 flash open-fault workaround
+    batt_temp = get_batt_temp_fg();
+    //batt_soc = get_batt_soc_fg();
+    batt_voltage = get_batt_voltage_fg();
+/*
+get_batt_temp_fg() : check the current battery temperature (flash will be not operate when less than 0 degrees)
+get_batt_soc_fg() : check the current battery level
+get_batt_voltage_fg() : check the current battery voltage(flash will be not operate when less than 3300000(3.3V) voltages)
+*/
+
+    //pr_err("[wsyang_debug] led->open_fault:%d / batt_temp:%d batt_soc:%d batt_voltage:%d \n", led->open_fault, batt_temp, batt_soc, batt_voltage);
+    if ((led->open_fault == true) && ((batt_temp > 0) || (batt_voltage > 3300000))) {
+        led->open_fault = false;
+    }
+#endif
 
 	if (led->open_fault) {
 		dev_err(&led->spmi_dev->dev, "Open fault detected\n");

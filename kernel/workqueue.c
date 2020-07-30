@@ -50,6 +50,12 @@
 #include <linux/uaccess.h>
 #include <linux/bug.h>
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
+#include <mach/pantech_debug.h> 
+#endif
+#endif
+
 #include "workqueue_internal.h"
 
 enum {
@@ -1998,6 +2004,13 @@ __acquires(&pool->lock)
 	 */
 	if (need_more_worker(pool))
 		wake_up_worker(pool);
+
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_121102
+    if(pantech_debug_enable)
+        pantechdbg_sched_msg("@%pS", f);
+#endif
+#endif
 
 	/*
 	 * Record the last pool and clear PENDING which should be the last

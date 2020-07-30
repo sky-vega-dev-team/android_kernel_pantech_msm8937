@@ -79,6 +79,10 @@ obj-$(CONFIG_MSM_SCM_ERRATA) += scm-errata.o
 obj-$(CONFIG_MSM_PFE_WA) += pfe-wa.o
 obj-$(CONFIG_MSM_PERFORMANCE) += msm_performance.o
 obj-$(CONFIG_ARCH_MSM8996) += msm_cpu_voltage.o
+ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+ccflags-y += -I../vendor/pantech/frameworks/pantechserver/include/sky_rawdata
+ccflags-y += -I../vendor/pantech/frameworks/pantechserver/include/server/cmd/logsystem
+endif
 obj-$(CONFIG_MSM_POWER) += msm_power.o
 
 ifdef CONFIG_MSM_SUBSYSTEM_RESTART

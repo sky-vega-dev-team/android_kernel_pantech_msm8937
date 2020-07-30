@@ -436,16 +436,18 @@
 			"AIF4 VI", "MCLK",
 			"AIF4 VI", "MICBIAS_REGULATOR",
 			"RX_BIAS", "MCLK",
+			"AMIC3", "MIC BIAS1", //FEATURE_PANTECH_SND
+			"MIC BIAS1", "Handset Mic", //FEATURE_PANTECH_SND
 			"MADINPUT", "MCLK",
 			"AIF4 MAD", "MICBIAS_REGULATOR",
 			"AMIC2", "MIC BIAS2",
 			"MIC BIAS2", "Headset Mic",
-			"AMIC3", "MIC BIAS2",
-			"MIC BIAS2", "ANCRight Headset Mic",
-			"AMIC4", "MIC BIAS2",
-			"MIC BIAS2", "ANCLeft Headset Mic",
-			"AMIC5", "MIC BIAS3",
-			"MIC BIAS3", "Handset Mic",
+//			"AMIC3", "MIC BIAS2", //FEATURE_PANTECH_SND
+//			"MIC BIAS2", "ANCRight Headset Mic", //FEATURE_PANTECH_SND
+//			"AMIC4", "MIC BIAS2", //FEATURE_PANTECH_SND
+//			"MIC BIAS2", "ANCLeft Headset Mic", //FEATURE_PANTECH_SND
+			"AMIC4", "MIC BIAS3", //FEATURE_PANTECH_SND
+			"MIC BIAS3", "Handset Mic", //FEATURE_PANTECH_SND
 			"AMIC6", "MIC BIAS4",
 			"MIC BIAS4", "Analog Mic6",
 			"DMIC0", "MIC BIAS1",
@@ -491,8 +493,12 @@
 		pinctrl-3 = <&pri_tlmm_lines_act &pri_tlmm_ws_act
 						&cross_conn_det_act>;
 
-		qcom,msm-mbhc-hphl-swh = <0>;
-		qcom,msm-mbhc-gnd-swh = <0>;
+		qcom,msm-mbhc-hphl-swh = <1>; //FEATURE_PANTECH_SND [20160106 SND hdj] NO-type
+		qcom,msm-mbhc-gnd-swh = <1>; //FEATURE_PANTECH_SND [20160106 SND hdj] NO-type
+		qcom,msm-hs-micbias-type = "external"; //FEATURE_PANTECH_SND [20160106 SND hdj] Headset MIC Bias Ext
+		qcom,cdc-micbias1-ext-cap; //FEATURE_PANTECH_SND [20160106 SND hdj] adding external cap
+		qcom,cdc-micbias2-ext-cap; //FEATURE_PANTECH_SND [20160106 SND hdj] adding external cap
+		qcom,cdc-micbias3-ext-cap; //FEATURE_PANTECH_SND [20160106 SND hdj] adding external cap
 		qcom,tasha-mclk-clk-freq = <9600000>;
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
@@ -678,12 +684,12 @@
 			"cdc-vdd-px";
 
 		qcom,cdc-on-demand-supplies = "cdc-vdd-mic-bias";
-
+//FEATURE_PANTECH_SND MIC QC default 1.8v pantech 2.5v only headset bias
 		qcom,cdc-micbias1-mv = <1800>;
-		qcom,cdc-micbias2-mv = <1800>;
+		qcom,cdc-micbias2-mv = <2500>;
 		qcom,cdc-micbias3-mv = <1800>;
 		qcom,cdc-micbias4-mv = <1800>;
-
+//FEATURE_PANTECH_SND
 		qcom,cdc-mclk-clk-rate = <9600000>;
 		qcom,cdc-slim-ifd = "tasha-slim-ifd";
 		qcom,cdc-slim-ifd-elemental-addr = [00 00 A0 01 17 02];

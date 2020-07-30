@@ -112,6 +112,46 @@ mpath=`dirname $$mdpath`; rm -rf $$mpath;\
 fi
 endef
 
+# CONFIG_PANTECH_SDXC_EXFAT
+# 20131223 LS1-p13795 modified for exFAT file system
+ifeq ($(KERNEL_ARCH),arm64)
+#64bit build
+else
+ifeq ($(PANTECH_SDXC_EXFAT_FS),true)
+ifeq ($(PANTECH_SDXC_EXFAT_BUILD),true)
+define exfat-module
+if test -e kheaders*.tar.bz2;then\
+rm -rf kheaders*.tar.bz2;\
+fi
+if test -e tuxera-exfat-*-msm8937*.tgz;then\
+rm -rf tuxera_exfat_hash;\
+rm -rf tuxera-exfat-*-msm8937*.tgz;\
+rm -rf tuxera-exfat-*-msm8937*;\
+fi
+./tuxera_update.sh --source-dir $(TOP)/kernel --output-dir $(KERNEL_OUT) -a --target target/pantech.d/msm8937-mm --user pantech --pass feke57aze93ni --use-cache --cache-dir $(TOP)/tuxera_exfat_hash
+tar -xvzf tuxera-exfat-*-msm8937*.tgz
+cp tuxera-exfat-*-msm8937*/exfat/kernel-module/texfat.ko $(KERNEL_MODULES_OUT)
+$(TOPDIR)kernel/scripts/sign-file sha512 $(KERNEL_OUT)/signing_key.priv $(KERNEL_OUT)/signing_key.x509 $(KERNEL_MODULES_OUT)/texfat.ko
+
+mpath=`find $(TARGET_OUT) -type d -name bin`;\
+if [ "$$mdpath" == "" ];then\
+mkdir -p $(TARGET_OUT)/bin;\
+fi
+cp tuxera-exfat-*-msm8937*/exfat/tools/* $(TARGET_OUT)/bin
+endef
+else
+define exfat-module
+cp tuxera-exfat-*-msm8937*/exfat/kernel-module/texfat.ko $(KERNEL_MODULES_OUT)
+$(TOPDIR)kernel/scripts/sign-file sha512 $(KERNEL_OUT)/signing_key.priv $(KERNEL_OUT)/signing_key.x509 $(KERNEL_MODULES_OUT)/texfat.ko
+cp tuxera-exfat-*-msm8937*/exfat/tools/* $(TARGET_OUT)/bin
+endef
+endif
+else
+define exfat-module
+endef
+endif
+endif
+
 ifneq ($(KERNEL_LEGACY_DIR),true)
 $(KERNEL_USR): $(KERNEL_HEADERS_INSTALL)
 	rm -rf $(KERNEL_SYMLINK)
@@ -138,6 +178,7 @@ $(TARGET_PREBUILT_INT_KERNEL): $(KERNEL_OUT) $(KERNEL_HEADERS_INSTALL)
 	$(MAKE) -C $(TARGET_KERNEL_SOURCE) O=$(BUILD_ROOT_LOC)$(KERNEL_OUT) INSTALL_MOD_PATH=$(BUILD_ROOT_LOC)../$(KERNEL_MODULES_INSTALL) INSTALL_MOD_STRIP=1 ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) modules_install
 	$(mv-modules)
 	$(clean-module-folder)
+	$(exfat-module) # CONFIG_PANTECH_SDXC_EXFAT
 
 $(KERNEL_HEADERS_INSTALL): $(KERNEL_OUT)
 	$(hide) if [ ! -z "$(KERNEL_HEADER_DEFCONFIG)" ]; then \

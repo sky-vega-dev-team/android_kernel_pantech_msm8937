@@ -931,7 +931,11 @@ static void tun_net_init(struct net_device *dev)
 		/* Zero header length */
 		dev->type = ARPHRD_NONE;
 		dev->flags = IFF_POINTOPOINT | IFF_NOARP | IFF_MULTICAST;
+#ifdef CONFIG_SKY_DS_OPTIMIZE_IPV6_THROUGHPUT
+		dev->tx_queue_len = TUN_READQ_SIZE * 2;  /* We prefer our own queue length */
+#else
 		dev->tx_queue_len = TUN_READQ_SIZE;  /* We prefer our own queue length */
+#endif 
 		break;
 
 	case TUN_TAP_DEV:

@@ -383,6 +383,7 @@ err:
 	mutex_unlock(&mask_info->lock);
 }
 
+
 static void diag_send_time_sync_update(uint8_t peripheral)
 {
 	struct diag_ctrl_msg_time_sync time_sync_msg;
@@ -707,6 +708,7 @@ static int diag_cmd_set_msg_mask(unsigned char *src_buf, int src_len,
 		}
 		mask_size = mask_size * sizeof(uint32_t);
 		memcpy(mask->ptr + offset, src_buf + header_len, mask_size);
+
 		mutex_unlock(&mask->lock);
 		mask_info->status = DIAG_CTRL_MASK_VALID;
 		break;
@@ -869,6 +871,7 @@ static int diag_cmd_update_event_mask(unsigned char *src_buf, int src_len,
 
 	mutex_lock(&mask_info->lock);
 	memcpy(mask_info->ptr, src_buf + header_len, mask_len);
+
 	mask_info->status = DIAG_CTRL_MASK_VALID;
 	mutex_unlock(&mask_info->lock);
 	if (diag_check_update(APPS_DATA))
@@ -1259,7 +1262,7 @@ int diag_create_msg_mask_table_entry(struct diag_msg_mask_t *msg_mask,
 	msg_mask->ssid_last = range->ssid_last;
 	msg_mask->ssid_last_tools = range->ssid_last;
 	msg_mask->range = msg_mask->ssid_last - msg_mask->ssid_first + 1;
-	if (msg_mask->range < MAX_SSID_PER_RANGE)
+	if (msg_mask->range > MAX_SSID_PER_RANGE)
 		msg_mask->range = MAX_SSID_PER_RANGE;
 	msg_mask->range_tools = msg_mask->range;
 	mutex_init(&msg_mask->lock);
@@ -1960,6 +1963,7 @@ int diag_process_apps_masks(unsigned char *buf, int len,
 int diag_masks_init(void)
 {
 	int err = 0;
+
 	err = diag_msg_mask_init();
 	if (err)
 		goto fail;

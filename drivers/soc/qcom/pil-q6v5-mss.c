@@ -371,6 +371,18 @@ static int pil_mss_driver_probe(struct platform_device *pdev)
 		drv->subsys_desc.is_not_loadable = 1;
 	} else {
 		ret = pil_mss_loadable_init(drv, pdev);
+		/*
+		is_not_loadable = 1;
+		
+		if(is_not_loadable){
+			drv->subsys_desc.is_not_loadable = 1;
+			init_completion(&drv->stop_ack);
+			return 0;
+		}else{
+			ret = pil_mss_loadable_init(drv, pdev);
+		}
+		*/
+		
 		if (ret)
 			return ret;
 	}

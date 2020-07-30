@@ -70,6 +70,13 @@ static struct of_device_id qpnp_revid_match_table[] = {
 	{}
 };
 
+#ifdef CONFIG_PANTECH_PMIC_HW_CHIP_REVISION
+static int pm8937_revid = 0;
+static int pmi8950_revid = 0;
+module_param_named(hw_revision1, pm8937_revid, int, S_IRUGO);
+module_param_named(hw_revision2, pmi8950_revid, int, S_IRUGO);
+#endif
+
 static u8 qpnp_read_byte(struct spmi_device *spmi, u16 addr)
 {
 	int rc;
@@ -140,11 +147,18 @@ static size_t build_pmic_string(char *buf, size_t n, int sid,
 	else
 		pos += snprintf(buf + pos, n - pos, ": %s",
 				pmic_names[subtype]);
+#ifdef CONFIG_PANTECH_PMIC_HW_CHIP_REVISION
+        if(subtype == 0x19) // PM8937
+            pm8937_revid = (int)(rev3 | (rev4<<8));
+        else if(subtype ==PMI8950_PERIPHERAL_SUBTYPE)
+            pmi8950_revid = (int)(rev3 | (rev4<<8));
+#endif
 	pos += snprintf(buf + pos, n - pos, " v%d.%d", rev4, rev3);
 	if (rev2 || rev1)
 		pos += snprintf(buf + pos, n - pos, ".%d", rev2);
 	if (rev1)
 		pos += snprintf(buf + pos, n - pos, ".%d", rev1);
+
 	return pos;
 }
 

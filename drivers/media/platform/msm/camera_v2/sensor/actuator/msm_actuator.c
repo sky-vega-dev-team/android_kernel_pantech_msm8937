@@ -811,6 +811,18 @@ static int32_t msm_actuator_park_lens(struct msm_actuator_ctrl_t *a_ctrl)
 
 	next_lens_pos = a_ctrl->step_position_table[a_ctrl->curr_step_pos];
 	while (next_lens_pos) {
+#ifdef CONFIG_PANTECH_CAMERA //F_PANTECH_CAMERA_EF71SS
+        /* conditions which help to reduce park lens time */
+        if (next_lens_pos > 400) {
+            next_lens_pos = next_lens_pos - 100;
+        } else if (next_lens_pos > 300) {
+            next_lens_pos = next_lens_pos - 20;
+        } else if (next_lens_pos > 200) {
+            next_lens_pos = next_lens_pos - 20;
+        } else {
+            next_lens_pos = (next_lens_pos > 100) ? (next_lens_pos - 50) : 0;
+        }
+#else
 		/* conditions which help to reduce park lens time */
 		if (next_lens_pos > (a_ctrl->park_lens.max_step *
 			PARK_LENS_LONG_STEP)) {
@@ -833,6 +845,7 @@ static int32_t msm_actuator_park_lens(struct msm_actuator_ctrl_t *a_ctrl)
 				(next_lens_pos - a_ctrl->park_lens.
 				max_step) : 0;
 		}
+#endif
 		a_ctrl->func_tbl->actuator_parse_i2c_params(a_ctrl,
 			next_lens_pos, a_ctrl->park_lens.hw_params,
 			a_ctrl->park_lens.damping_delay);

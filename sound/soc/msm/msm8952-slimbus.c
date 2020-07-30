@@ -116,7 +116,11 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = true,
 	.key_code[0] = KEY_MEDIA,
+#ifdef CONFIG_PANTECH_SND // pantech don't use BTN_1 for voice searching.
+	.key_code[1] = KEY_VOLUMEUP,
+#else
 	.key_code[1] = KEY_VOICECOMMAND,
+#endif
 	.key_code[2] = KEY_VOLUMEUP,
 	.key_code[3] = KEY_VOLUMEDOWN,
 	.key_code[4] = 0,
@@ -162,7 +166,11 @@ static void *def_tasha_mbhc_cal(void)
 		return NULL;
 
 #define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(tasha_wcd_cal)->X) = (Y))
+#ifdef CONFIG_PANTECH_SND // HS_VREF 1.6V H/W tune
+    	S(v_hs_max, 1600);
+#else
 	S(v_hs_max, 1500);
+#endif
 #undef S
 #define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(tasha_wcd_cal)->X) = (Y))
 	S(num_btn, WCD_MBHC_DEF_BUTTONS);
@@ -171,8 +179,11 @@ static void *def_tasha_mbhc_cal(void)
 	btn_cfg = WCD_MBHC_CAL_BTN_DET_PTR(tasha_wcd_cal);
 	btn_high = ((void *)&btn_cfg->_v_btn_low) +
 		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
-
+#ifdef CONFIG_PANTECH_SND //20160302 hdj [H/W headset button tuning.]
+	btn_high[0] = 100;
+#else
 	btn_high[0] = 75;
+#endif
 	btn_high[1] = 150;
 	btn_high[2] = 237;
 	btn_high[3] = 450;
@@ -1033,6 +1044,32 @@ static int msm_btsco_rate_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+#ifdef CONFIG_PANTECH_SND_BOOTUP_HEADSET_INFO
+static int headset_status_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = wcd9xxx_headsetJackStatusGet();
+	return 0;
+}
+
+static int headset_status_set(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	pr_info("%s() %s\n", __func__, "This behaviour is not implemented");
+	return 0;
+}
+#endif /* CONFIG_PANTECH_SND_BOOTUP_HEADSET_INFO */
+
+#ifdef CONFIG_PANTECH_SND //check headset impedance    
+static int headset_Impedance_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = wcd9xxx_headsetImpedanceGet();
+	return 0;
+}
+static int headset_Impedance_set(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	pr_info("%s() %s\n", __func__, "This behaviour is not implemented");
+	return 0;
+}
+#endif
 static int msm_proxy_rx_ch_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
@@ -1071,6 +1108,13 @@ static const char *const proxy_rx_ch_text[] = {"One", "Two", "Three", "Four",
 	"Five", "Six", "Seven", "Eight"};
 static char const *slim6_rx_bit_format_text[] = {"S16_LE", "S24_LE", "S24_3LE"};
 
+#ifdef CONFIG_PANTECH_SND_BOOTUP_HEADSET_INFO
+static const char *headset_status_function[] = {"Get"};
+#endif
+#ifdef CONFIG_PANTECH_SND //check headset impedance    
+static const char *headset_Impedance_function[] = {"Get"};
+#endif
+
 static const struct soc_enum msm_snd_enum[] = {
 	SOC_ENUM_SINGLE_EXT(2, spk_function),
 	SOC_ENUM_SINGLE_EXT(2, slim0_rx_ch_text),
@@ -1083,6 +1127,12 @@ static const struct soc_enum msm_snd_enum[] = {
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(slim5_rx_bit_format_text),
 			    slim5_rx_bit_format_text),
 	SOC_ENUM_SINGLE_EXT(2, slim5_rx_ch_text),
+#ifdef CONFIG_PANTECH_SND_BOOTUP_HEADSET_INFO
+	SOC_ENUM_SINGLE_EXT(1, headset_status_function),
+#endif
+#ifdef CONFIG_PANTECH_SND //check headset impedance    
+	SOC_ENUM_SINGLE_EXT(1, headset_Impedance_function),
+#endif
 	SOC_ENUM_SINGLE_EXT(8, proxy_rx_ch_text),
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(slim6_rx_sample_rate_text),
 				slim6_rx_sample_rate_text),
@@ -1132,6 +1182,14 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			slim0_tx_bit_format_get, slim0_tx_bit_format_put),
 	SOC_ENUM_EXT("Internal BTSCO SampleRate", msm_btsco_enum[0],
 		     msm_btsco_rate_get, msm_btsco_rate_put),
+#ifdef CONFIG_PANTECH_SND_BOOTUP_HEADSET_INFO
+	SOC_ENUM_EXT("Headset Status", msm_snd_enum[9], headset_status_get,
+			headset_status_set),
+#endif
+#ifdef CONFIG_PANTECH_SND //check headset impedance    
+	SOC_ENUM_EXT("Headset impedance", msm_snd_enum[10], headset_Impedance_get,
+			headset_Impedance_set),
+#endif
 	SOC_ENUM_EXT("PROXY_RX Channels", msm_snd_enum[9],
 			msm_proxy_rx_ch_get, msm_proxy_rx_ch_put),
 };

@@ -1,0 +1,28 @@
+/*
+ * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&i2c_8 { /* BLSP2 QUP4 */
+	status = "ok";
+	lp5523_led_driver@32 {
+		compatible = "ti,lp5523_led_driver";
+		reg = <0x32>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <93 0x2008>;
+		lp5523,clock_mode = <1>;
+		lp5523,led_en_gpio = <&tlmm 129 0x00>;
+		lp5523,max_chan = <9>;
+		lp5523,led_current = <40>;
+		lp5523,max_current = <250>;
+		//lp5523,trg_touchkey-backlight = <4 5>;
+	};
+};

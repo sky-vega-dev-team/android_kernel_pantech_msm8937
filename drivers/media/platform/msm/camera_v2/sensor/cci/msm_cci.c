@@ -809,9 +809,15 @@ static int32_t msm_cci_i2c_read(struct v4l2_subdev *sd,
 	 * If this call fails, don't proceed with i2c_read call. This is to
 	 * avoid overflow / underflow of queue
 	 */
+#if 0//def CONFIG_PANTECH_CAMERA
+	rc = msm_cci_validate_queue(cci_dev,
+		read_cfg->num_byte - 1,
+		master, queue);
+#else	 
 	rc = msm_cci_validate_queue(cci_dev,
 		cci_dev->cci_i2c_queue_info[master][queue].max_queue_size - 1,
 		master, queue);
+#endif
 	if (rc < 0) {
 		pr_err("%s:%d Initial validataion failed rc %d\n", __func__,
 			__LINE__, rc);
@@ -914,6 +920,9 @@ static int32_t msm_cci_i2c_read(struct v4l2_subdev *sd,
 			__LINE__, read_words, exp_words);
 		memset(read_cfg->data, 0, read_cfg->num_byte);
 		rc = -EINVAL;
+#if 0//def CONFIG_PANTECH_CAMERA
+		msm_cci_flush_queue(cci_dev, master); //=> Please try to add this line
+#endif
 		goto ERROR;
 	}
 	index = 0;
@@ -1603,8 +1612,52 @@ static int32_t msm_cci_config(struct v4l2_subdev *sd,
 	struct msm_camera_cci_ctrl *cci_ctrl)
 {
 	int32_t rc = 0;
+#if 0//def CONFIG_PANTECH_CAMERA // test
+    uint32_t cci_retry = 3;
+#endif	
 	CDBG("%s line %d cmd %d\n", __func__, __LINE__,
 		cci_ctrl->cmd);
+#if 0//def CONFIG_PANTECH_CAMERA // test
+	do{
+		switch (cci_ctrl->cmd) {
+		case MSM_CCI_INIT:
+			rc = msm_cci_init(sd, cci_ctrl);
+			break;
+		case MSM_CCI_RELEASE:
+			rc = msm_cci_release(sd);
+			break;
+		case MSM_CCI_I2C_READ:
+			rc = msm_cci_i2c_read_bytes(sd, cci_ctrl);
+			if(rc < 0)
+				pr_err("%s line %d cmd %d\n", __func__, __LINE__, cci_ctrl->cmd);
+			break;
+		case MSM_CCI_I2C_WRITE:
+		case MSM_CCI_I2C_WRITE_SEQ:
+		case MSM_CCI_I2C_WRITE_SYNC:
+		case MSM_CCI_I2C_WRITE_ASYNC:
+		case MSM_CCI_I2C_WRITE_SYNC_BLOCK:
+			rc = msm_cci_write(sd, cci_ctrl);
+			break;
+		case MSM_CCI_GPIO_WRITE:
+			break;
+		case MSM_CCI_SET_SYNC_CID:
+			rc = msm_cci_i2c_set_sync_prms(sd, cci_ctrl);
+			break;
+
+		default:
+			rc = -ENOIOCTLCMD;
+		}
+		CDBG("%s line %d rc %d\n", __func__, __LINE__, rc);
+		cci_retry--;
+	} while(rc < 0 && cci_retry > 0);
+	if(cci_retry < 2)
+	{
+		if(rc < 0)
+			pr_err("%s line %d cmd %d  FAIL ++++++++++\n", __func__, __LINE__, cci_ctrl->cmd);
+		else
+			pr_err("%s line %d cmd %d <cci_retry=%d> SUCCESS ++++++++++\n", __func__, __LINE__, cci_ctrl->cmd, cci_retry);
+	}
+#else	
 	switch (cci_ctrl->cmd) {
 	case MSM_CCI_INIT:
 		rc = msm_cci_init(sd, cci_ctrl);
@@ -1631,7 +1684,14 @@ static int32_t msm_cci_config(struct v4l2_subdev *sd,
 	default:
 		rc = -ENOIOCTLCMD;
 	}
+#endif	
 	CDBG("%s line %d rc %d\n", __func__, __LINE__, rc);
+#if 0//def CONFIG_PANTECH_CAMERA //F_PANTECH_CAMERA_KERNEL_DEFENCE_CODE_FOR_I2C_KERNEL_PANIC
+	if (rc < 0) {
+		pr_err("%s %d, cci_ctrl->cmd=%d, rc=%d, msm_cci_config failed, workaround for i2c kernel panic \n", __func__, __LINE__, cci_ctrl->cmd, rc);
+        rc = 0; 
+	}	
+#endif	
 	cci_ctrl->status = rc;
 	return rc;
 }

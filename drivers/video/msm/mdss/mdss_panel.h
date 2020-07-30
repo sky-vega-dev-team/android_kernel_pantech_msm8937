@@ -797,6 +797,10 @@ struct mdss_panel_data {
 	/* To store dsc cfg name passed by bootloader */
 	char dsc_cfg_np_name[MDSS_MAX_PANEL_LEN];
 	struct mdss_panel_data *next;
+#ifdef CONFIG_F_SKYDISP_SILENT_BOOT     //seunghwa_Ji p13832
+        int silent_flag;
+        int silent_backlight;
+#endif
 };
 
 struct mdss_panel_debugfs_info {

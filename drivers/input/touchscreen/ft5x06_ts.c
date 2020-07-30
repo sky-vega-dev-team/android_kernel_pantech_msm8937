@@ -505,6 +505,7 @@ static ssize_t ft5x06_secure_touch_show(struct device *dev,
 		complete(&data->st_irq_processed);
 	return scnprintf(buf, PAGE_SIZE, "%u", val);
 }
+
 #else
 static void ft5x06_secure_touch_init(struct ft5x06_ts_data *data)
 {
@@ -2578,6 +2579,10 @@ static int ft5x06_ts_probe(struct i2c_client *client,
 			goto free_secure_touch_sysfs;
 		}
 	}
+
+	/*Initialize secure touch */
+	ft5x06_secure_touch_init(data);
+	ft5x06_secure_touch_stop(data, 1);
 
 	ft5x06_update_fw_ver(data);
 	ft5x06_update_fw_vendor_id(data);

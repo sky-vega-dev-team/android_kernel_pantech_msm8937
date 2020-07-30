@@ -33,6 +33,18 @@
 
 #include <asm/ioctls.h>
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#include <mach/pantech_sys_info.h>
+#endif
+
+#ifndef CONFIG_LOGCAT_SIZE
+#define CONFIG_LOGCAT_SIZE 256
+#endif
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#define LOGCAT_HEADER_SIZE 0xC
+#endif
+
 /**
  * struct logger_log - represents a specific log, such as 'main' or 'radio'
  * @buffer:	The actual ring buffer
@@ -125,7 +137,6 @@ static struct logger_entry *get_entry_header(struct logger_log *log,
 		size_t off, struct logger_entry *scratch)
 {
 	size_t len = min(sizeof(struct logger_entry), log->size - off);
-
 	if (len != sizeof(struct logger_entry)) {
 		memcpy(((void *) scratch), log->buffer + off, len);
 		memcpy(((void *) scratch) + len, log->buffer,
@@ -410,7 +421,6 @@ static void fix_up_readers(struct logger_log *log, size_t len)
 			reader->r_off = get_next_entry(log, reader->r_off, len);
 }
 
-/*
  * logger_write_iter - our write method, implementing support for write(),
  * writev(), and aio_write(). Writes are our fast path, and we try to optimize
  * them above all else.
@@ -595,7 +605,6 @@ static unsigned int logger_poll(struct file *file, poll_table *wait)
 static long logger_set_version(struct logger_reader *reader, void __user *arg)
 {
 	int version;
-
 	if (copy_from_user(&version, arg, sizeof(int)))
 		return -EFAULT;
 
@@ -696,6 +705,39 @@ static const struct file_operations logger_fops = {
 	.release = logger_release,
 };
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+struct logger_log *log_main = NULL;
+struct logger_log *log_radio = NULL;
+struct logger_log *log_system = NULL;
+
+static pantech_log_header logcat_header;
+
+pantech_log_header *get_pantech_logcat_dump_address(void)
+{
+	if(log_main != NULL)
+	{
+		logcat_header.mlogcat_buf_address = (unsigned long long)virt_to_phys((void*)log_main->buffer);
+		//logcat_header.mlogcat_w_off = (unsigned long long)virt_to_phys((void*)(log_main->w_off));
+		logcat_header.mlogcat_size = (unsigned int)log_main->size;
+	}
+
+	if(log_system != NULL)
+	{
+		logcat_header.slogcat_buf_address = (unsigned long long)virt_to_phys((void*)log_system->buffer);
+		//logcat_header.slogcat_w_off = (unsigned long long)virt_to_phys((void*)(log_system->w_off));
+		logcat_header.slogcat_size = (unsigned int)log_system->size;
+	}
+
+	if(log_radio != NULL)
+	{
+		logcat_header.rlogcat_buf_address = (unsigned long long)virt_to_phys((void*)log_radio->buffer);
+		//logcat_header.rlogcat_w_off = (unsigned long long)virt_to_phys((void*)(log_radio->w_off));
+		logcat_header.rlogcat_size = (unsigned int)log_radio->size;
+	}
+	return &logcat_header;
+}
+#endif
+
 /*
  * Log size must must be a power of two, and greater than
  * (LOGGER_ENTRY_MAX_PAYLOAD + sizeof(struct logger_entry)).
@@ -744,6 +786,15 @@ static int __init create_log(char *log_name, int size)
 				log->misc.name);
 		goto out_free_misc_name;
 	}
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	if(!strcmp(log_name, LOGGER_LOG_MAIN))
+		log_main = log;
+	else if(!strcmp(log_name, LOGGER_LOG_RADIO))
+		log_radio = log;
+	else if(!strcmp(log_name, LOGGER_LOG_SYSTEM))
+		log_system = log;
+#endif
 
 	pr_info("created %luK log '%s'\n",
 		(unsigned long) log->size >> 10, log->misc.name);

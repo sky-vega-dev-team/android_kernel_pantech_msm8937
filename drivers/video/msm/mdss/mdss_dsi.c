@@ -26,6 +26,9 @@
 #include <linux/uaccess.h>
 #include <linux/msm-bus.h>
 #include <linux/pm_qos.h>
+#ifdef CONFIG_F_SKYDISP_SILENT_BOOT
+#include <mach/pantech_sys.h>
+#endif
 
 #include "mdss.h"
 #include "mdss_panel.h"
@@ -34,8 +37,36 @@
 #include "mdss_dsi_phy.h"
 #include "mdss_dba_utils.h"
 
+
 #define XO_CLK_RATE	19200000
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
+
+#ifdef CONFIG_F_SKYDISP_SILENT_BOOT
+static void mdss_dsi_check_reset_reson(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	if (pantech_sys_rst_is_silent_boot_mode()) {
+		mdss_dsi_set_silentreboot_flag(ctrl_pdata, 1);
+		if (!pantech_sys_reset_backlight_flag_get()) {/* backlight off */
+			pr_err("%s : silent backlight off status \n", __func__);
+			mdss_dsi_set_silent_backlight_flag(ctrl_pdata, 1); /* set backlight off status 1 */
+		}
+		else {
+			mdss_dsi_set_silent_backlight_flag(ctrl_pdata, 0); 
+		}
+	} else {
+		mdss_dsi_set_silentreboot_flag(ctrl_pdata, 0);
+	}
+
+	pr_err("%s : silent reboot %d : backlight flag %d \n", __func__,
+		mdss_dsi_get_silentreboot_flag(ctrl_pdata),
+		mdss_dsi_get_silent_backlight_flag(ctrl_pdata));
+}
+
+static void mdss_dsi_set_sharedmem_bloff(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned int flag)
+{
+	pantech_sys_reset_backlight_flag_set(flag);
+}
+#endif
 
 /* Master structure to hold all the information about the DSI/panel */
 static struct mdss_dsi_data *mdss_dsi_res;
@@ -248,7 +279,6 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev,
 		struct dsi_shared_data *sdata)
 {
 	int rc = 0, i = 0, j = 0;
-
 	if (!pdev || !sdata) {
 		pr_err("%s: invalid input\n", __func__);
 		return -EINVAL;
@@ -272,6 +302,32 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev,
 	return rc;
 }
 
+
+#if defined (CONFIG_F_SKYDISP_EF71_SS) 
+static int mdss_dsi_oem_set_vddio(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int enable)
+{
+	int ret = 0;
+
+	 if  (ctrl_pdata  == NULL)  {
+		pr_err("%s: Invalid input data\n", __func__);
+		return -EINVAL;
+	}
+
+	/* Set vddio and wait for the other master to notice */
+	if (gpio_is_valid(ctrl_pdata->lcd_vddio_switch_en_gpio)) {
+		gpio_direction_output((ctrl_pdata->lcd_vddio_switch_en_gpio), enable);	
+		udelay(10);
+	}
+	return ret;
+}
+#else
+static inline int mdss_dsi_oem_set_vddio(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int enable)
+{
+	return 0;
+}
+#endif
+
+
 static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
@@ -286,45 +342,117 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+	ret = msm_dss_enable_vreg(
+		ctrl_pdata->panel_power_data.vreg_config,
+		ctrl_pdata->panel_power_data.num_vreg, 0);
+	if (ret)
+		pr_err("%s: failed to vregs for %s\n", 
+				__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+
+	/* Need to be more 3ms delay in power off until LAB/IBB regulator off by mesuare.  */
+	msleep(3); 
+
+	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
+		pr_debug("reset disable: pinctrl not enabled\n");
+
 	ret = mdss_dsi_panel_reset(pdata, 0);
 	if (ret) {
 		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
 		ret = 0;
 	}
 
-	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
-		pr_debug("reset disable: pinctrl not enabled\n");
-
-	ret = msm_dss_enable_vreg(
-		ctrl_pdata->panel_power_data.vreg_config,
-		ctrl_pdata->panel_power_data.num_vreg, 0);
-	if (ret)
-		pr_err("%s: failed to disable vregs for %s\n",
-			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+	mdss_dsi_oem_set_vddio(ctrl_pdata, 0);
 
 end:
 	return ret;
 }
 
+#if defined (CONFIG_F_SKYDISP_EF71_SS) 
 static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
 	if (pdata == NULL) {
-		pr_err("%s: Invalid input data\n", __func__);
-		return -EINVAL;
+                        pr_err("%s: Invalid input data\n", __func__);
+                        return -EINVAL;
 	}
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+	/* Enable VDDIO  in the external LDO */
+	mdss_dsi_oem_set_vddio(ctrl_pdata, 1);
+
+	ret = msm_dss_enable_vreg(
+			ctrl_pdata->panel_power_data.vreg_config,
+			ctrl_pdata->panel_power_data.num_vreg, 1);
+	if (ret) {
+		pr_err("%s: failed to enable vregs for %s\n",
+				__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+		msm_dss_enable_vreg(
+			ctrl_pdata->panel_power_data.vreg_config,
+			ctrl_pdata->panel_power_data.num_vreg, 0);
+		return ret;
+	}
+
+        /*
+         * If continuous splash screen feature is enabled, then we need to
+         * request all the GPIOs that have already been configured in the
+         * bootloader. This needs to be done irresepective of whether
+         * the lp11_init flag is set or not.
+         */
+	if (pdata->panel_info.cont_splash_enabled ||
+		!pdata->panel_info.mipi.lp11_init) {
+		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
+			pr_debug("reset enable: pinctrl not enabled\n");
+
+		ret = mdss_dsi_panel_reset(pdata, 1);
+                if (ret)
+       	                pr_err("%s: Panel reset failed. rc=%d\n",
+				__func__, ret);
+		/* 
+		 * Wait after reset >50ms for NVM automatic load time 
+		* Modified 50ms to 55ms until load stable 
+		 */
+		msleep(55); 
+        }
+
+	return ret;
+}
+#else
+static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
+{
+	int ret = 0;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+
+	if (pdata == NULL) {
+                        pr_err("%s: Invalid input data\n", __func__);
+                        return -EINVAL;
+	}
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	/* Enable VDDIO  in the external LDO */
+	ret = mdss_dsi_oem_set_vddio(ctrl_pdata, 1);
+	if (ret) {
+		mdss_dsi_oem_set_vddio(ctrl_pdata, 0);
+		return ret;
+	}
+
+	/* enable LAB/IBB regulator of PMIC*/
 	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
 		ctrl_pdata->panel_power_data.num_vreg, 1);
 	if (ret) {
 		pr_err("%s: failed to enable vregs for %s\n",
 			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+
+		/* disable LAB/IBB regulator if failed */
+		msm_dss_enable_vreg(
+			ctrl_pdata->panel_power_data.vreg_config,
+		ctrl_pdata->panel_power_data.num_vreg, 0);
 		return ret;
 	}
 
@@ -343,10 +471,16 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 		if (ret)
 			pr_err("%s: Panel reset failed. rc=%d\n",
 					__func__, ret);
-	}
+		}		
+		/* 
+		 * Wait after reset >50ms for NVM automatic load time 
+		* Modified 50ms to 55ms until load stable 
+		 */
+		msleep(55);
 
 	return ret;
 }
+#endif
 
 static int mdss_dsi_panel_power_lp(struct mdss_panel_data *pdata, int enable)
 {
@@ -1356,6 +1490,16 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 		goto end;
 	}
 
+	/* Lim-hajong
+	 * FIXME : change to in the mdss_dsi_panel_power_on for reset timming
+	 * 		why this code added in 78s???  @.@
+	 * 		why delete reset code in power on and add this code??
+	*/
+#if 0
+        if (!pdata->panel_info.mipi.lp11_init) {
+        mdss_dsi_panel_reset(pdata, 1);
+       }
+#endif
 	ret = mdss_dsi_set_clk_src(ctrl_pdata);
 	if (ret) {
 		pr_err("%s: failed to set clk src. rc=%d\n", __func__, ret);
@@ -1554,6 +1698,11 @@ error:
 
 	mdss_dsi_pm_qos_update_request(DSI_ENABLE_PC_LATENCY);
 
+#ifdef CONFIG_F_SKYDISP_SILENT_BOOT
+		mdss_dsi_set_sharedmem_bloff(ctrl_pdata, 1);
+		pr_debug("%s : [silent] backlight on status\n", __func__);
+#endif
+
 	pr_debug("%s-:\n", __func__);
 
 	return ret;
@@ -1635,6 +1784,12 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 error:
 	mdss_dsi_clk_ctrl(ctrl_pdata, ctrl_pdata->dsi_clk_handle,
 			  MDSS_DSI_ALL_CLKS, MDSS_DSI_CLK_OFF);
+
+#ifdef CONFIG_F_SKYDISP_SILENT_BOOT
+		mdss_dsi_set_sharedmem_bloff(ctrl_pdata, 0);
+		pr_debug("%s : [silent] backlight off status \n", __func__);
+#endif
+
 	pr_debug("%s-:End\n", __func__);
 	return ret;
 }
@@ -2519,8 +2674,9 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 							pdata);
 		break;
 	case MDSS_EVENT_UNBLANK:
-		if (ctrl_pdata->on_cmds.link_state == DSI_LP_MODE)
+		if (ctrl_pdata->on_cmds.link_state == DSI_LP_MODE){
 			rc = mdss_dsi_unblank(pdata);
+		}
 		break;
 	case MDSS_EVENT_POST_PANEL_ON:
 		rc = mdss_dsi_post_panel_on(pdata);
@@ -2529,12 +2685,19 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		ctrl_pdata->ctrl_state |= CTRL_STATE_MDP_ACTIVE;
 		if (ctrl_pdata->on_cmds.link_state == DSI_HS_MODE)
 			rc = mdss_dsi_unblank(pdata);
+
 		pdata->panel_info.esd_rdy = true;
 		break;
 	case MDSS_EVENT_BLANK:
 		power_state = (int) (unsigned long) arg;
-		if (ctrl_pdata->off_cmds.link_state == DSI_HS_MODE)
+		if (ctrl_pdata->off_cmds.link_state == DSI_HS_MODE) {
 			rc = mdss_dsi_blank(pdata, power_state);
+#ifdef CONFIG_F_SKYDISP_SILENT_BOOT
+			if (mdss_dsi_get_silentreboot_flag(ctrl_pdata)) {
+				mdss_dsi_set_silentreboot_flag(ctrl_pdata, 0); /* reset silent flag */
+			}
+#endif
+		}
 		break;
 	case MDSS_EVENT_PANEL_OFF:
 		power_state = (int) (unsigned long) arg;
@@ -3114,6 +3277,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+			
 	if (!mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data) ||
 		(mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data) &&
 		(ctrl_pdata->panel_data.panel_info.pdest == DISPLAY_1))) {
@@ -3129,6 +3293,11 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	} else {
 		ctrl_pdata->bklt_ctrl = UNKNOWN_CTRL;
 	}
+
+	
+#ifdef CONFIG_F_SKYDISP_SILENT_BOOT
+		mdss_dsi_check_reset_reson(ctrl_pdata);
+#endif
 
 	rc = dsi_panel_device_register(pdev, dsi_pan_node, ctrl_pdata);
 	if (rc) {
@@ -3154,6 +3323,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		pr_err("%s: Failed to set dsi clk rates\n", __func__);
 		return rc;
 	}
+
 
 	rc = mdss_dsi_cont_splash_config(pinfo, ctrl_pdata);
 	if (rc) {
@@ -3907,6 +4077,260 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 {
 	struct mdss_panel_info *pinfo = &(ctrl_pdata->panel_data.panel_info);
 
+#if defined (CONFIG_F_SKYDISP_EF71_SS)
+	int rc;
+
+/* backlight gpio */
+	ctrl_pdata->bl_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+						     "qcom,platform-bl-en-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->bl_en_gpio)) {
+		pr_err("%s:%d, Disp_en gpio not specified\n",
+						__func__, __LINE__);
+	} else {
+		rc = gpio_request(ctrl_pdata->bl_en_gpio, "bl_enable");
+		if (rc) {
+			pr_err("request bl enable gpio failed, rc=%d\n",
+			       rc);
+			gpio_free(ctrl_pdata->bl_en_gpio);
+			return -ENODEV;
+		}
+#ifdef CONFIG_F_SKYDISP_SILENT_BOOT
+		if (mdss_dsi_get_silentreboot_flag(ctrl_pdata)) {
+
+			if (!mdss_dsi_get_silent_backlight_flag(ctrl_pdata)) { /* is backlight on */
+				rc = gpio_direction_output(ctrl_pdata->bl_en_gpio, 1);
+			} else {
+				rc = gpio_direction_output(ctrl_pdata->bl_en_gpio, 0);
+			}
+			pr_debug("%s : silent reboot backlight status %d\n", __func__,
+				mdss_dsi_get_silent_backlight_flag(ctrl_pdata));
+			if (rc) {
+				pr_err("set_direction for bl_en_gpio gpio failed, rc=%d\n",
+					rc);
+				gpio_free(ctrl_pdata->bl_en_gpio);
+				return -ENODEV;
+			}
+		} else {
+			rc = gpio_direction_output(ctrl_pdata->bl_en_gpio, 1);
+			if (rc) {
+			pr_err("set_direction for bl_en_gpio gpio failed, rc=%d\n",
+			       rc);
+			gpio_free(ctrl_pdata->bl_en_gpio);
+			return -ENODEV;
+			}
+		}
+#else
+		rc = gpio_direction_output(ctrl_pdata->bl_en_gpio, 1);
+		if (rc) {
+			pr_err("set_direction for bl_en_gpio gpio failed, rc=%d\n",
+			       rc);
+			gpio_free(ctrl_pdata->bl_en_gpio);
+			return -ENODEV;
+		}
+#endif	
+	}
+/* 1.8V regulator chip switch */
+	ctrl_pdata->lcd_vddio_switch_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+						 "qcom,platform-vddio-switch-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->lcd_vddio_switch_en_gpio)) {
+		pr_err("%s:%d, 1.8v Ext Regulator switch gpio not specified\n",
+						__func__, __LINE__);
+	} else {
+		rc = gpio_request(ctrl_pdata->lcd_vddio_switch_en_gpio, "lcd_vddio_ext_reg_switch");
+		if (rc) {
+			pr_err("request 1.8v Ext Regulator switch gpio failed, rc=%d\n",
+				rc);
+			gpio_free(ctrl_pdata->lcd_vddio_switch_en_gpio);
+			if (gpio_is_valid(ctrl_pdata->bl_en_gpio))
+				gpio_free(ctrl_pdata->bl_en_gpio);
+			return -ENODEV;
+		}
+		rc = gpio_direction_output(ctrl_pdata->lcd_vddio_switch_en_gpio, 1);
+		if (rc) {
+			pr_err("set_direction for lcd_vddio_ext_reg_switch gpio failed, rc=%d\n",
+			       rc);
+			gpio_free(ctrl_pdata->lcd_vddio_switch_en_gpio);
+			if (gpio_is_valid(ctrl_pdata->bl_en_gpio))
+				gpio_free(ctrl_pdata->bl_en_gpio);
+			return -ENODEV;
+		}
+	}
+
+/* 1.8V regulator */
+	/*
+	ctrl_pdata->lcd_vddio_reg_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+						 "qcom,platform-vddio-reg-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->lcd_vddio_reg_en_gpio)) {
+		pr_err("%s:%d, 1.8v Ext Regulator gpio not specified\n",
+						__func__, __LINE__);
+	} else {
+		rc = gpio_request(ctrl_pdata->lcd_vddio_reg_en_gpio, "lcd_vddio_ext_reg");
+		if (rc) {
+			pr_err("request 1.8v Ext Regulator gpio failed, rc=%d\n",
+				rc);
+			gpio_free(ctrl_pdata->lcd_vddio_reg_en_gpio);
+			if (gpio_is_valid(ctrl_pdata->bl_en_gpio))
+				gpio_free(ctrl_pdata->bl_en_gpio);
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_switch_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_switch_en_gpio);
+			return -ENODEV;
+		}
+		rc = gpio_direction_output(ctrl_pdata->lcd_vddio_reg_en_gpio, 1);
+		if (rc) {
+			pr_err("set_direction for lcd_vddio_ext_reg gpio failed, rc=%d\n",
+			       rc);
+			gpio_free(ctrl_pdata->lcd_vddio_reg_en_gpio);
+			if (gpio_is_valid(ctrl_pdata->bl_en_gpio))
+				gpio_free(ctrl_pdata->bl_en_gpio);
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_switch_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_switch_en_gpio);
+			return -ENODEV;
+		}
+	}
+	*/
+
+/* LCD reset */
+	ctrl_pdata->rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+						 "qcom,platform-reset-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->rst_gpio)) {
+		pr_err("%s:%d, reset gpio not specified\n",
+						__func__, __LINE__);
+	} else {
+		rc = gpio_request(ctrl_pdata->rst_gpio, "disp_rst_n");
+		if (rc) {
+			pr_err("request reset gpio failed, rc=%d\n",
+				rc);
+			gpio_free(ctrl_pdata->rst_gpio);
+			if (gpio_is_valid(ctrl_pdata->bl_en_gpio))
+				gpio_free(ctrl_pdata->bl_en_gpio);	
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_switch_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_switch_en_gpio);						
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_reg_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_reg_en_gpio);
+			return -ENODEV;
+		}
+		rc = gpio_direction_output(ctrl_pdata->rst_gpio, 1);
+		if (rc) {
+			pr_err("set_direction for lcd rst gpio failed, rc=%d\n",
+			       rc);
+			gpio_free(ctrl_pdata->rst_gpio);
+			if (gpio_is_valid(ctrl_pdata->bl_en_gpio))
+				gpio_free(ctrl_pdata->bl_en_gpio);	
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_switch_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_switch_en_gpio);						
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_reg_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_reg_en_gpio);
+			return -ENODEV;
+		}
+	}
+
+#if (CONFIG_BOARD_VER < CONFIG_TP10)//DISPLAY_SKYDISP_LABIBB	
+/* +5.7V regulator */		
+	ctrl_pdata->lcd_vcip_reg_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+						 "qcom,platform-vcip-reg-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->lcd_vcip_reg_en_gpio)) {
+		pr_err("%s:%d, +5.7v Ext Regulator gpio not specified\n",
+						__func__, __LINE__);
+	} else {
+		rc = gpio_request(ctrl_pdata->lcd_vcip_reg_en_gpio, "lcd_vcip_ext_reg");
+		if (rc) {
+			pr_err("request +5.6v Ext Regulator gpio failed, rc=%d\n",
+				rc);
+			gpio_free(ctrl_pdata->lcd_vcip_reg_en_gpio);
+			if (gpio_is_valid(ctrl_pdata->bl_en_gpio))
+				gpio_free(ctrl_pdata->bl_en_gpio);	
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_switch_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_switch_en_gpio);			
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_reg_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_reg_en_gpio);	
+			if (gpio_is_valid(ctrl_pdata->rst_gpio))
+				gpio_free(ctrl_pdata->rst_gpio);	
+			return -ENODEV;
+		}
+		rc = gpio_direction_output(ctrl_pdata->lcd_vcip_reg_en_gpio, 1);
+		if (rc) {
+			pr_err("set_direction for lcd_vci_ext_reg gpio failed, rc=%d\n",
+			       rc);
+			gpio_free(ctrl_pdata->lcd_vcip_reg_en_gpio);
+			if (gpio_is_valid(ctrl_pdata->bl_en_gpio))
+				gpio_free(ctrl_pdata->bl_en_gpio);	
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_switch_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_switch_en_gpio);						
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_reg_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_reg_en_gpio);	
+			if (gpio_is_valid(ctrl_pdata->rst_gpio))
+				gpio_free(ctrl_pdata->rst_gpio);	
+			return -ENODEV;
+		}
+	}
+
+#if 1 // LCD_USED_VCIP_MPPS
+    /* +5.7V regulator for MPPS */		
+	ctrl_pdata->lcd_vcip_reg_en_mpps = of_get_named_gpio(ctrl_pdev->dev.of_node,
+						 "qcom,platform-vcip-reg-mpps", 0);
+	if (!gpio_is_valid(ctrl_pdata->lcd_vcip_reg_en_mpps)) {
+		pr_err("%s:%d, +5.7v Ext Regulator gpio not specified\n",
+						__func__, __LINE__);
+	} else {			
+		rc = gpio_request(ctrl_pdata->lcd_vcip_reg_en_mpps, "lcd_vcip_ext_reg");
+		if (rc) {
+			pr_err("request +5.6v Ext Regulator mpps failed, rc=%d\n",
+				rc);
+			gpio_free(ctrl_pdata->lcd_vcip_reg_en_mpps);
+			if (gpio_is_valid(ctrl_pdata->bl_en_gpio))
+				gpio_free(ctrl_pdata->bl_en_gpio);	
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_switch_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_switch_en_gpio);			
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_reg_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_reg_en_gpio);	
+			if (gpio_is_valid(ctrl_pdata->rst_gpio))
+				gpio_free(ctrl_pdata->rst_gpio);	
+			if (gpio_is_valid(ctrl_pdata->lcd_vcip_reg_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vcip_reg_en_gpio);	
+			return -ENODEV;
+		}
+		rc = gpio_direction_output(ctrl_pdata->lcd_vcip_reg_en_mpps, 1);
+		if (rc) {
+			pr_err("set_direction for lcd_vci_ext_reg gpio failed, rc=%d\n",
+			       rc);
+			gpio_free(ctrl_pdata->lcd_vcip_reg_en_mpps);		
+			if (gpio_is_valid(ctrl_pdata->bl_en_gpio))
+				gpio_free(ctrl_pdata->bl_en_gpio);	
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_switch_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_switch_en_gpio);						
+			if (gpio_is_valid(ctrl_pdata->lcd_vddio_reg_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vddio_reg_en_gpio);	
+			if (gpio_is_valid(ctrl_pdata->rst_gpio))
+				gpio_free(ctrl_pdata->rst_gpio);	
+			if (gpio_is_valid(ctrl_pdata->lcd_vcip_reg_en_gpio))
+				gpio_free(ctrl_pdata->lcd_vcip_reg_en_gpio);	
+			return -ENODEV;
+		}
+	}
+#endif
+
+#endif //DISPLAY_SKYDISP_LABIBB
+#if 0 // LCD_NOT_USED_VCIN_GPIO	
+/* -5.7V regulator */		
+	ctrl_pdata->lcd_vcin_reg_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+						 "qcom,platform-vcin-reg-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->lcd_vcin_reg_en_gpio)) {
+		pr_err("%s:%d, -5.7v Ext Regulator gpio not specified\n",
+						__func__, __LINE__);
+	} 
+#endif
+
+/* LCD_TE add */
+	if (pinfo->type == MIPI_CMD_PANEL) {
+		ctrl_pdata->disp_te_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+						"qcom,platform-te-gpio", 0);
+		if (!gpio_is_valid(ctrl_pdata->disp_te_gpio)) {
+			pr_err("%s:%d, Disp_te gpio not specified\n",
+						__func__, __LINE__);
+		}
+	}
+
+#else	
 	/*
 	 * If disp_en_gpio has been set previously (disp_en_gpio > 0)
 	 *  while parsing the panel node, then do not override it
@@ -3950,7 +4374,7 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 	} else {
 		ctrl_pdata->mode_gpio = -EINVAL;
 	}
-
+#endif
 	return 0;
 }
 
@@ -4095,7 +4519,6 @@ int dsi_panel_device_register(struct platform_device *ctrl_pdev,
 	 * suspend also.
 	 */
 	sdata = ctrl_pdata->shared_data;
-
 	if (pinfo->ulps_suspend_enabled) {
 		rc = msm_dss_enable_vreg(
 			sdata->power_data[DSI_PHY_PM].vreg_config,
