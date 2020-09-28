@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,6 +18,7 @@
 #include <linux/interrupt.h>
 
 struct subsys_device;
+extern struct bus_type subsys_bus_type;
 
 enum {
 	RESET_SOC = 0,
@@ -79,6 +80,7 @@ struct subsys_desc {
 	int shutdown_ack_gpio;
 	int ramdump_disable;
 	bool no_auth;
+	bool pil_mss_memsetup;
 	int ssctl_instance_id;
 	u32 sysmon_pid;
 	int sysmon_shutdown_ret;

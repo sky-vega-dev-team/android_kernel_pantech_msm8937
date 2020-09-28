@@ -635,7 +635,7 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	 * confirmed us.
 	 */
 	NF_CT_ASSERT(!nf_ct_is_confirmed(ct));
-	pr_debug("Confirming conntrack %p\n", ct);
+	pr_debug("Confirming conntrack %pK\n", ct);
 	/* We have to check the DYING flag after unlink to prevent
 	 * a race against nf_ct_get_next_corpse() possibly called from
 	 * user context, else we insert an already 'dead' hash, blocking
@@ -981,7 +981,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 		spin_lock(&nf_conntrack_expect_lock);
 		exp = nf_ct_find_expectation(net, zone, tuple);
 		if (exp) {
-			pr_debug("conntrack: expectation arrives ct=%p exp=%p\n",
+			pr_debug("conntrack: expectation arrives ct=%pK exp=%pK\n",
 				 ct, exp);
 			/* Welcome, Mr. Bond.  We've been expecting you... */
 			__set_bit(IPS_EXPECTED_BIT, &ct->status);
@@ -1800,7 +1800,7 @@ int nf_conntrack_init_net(struct net *net)
 	if (!net->ct.stat)
 		goto err_pcpu_lists;
 
-	net->ct.slabname = kasprintf(GFP_KERNEL, "nf_conntrack_%p", net);
+	net->ct.slabname = kasprintf(GFP_KERNEL, "nf_conntrack_%pK", net);
 	if (!net->ct.slabname)
 		goto err_slabname;
 

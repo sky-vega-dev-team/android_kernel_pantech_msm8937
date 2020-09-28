@@ -255,8 +255,12 @@
 	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
 };
 */
-/*
-&qpdi {
-	qcom,pmic-carddetect-gpio = <&pm8937_gpios 0x2 0>;
+
+/* PM8937 GPIO configuration */
+&pm8937_gpios {
+	gpio@c100 {
+		qcom,mode = <0>;
+		qcom,vin-sel = <3>;
+		status = "okay";
+	};
 };
-*/

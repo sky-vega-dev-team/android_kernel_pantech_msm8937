@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -108,9 +108,11 @@ static int hfi_process_sess_evt_seq_changed(u32 device_id,
 	struct hfi_frame_size *frame_sz;
 	struct hfi_profile_level *profile_level;
 	struct hfi_bit_depth *pixel_depth;
+	struct hfi_pic_struct *pic_struct;
 	u8 *data_ptr;
 	int prop_id;
 	enum msm_vidc_pixel_depth luma_bit_depth, chroma_bit_depth;
+	struct hfi_colour_space *colour_info;
 
 	if (sizeof(struct hfi_msg_event_notify_packet) > pkt->size) {
 		dprintk(VIDC_ERR,
@@ -192,6 +194,29 @@ static int hfi_process_sess_evt_seq_changed(u32 device_id,
 					event_notify.bit_depth, luma_bit_depth,
 					chroma_bit_depth);
 				data_ptr += sizeof(struct hfi_bit_depth);
+				break;
+			case HFI_PROPERTY_PARAM_VDEC_PIC_STRUCT:
+				data_ptr = data_ptr + sizeof(u32);
+				pic_struct = (struct hfi_pic_struct *) data_ptr;
+				event_notify.pic_struct =
+					pic_struct->progressive_only;
+				dprintk(VIDC_DBG,
+					"Progressive only flag: %d\n",
+						pic_struct->progressive_only);
+				data_ptr +=
+					sizeof(struct hfi_pic_struct);
+				break;
+			case HFI_PROPERTY_PARAM_VDEC_COLOUR_SPACE:
+				data_ptr = data_ptr + sizeof(u32);
+				colour_info =
+					(struct hfi_colour_space *) data_ptr;
+				event_notify.colour_space =
+					colour_info->colour_space;
+				dprintk(VIDC_DBG,
+					"Colour space value is: %d\n",
+						colour_info->colour_space);
+				data_ptr +=
+					sizeof(struct hfi_colour_space);
 				break;
 			default:
 				dprintk(VIDC_ERR,
@@ -943,7 +968,7 @@ static enum vidc_status hfi_parse_init_done_properties(
 		}
 		default:
 			dprintk(VIDC_DBG,
-				"%s: default case - data_ptr %p, prop_id 0x%x\n",
+				"%s: default case - data_ptr %pK, prop_id 0x%x\n",
 				__func__, data_ptr, prop_id);
 			break;
 		}
@@ -1043,7 +1068,7 @@ static void hfi_process_sess_get_prop_profile_level(
 	dprintk(VIDC_DBG, "Entered %s\n", __func__);
 	if (!prop) {
 		dprintk(VIDC_ERR,
-			"hal_process_sess_get_profile_level: bad_prop: %p\n",
+			"hal_process_sess_get_profile_level: bad_prop: %pK\n",
 			prop);
 		return;
 	}
@@ -1074,7 +1099,7 @@ static void hfi_process_sess_get_prop_buf_req(
 
 	if (!prop) {
 		dprintk(VIDC_ERR,
-			"hal_process_sess_get_prop_buf_req: bad_prop: %p\n",
+			"hal_process_sess_get_prop_buf_req: bad_prop: %pK\n",
 			prop);
 		return;
 	}
@@ -1191,7 +1216,7 @@ static int hfi_process_session_prop_info(u32 device_id,
 {
 	struct msm_vidc_cb_cmd_done cmd_done = {0};
 	struct hfi_profile_level profile_level = {0};
-	enum hal_h264_entropy entropy;
+	enum hal_h264_entropy entropy = HAL_UNUSED_ENTROPY;
 	struct buffer_requirements buff_req = { { {0} } };
 
 	dprintk(VIDC_DBG, "Received SESSION_PROPERTY_INFO[%#x]\n",

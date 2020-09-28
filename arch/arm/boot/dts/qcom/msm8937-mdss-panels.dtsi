@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,10 +10,26 @@
  * GNU General Public License for more details.
  */
 
+
 #include "dsi-panel-nt35695-1080p-video-ef71.dtsi"
 #include "dsi-panel-nt35695-1080p-cmd-ef71.dtsi"
-//#include "dsi-panel-nt35531-1080p-video-ef78.dtsi"
-//#include "dsi-panel-nt35531-1080p-cmd-ef78.dtsi"
+
+/*
+#include "dsi-panel-sim-video.dtsi"
+#include "dsi-panel-sim-cmd.dtsi"
+#include "dsi-panel-truly-1080p-video.dtsi"
+#include "dsi-panel-truly-1080p-cmd.dtsi"
+#include "dsi-panel-r69006-1080p-cmd.dtsi"
+#include "dsi-panel-r69006-1080p-video.dtsi"
+#include "dsi-panel-hx8394f-720p-video.dtsi"
+#include "dsi-adv7533-1080p.dtsi"
+#include "dsi-adv7533-720p.dtsi"
+#include "dsi-panel-truly-720p-video.dtsi"
+#include "dsi-panel-truly-wuxga-video.dtsi"
+#include "dsi-panel-truly-720p-cmd.dtsi"
+#include "dsi-panel-lead-fl10802-fwvga-video.dtsi"
+#include "dsi-panel-icn9706-720-1440p-video.dtsi"
+*/
 
 &soc {
        /* DISPLAY_SKYDISP_LABIBB */ //can not change this. (msm8937-ef71s-tp10.dts) hohi

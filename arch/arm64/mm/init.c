@@ -68,7 +68,7 @@ early_param("initrd", early_initrd);
  * currently assumes that for memory starting above 4G, 32-bit devices will
  * use a DMA offset.
  */
-static phys_addr_t max_zone_dma_phys(void)
+static phys_addr_t __init max_zone_dma_phys(void)
 {
 	phys_addr_t offset = memblock_start_of_DRAM() & GENMASK_ULL(63, 32);
 	return min(offset + (1ULL << 32), memblock_end_of_DRAM());
@@ -124,11 +124,11 @@ EXPORT_SYMBOL(pfn_valid);
 #endif
 
 #ifndef CONFIG_SPARSEMEM
-static void arm64_memory_present(void)
+static void __init arm64_memory_present(void)
 {
 }
 #else
-static void arm64_memory_present(void)
+static void __init arm64_memory_present(void)
 {
 	struct memblock_region *reg;
 
@@ -169,6 +169,8 @@ void __init bootmem_init(void)
 
 	min = PFN_UP(memblock_start_of_DRAM());
 	max = PFN_DOWN(memblock_end_of_DRAM());
+
+	early_memtest(min << PAGE_SHIFT, max << PAGE_SHIFT);
 
 	/*
 	 * Sparsemem tries to allocate bootmem in memory_present(), so must be
@@ -274,6 +276,9 @@ void __init mem_init(void)
 #define MLK_ROUNDUP(b, t) b, t, DIV_ROUND_UP(((t) - (b)), SZ_1K)
 
 	pr_notice("Virtual kernel memory layout:\n"
+#ifdef CONFIG_KASAN
+		  "    kasan   : 0x%16lx - 0x%16lx   (%6ld GB)\n"
+#endif
 		  "    vmalloc : 0x%16lx - 0x%16lx   (%6ld GB)\n"
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
 		  "    vmemmap : 0x%16lx - 0x%16lx   (%6ld GB maximum)\n"
@@ -286,10 +291,13 @@ void __init mem_init(void)
 		  "      .init : 0x%p" " - 0x%p" "   (%6ld KB)\n"
 		  "      .text : 0x%p" " - 0x%p" "   (%6ld KB)\n"
 		  "      .data : 0x%p" " - 0x%p" "   (%6ld KB)\n",
+#ifdef CONFIG_KASAN
+		  MLG(KASAN_SHADOW_START, KASAN_SHADOW_END),
+#endif
 		  MLG(VMALLOC_START, VMALLOC_END),
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
-		  MLG((unsigned long)vmemmap,
-		      (unsigned long)vmemmap + VMEMMAP_SIZE),
+		  MLG(VMEMMAP_START,
+		      VMEMMAP_START + VMEMMAP_SIZE),
 		  MLM((unsigned long)virt_to_page(PAGE_OFFSET),
 		      (unsigned long)virt_to_page(high_memory)),
 #endif

@@ -256,6 +256,8 @@ static struct rcg_clk csi0_clk_src = {
 
 static struct clk_freq_tbl ftbl_vfe_clk_src[] = {
 	F_MM( 200000000,    mmsscc_gpll0,    3,    0,     0),
+	F_MM( 300000000,    mmsscc_gpll0,    2,    0,     0),
+	F_MM( 320000000,  mmpll7_pll_out,    3,    0,     0),
 	F_MM( 384000000,  mmpll4_pll_out,    2,    0,     0),
 	F_MM( 576000000, mmpll10_pll_out,    1,    0,     0),
 	F_MM( 600000000,    mmsscc_gpll0,    1,    0,     0),
@@ -1747,6 +1749,18 @@ static struct branch_clk mmss_mdss_byte0_clk = {
 	},
 };
 
+static struct branch_clk mmss_mdss_byte0_intf_clk = {
+	.cbcr_reg = MMSS_MDSS_BYTE0_INTF_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "mmss_mdss_byte0_intf_clk",
+		.parent = &byte0_clk_src.c,
+		.ops = &clk_ops_branch,
+		CLK_INIT(mmss_mdss_byte0_intf_clk.c),
+	},
+};
+
 static struct branch_clk mmss_mdss_byte1_clk = {
 	.cbcr_reg = MMSS_MDSS_BYTE1_CBCR,
 	.has_sibling = 0,
@@ -1756,6 +1770,18 @@ static struct branch_clk mmss_mdss_byte1_clk = {
 		.parent = &byte1_clk_src.c,
 		.ops = &clk_ops_branch,
 		CLK_INIT(mmss_mdss_byte1_clk.c),
+	},
+};
+
+static struct branch_clk mmss_mdss_byte1_intf_clk = {
+	.cbcr_reg = MMSS_MDSS_BYTE1_INTF_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "mmss_mdss_byte1_intf_clk",
+		.parent = &byte1_clk_src.c,
+		.ops = &clk_ops_branch,
+		CLK_INIT(mmss_mdss_byte1_intf_clk.c),
 	},
 };
 
@@ -2245,6 +2271,8 @@ static struct mux_clk mmss_debug_mux = {
 		{ &mmss_throttle_camss_axi_clk.c, 0x00aa },
 		{ &mmss_throttle_mdss_axi_clk.c, 0x00ab },
 		{ &mmss_throttle_video_axi_clk.c, 0x00ac },
+		{ &mmss_mdss_byte0_intf_clk.c, 0x00ad },
+		{ &mmss_mdss_byte1_intf_clk.c, 0x00ae },
 	),
 	.c = {
 		.dbg_name = "mmss_debug_mux",
@@ -2381,7 +2409,9 @@ static struct clk_lookup msm_clocks_mmss_cobalt[] = {
 	CLK_LIST(mmss_mdss_ahb_clk),
 	CLK_LIST(mmss_mdss_axi_clk),
 	CLK_LIST(mmss_mdss_byte0_clk),
+	CLK_LIST(mmss_mdss_byte0_intf_clk),
 	CLK_LIST(mmss_mdss_byte1_clk),
+	CLK_LIST(mmss_mdss_byte1_intf_clk),
 	CLK_LIST(mmss_mdss_dp_aux_clk),
 	CLK_LIST(mmss_mdss_dp_gtc_clk),
 	CLK_LIST(mmss_mdss_esc0_clk),

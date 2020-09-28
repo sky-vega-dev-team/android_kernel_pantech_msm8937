@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -65,6 +65,7 @@ static void __iomem *pil_info_base;
 static int proxy_timeout_ms = -1;
 module_param(proxy_timeout_ms, int, S_IRUGO | S_IWUSR);
 
+static bool disable_timeouts;
 /**
  * struct pil_mdt - Representation of <name>.mdt file in memory
  * @hdr: ELF32 header
@@ -460,6 +461,8 @@ static int pil_alloc_region(struct pil_priv *priv, phys_addr_t min_addr,
 	if (region == NULL) {
 		pil_err(priv->desc, "Failed to allocate relocatable region of size %zx\n",
 					size);
+		priv->region_start = 0;
+		priv->region_end = 0;
 		return -ENOMEM;
 	}
 
@@ -578,6 +581,13 @@ static int pil_init_mmap(struct pil_desc *desc, const struct pil_mdt *mdt)
 	return pil_init_entry_addr(priv, mdt);
 }
 
+struct pil_map_fw_info {
+	void *region;
+	struct dma_attrs attrs;
+	phys_addr_t base_addr;
+	struct device *dev;
+};
+
 static void pil_release_mmap(struct pil_desc *desc)
 {
 	struct pil_priv *priv = desc->priv;
@@ -596,14 +606,30 @@ static void pil_release_mmap(struct pil_desc *desc)
 	}
 }
 
-#define IOMAP_SIZE SZ_1M
+static void pil_clear_segment(struct pil_desc *desc)
+{
+	struct pil_priv *priv = desc->priv;
+	u8 __iomem *buf;
 
-struct pil_map_fw_info {
-	void *region;
-	struct dma_attrs attrs;
-	phys_addr_t base_addr;
-	struct device *dev;
-};
+	struct pil_map_fw_info map_fw_info = {
+		.attrs = desc->attrs,
+		.region = priv->region,
+		.base_addr = priv->region_start,
+		.dev = desc->dev,
+	};
+
+	void *map_data = desc->map_data ? desc->map_data : &map_fw_info;
+
+	/* Clear memory so that unauthorized ELF code is not left behind */
+	buf = desc->map_fw_mem(priv->region_start, (priv->region_end -
+					priv->region_start), map_data);
+	pil_memset_io(buf, 0, (priv->region_end - priv->region_start));
+	desc->unmap_fw_mem(buf, (priv->region_end - priv->region_start),
+								map_data);
+
+}
+
+#define IOMAP_SIZE SZ_1M
 
 static void *map_fw_mem(phys_addr_t paddr, size_t size, void *data)
 {
@@ -796,7 +822,9 @@ int pil_boot(struct pil_desc *desc)
 	}
 
 	if (desc->ops->init_image)
-		ret = desc->ops->init_image(desc, fw->data, fw->size);
+		ret = desc->ops->init_image(desc, fw->data, fw->size,
+			priv->region_start,
+			priv->region_end - priv->region_start);
 	if (ret) {
 		pil_err(desc, "Invalid firmware metadata\n");
 		goto err_boot;
@@ -811,15 +839,6 @@ int pil_boot(struct pil_desc *desc)
 	}
 
 	if (desc->subsys_vmid > 0) {
-		/* Make sure the memory is actually assigned to Linux. In the
-		 * case where the shutdown sequence is not able to immediately
-		 * assign the memory back to Linux, we need to do this here. */
-		ret = pil_assign_mem_to_linux(desc, priv->region_start,
-				(priv->region_end - priv->region_start));
-		if (ret)
-			pil_err(desc, "Failed to assign to linux, ret - %d\n",
-								ret);
-
 		ret = pil_assign_mem_to_subsys_and_linux(desc,
 				priv->region_start,
 				(priv->region_end - priv->region_start));
@@ -855,6 +874,7 @@ int pil_boot(struct pil_desc *desc)
 		goto err_auth_and_reset;
 	}
 	pil_info(desc, "Brought out of reset\n");
+	desc->modem_ssr = false;
 err_auth_and_reset:
 	if (ret && desc->subsys_vmid > 0) {
 		pil_assign_mem_to_linux(desc, priv->region_start,
@@ -881,6 +901,8 @@ out:
 						priv->region_start),
 					VMID_HLOS);
 			}
+			if (desc->clear_fw_region && priv->region_start)
+				pil_clear_segment(desc);
 			dma_free_attrs(desc->dev, priv->region_size,
 					priv->region, priv->region_start,
 					&desc->attrs);
@@ -915,6 +937,7 @@ void pil_shutdown(struct pil_desc *desc)
 		pil_proxy_unvote(desc, 1);
 	else
 		flush_delayed_work(&priv->proxy);
+	desc->modem_ssr = true;
 }
 EXPORT_SYMBOL(pil_shutdown);
 
@@ -939,6 +962,10 @@ EXPORT_SYMBOL(pil_free_memory);
 
 static DEFINE_IDA(pil_ida);
 
+bool is_timeout_disabled(void)
+{
+	return disable_timeouts;
+}
 /**
  * pil_desc_init() - Initialize a pil descriptor
  * @desc: descriptor to intialize
@@ -1077,6 +1104,10 @@ static int __init msm_pil_init(void)
 	if (!pil_info_base) {
 		pr_warn("pil: could not map imem region\n");
 		goto out;
+	}
+	if (__raw_readl(pil_info_base) == 0x53444247) {
+		pr_info("pil: pil-imem set to disable pil timeouts\n");
+		disable_timeouts = true;
 	}
 	for (i = 0; i < resource_size(&res)/sizeof(u32); i++)
 		writel_relaxed(0, pil_info_base + (i * sizeof(u32)));

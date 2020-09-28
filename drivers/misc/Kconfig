@@ -579,6 +579,15 @@ config NFC_NXP_PN5XX
 	help
 	  NXP PN548 Near Field Communication controller support.
 
+config QPNP_MISC
+	tristate "QPNP Misc Peripheral"
+	depends on SPMI || MSM_SPMI
+	help
+	  Say 'y' here to include support for the QTI QPNP MISC
+	  peripheral. The MISC peripheral holds the USB ID interrupt
+	  and the driver provides an API to check if this interrupt
+	  is available on the current PMIC chip.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

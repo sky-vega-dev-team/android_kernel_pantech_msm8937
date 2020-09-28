@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -88,6 +88,7 @@ static DEFINE_SPINLOCK(reg_spinlock);
 #define CCU_RIVA_LAST_ADDR2_OFFSET		0x10c
 
 #define PRONTO_PMU_SPARE_OFFSET       0x1088
+#define PMU_A2XB_CFG_HSPLIT_RESP_LIMIT_OFFSET	0x117C
 
 #define PRONTO_PMU_COM_GDSCR_OFFSET       0x0024
 #define PRONTO_PMU_COM_GDSCR_SW_COLLAPSE  BIT(0)
@@ -172,6 +173,7 @@ static DEFINE_SPINLOCK(reg_spinlock);
 #define MCU_FDBR_FDAHB_ERR_OFFSET		0x3a4
 #define MCU_FDBR_CDAHB_TIMEOUT_OFFSET		0x3a8
 #define MCU_FDBR_FDAHB_TIMEOUT_OFFSET		0x3ac
+#define PRONTO_PMU_CCPU_BOOT_REMAP_OFFSET	0x2004
 
 #define WCNSS_DEF_WLAN_RX_BUFF_COUNT		1024
 
@@ -352,6 +354,7 @@ static struct {
 	int		smd_channel_ready;
 	u32		wlan_rx_buff_count;
 	int		is_vsys_adc_channel;
+	int		is_a2xb_split_reg;
 	smd_channel_t	*smd_ch;
 	unsigned char	wcnss_version[WCNSS_VERSION_LEN];
 	unsigned char   fw_major;
@@ -392,8 +395,7 @@ static struct {
 	int	user_cal_read;
 	int	user_cal_available;
 	u32	user_cal_rcvd;
-	int	user_cal_exp_size;
-	int	device_opened;
+	u32	user_cal_exp_size;
 	int	iris_xo_mode_set;
 	int	fw_vbatt_state;
 	char	wlan_nv_macAddr[WLAN_MAC_ADDR_SIZE];
@@ -586,12 +588,11 @@ void wcnss_pronto_is_a2xb_bus_stall(void *tst_addr, u32 fifo_mask, char *type)
 	}
 }
 
-/* Log pronto debug registers before sending reset interrupt */
+/* Log pronto debug registers during SSR Timeout CB */
 void wcnss_pronto_log_debug_regs(void)
 {
 	void __iomem *reg_addr, *tst_addr, *tst_ctrl_addr;
 	u32 reg = 0, reg2 = 0, reg3 = 0, reg4 = 0;
-
 
 	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_SPARE_OFFSET;
 	reg = readl_relaxed(reg_addr);
@@ -629,10 +630,21 @@ void wcnss_pronto_log_debug_regs(void)
 	reg = readl_relaxed(reg_addr);
 	pr_err("PRONTO_SAW2_SPM_CTL %08x\n", reg);
 
+	if (penv->is_a2xb_split_reg) {
+		reg_addr = penv->msm_wcnss_base +
+			   PMU_A2XB_CFG_HSPLIT_RESP_LIMIT_OFFSET;
+		reg = readl_relaxed(reg_addr);
+		pr_err("PMU_A2XB_CFG_HSPLIT_RESP_LIMIT %08x\n", reg);
+	}
+
 	reg_addr = penv->pronto_saw2_base + PRONTO_SAW2_SAW2_VERSION;
 	reg = readl_relaxed(reg_addr);
 	pr_err("PRONTO_SAW2_SAW2_VERSION %08x\n", reg);
 	reg >>= PRONTO_SAW2_MAJOR_VER_OFFSET;
+
+	reg_addr = penv->msm_wcnss_base  + PRONTO_PMU_CCPU_BOOT_REMAP_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("PRONTO_PMU_CCPU_BOOT_REMAP %08x\n", reg);
 
 	reg_addr = penv->pronto_pll_base + PRONTO_PLL_STATUS_OFFSET;
 	reg = readl_relaxed(reg_addr);
@@ -785,6 +797,33 @@ void wcnss_pronto_log_debug_regs(void)
 	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_WLAN_AHB_CBCR_OFFSET;
 	reg3 = readl_relaxed(reg_addr);
 	pr_err("PMU_WLAN_AHB_CBCR %08x\n", reg3);
+}
+EXPORT_SYMBOL(wcnss_pronto_log_debug_regs);
+
+/* Log pronto debug registers before sending reset interrupt */
+void wcnss_pronto_dump_regs(void)
+{
+	void __iomem *reg_addr;
+	u32 reg = 0, reg2 = 0, reg3 = 0, reg4 = 0;
+
+	if (!penv || !penv->triggered || !penv->msm_wcnss_base) {
+		pr_info(DEVICE " WCNSS driver is not triggered by userspace\n");
+		return;
+	}
+
+	wcnss_pronto_log_debug_regs();
+
+	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_WLAN_BCR_OFFSET;
+	reg = readl_relaxed(reg_addr);
+
+	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_WLAN_GDSCR_OFFSET;
+	reg2 = readl_relaxed(reg_addr);
+
+	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_WLAN_AHB_CBCR_OFFSET;
+	reg3 = readl_relaxed(reg_addr);
+
+	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_CPU_AHB_CMD_RCGR_OFFSET;
+	reg4 = readl_relaxed(reg_addr);
 
 	msleep(50);
 
@@ -864,7 +903,7 @@ void wcnss_pronto_log_debug_regs(void)
 	reg = readl_relaxed(penv->alarms_tactl);
 	pr_err("ALARMS_TACTL %08x\n", reg);
 }
-EXPORT_SYMBOL(wcnss_pronto_log_debug_regs);
+EXPORT_SYMBOL(wcnss_pronto_dump_regs);
 
 #ifdef CONFIG_WCNSS_REGISTER_DUMP_ON_BITE
 
@@ -2024,21 +2063,23 @@ void extract_cal_data(int len)
 		return;
 	}
 
+	mutex_lock(&penv->dev_lock);
 	rc = smd_read(penv->smd_ch, (unsigned char *)&calhdr,
 			sizeof(struct cal_data_params));
 	if (rc < sizeof(struct cal_data_params)) {
 		pr_err("wcnss: incomplete cal header read from smd\n");
+		mutex_unlock(&penv->dev_lock);
 		return;
 	}
 
 	if (penv->fw_cal_exp_frag != calhdr.frag_number) {
 		pr_err("wcnss: Invalid frgament");
-		goto exit;
+		goto unlock_exit;
 	}
 
 	if (calhdr.frag_size > WCNSS_MAX_FRAME_SIZE) {
 		pr_err("wcnss: Invalid fragment size");
-		goto exit;
+		goto unlock_exit;
 	}
 
 	if (penv->fw_cal_available) {
@@ -2047,8 +2088,9 @@ void extract_cal_data(int len)
 		penv->fw_cal_exp_frag++;
 		if (calhdr.msg_flags & LAST_FRAGMENT) {
 			penv->fw_cal_exp_frag = 0;
-			goto exit;
+			goto unlock_exit;
 		}
+		mutex_unlock(&penv->dev_lock);
 		return;
 	}
 
@@ -2056,7 +2098,7 @@ void extract_cal_data(int len)
 		if (calhdr.total_size > MAX_CALIBRATED_DATA_SIZE) {
 			pr_err("wcnss: Invalid cal data size %d",
 				calhdr.total_size);
-			goto exit;
+			goto unlock_exit;
 		}
 		kfree(penv->fw_cal_data);
 		penv->fw_cal_rcvd = 0;
@@ -2064,11 +2106,10 @@ void extract_cal_data(int len)
 				GFP_KERNEL);
 		if (penv->fw_cal_data == NULL) {
 			smd_read(penv->smd_ch, NULL, calhdr.frag_size);
-			goto exit;
+			goto unlock_exit;
 		}
 	}
 
-	mutex_lock(&penv->dev_lock);
 	if (penv->fw_cal_rcvd + calhdr.frag_size >
 			MAX_CALIBRATED_DATA_SIZE) {
 		pr_err("calibrated data size is more than expected %d",
@@ -2103,16 +2144,12 @@ void extract_cal_data(int len)
 
 unlock_exit:
 	mutex_unlock(&penv->dev_lock);
-
-exit:
 	wcnss_send_cal_rsp(fw_status);
 	return;
 }
 
-
-static void wcnssctrl_rx_handler(struct work_struct *worker)
+static void wcnss_process_smd_msg(int len)
 {
-	int len = 0;
 	int rc = 0;
 	unsigned char buf[sizeof(struct wcnss_version)];
 	unsigned char build[WCNSS_MAX_BUILD_VER_LEN+1];
@@ -2121,17 +2158,6 @@ static void wcnssctrl_rx_handler(struct work_struct *worker)
 	struct wcnss_version *pversion;
 	int hw_type;
 	unsigned char fw_status = 0;
-
-	len = smd_read_avail(penv->smd_ch);
-	if (len > WCNSS_MAX_FRAME_SIZE) {
-		pr_err("wcnss: frame larger than the allowed size\n");
-		smd_read(penv->smd_ch, NULL, len);
-		return;
-	}
-	if (len < sizeof(struct smd_msg_hdr)) {
-		pr_err("wcnss: incomplete header available len = %d\n", len);
-		return;
-	}
 
 	rc = smd_read(penv->smd_ch, buf, sizeof(struct smd_msg_hdr));
 	if (rc < sizeof(struct smd_msg_hdr)) {
@@ -2199,7 +2225,7 @@ static void wcnssctrl_rx_handler(struct work_struct *worker)
 	case WCNSS_BUILD_VER_RSP:
 		if (len > WCNSS_MAX_BUILD_VER_LEN) {
 			pr_err("wcnss: invalid build version data from wcnss %d\n",
-					len);
+				len);
 			return;
 		}
 		rc = smd_read(penv->smd_ch, build, len);
@@ -2231,7 +2257,6 @@ static void wcnssctrl_rx_handler(struct work_struct *worker)
 		penv->is_cbc_done = 1;
 		pr_debug("wcnss: received WCNSS_CBC_COMPLETE_IND from FW\n");
 		break;
-
 	case WCNSS_CALDATA_UPLD_REQ:
 		extract_cal_data(len);
 		break;
@@ -2240,6 +2265,33 @@ static void wcnssctrl_rx_handler(struct work_struct *worker)
 		pr_err("wcnss: invalid message type %d\n", phdr->msg_type);
 	}
 	return;
+}
+
+static void wcnssctrl_rx_handler(struct work_struct *worker)
+{
+	int len;
+
+	while (1) {
+		len = smd_read_avail(penv->smd_ch);
+		if (0 == len) {
+			pr_debug("wcnss: No more data to be read\n");
+			return;
+		}
+
+		if (len > WCNSS_MAX_FRAME_SIZE) {
+			pr_err("wcnss: frame larger than the allowed size\n");
+			smd_read(penv->smd_ch, NULL, len);
+			return;
+		}
+
+		if (len < sizeof(struct smd_msg_hdr)) {
+			pr_err("wcnss: incomplete header available len = %d\n",
+			       len);
+			return;
+		}
+
+		wcnss_process_smd_msg(len);
+	}
 }
 
 static void wcnss_send_version_req(struct work_struct *worker)
@@ -2710,6 +2762,9 @@ wcnss_trigger_config(struct platform_device *pdev)
 	penv->is_vsys_adc_channel = of_property_read_bool(pdev->dev.of_node,
 						"qcom,has-vsys-adc-channel");
 
+	penv->is_a2xb_split_reg = of_property_read_bool(pdev->dev.of_node,
+						"qcom,has-a2xb-split-reg");
+
 	if (of_property_read_u32(pdev->dev.of_node,
 			"qcom,wlan-rx-buff-count", &penv->wlan_rx_buff_count)) {
 		penv->wlan_rx_buff_count = WCNSS_DEF_WLAN_RX_BUFF_COUNT;
@@ -3131,7 +3186,7 @@ wcnss_trigger_config(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Peripheral Loader failed on WCNSS.\n");
 			ret = PTR_ERR(penv->pil);
 			wcnss_disable_pc_add_req();
-			wcnss_pronto_log_debug_regs();
+			wcnss_pronto_dump_regs();
 		}
 	} while (pil_retry++ < WCNSS_MAX_PIL_RETRY && IS_ERR(penv->pil));
 
@@ -3241,14 +3296,6 @@ static int wcnss_node_open(struct inode *inode, struct file *file)
 			return -EFAULT;
 	}
 
-	mutex_lock(&penv->dev_lock);
-	penv->user_cal_rcvd = 0;
-	penv->user_cal_read = 0;
-	penv->user_cal_available = false;
-	penv->user_cal_data = NULL;
-	penv->device_opened = 1;
-	mutex_unlock(&penv->dev_lock);
-
 	return rc;
 }
 
@@ -3257,7 +3304,7 @@ static ssize_t wcnss_wlan_read(struct file *fp, char __user
 {
 	int rc = 0;
 
-	if (!penv || !penv->device_opened)
+	if (!penv)
 		return -EFAULT;
 
 	rc = wait_event_interruptible(penv->read_wait, penv->fw_cal_rcvd
@@ -3294,55 +3341,66 @@ static ssize_t wcnss_wlan_write(struct file *fp, const char __user
 			*user_buffer, size_t count, loff_t *position)
 {
 	int rc = 0;
-	u32 size = 0;
+	char *cal_data = NULL;
 
-	if (!penv || !penv->device_opened || penv->user_cal_available)
+	if (!penv || penv->user_cal_available)
 		return -EFAULT;
 
-	if (penv->user_cal_rcvd == 0 && count >= 4
-			&& !penv->user_cal_data) {
-		rc = copy_from_user((void *)&size, user_buffer, 4);
-		if (!size || size > MAX_CALIBRATED_DATA_SIZE) {
-			pr_err(DEVICE " invalid size to write %d\n", size);
+	if (!penv->user_cal_rcvd && count >= 4 && !penv->user_cal_exp_size) {
+		mutex_lock(&penv->dev_lock);
+		rc = copy_from_user((void *)&penv->user_cal_exp_size,
+				    user_buffer, 4);
+		if (!penv->user_cal_exp_size ||
+		    penv->user_cal_exp_size > MAX_CALIBRATED_DATA_SIZE) {
+			pr_err(DEVICE " invalid size to write %d\n",
+			       penv->user_cal_exp_size);
+			penv->user_cal_exp_size = 0;
+			mutex_unlock(&penv->dev_lock);
 			return -EFAULT;
 		}
-
-		rc += count;
-		count -= 4;
-		penv->user_cal_exp_size =  size;
-		penv->user_cal_data = kmalloc(size, GFP_KERNEL);
-		if (penv->user_cal_data == NULL) {
-			pr_err(DEVICE " no memory to write\n");
-			return -ENOMEM;
-		}
-		if (0 == count)
-			goto exit;
-
-	} else if (penv->user_cal_rcvd == 0 && count < 4)
+		mutex_unlock(&penv->dev_lock);
+		return count;
+	} else if (!penv->user_cal_rcvd && count < 4) {
 		return -EFAULT;
+	}
 
+	mutex_lock(&penv->dev_lock);
 	if ((UINT32_MAX - count < penv->user_cal_rcvd) ||
-	     (penv->user_cal_exp_size < count + penv->user_cal_rcvd)) {
+		(penv->user_cal_exp_size < count + penv->user_cal_rcvd)) {
 		pr_err(DEVICE " invalid size to write %zu\n", count +
 				penv->user_cal_rcvd);
-		rc = -ENOMEM;
-		goto exit;
+		mutex_unlock(&penv->dev_lock);
+		return -ENOMEM;
 	}
-	rc = copy_from_user((void *)penv->user_cal_data +
-			penv->user_cal_rcvd, user_buffer, count);
-	if (0 == rc) {
+
+	cal_data = kmalloc(count, GFP_KERNEL);
+	if (!cal_data) {
+		mutex_unlock(&penv->dev_lock);
+		return -ENOMEM;
+	}
+
+	rc = copy_from_user(cal_data, user_buffer, count);
+	if (!rc) {
+		memcpy(penv->user_cal_data + penv->user_cal_rcvd,
+		       cal_data, count);
 		penv->user_cal_rcvd += count;
 		rc += count;
 	}
+
+	kfree(cal_data);
 	if (penv->user_cal_rcvd == penv->user_cal_exp_size) {
 		penv->user_cal_available = true;
 		pr_info_ratelimited("wcnss: user cal written");
 	}
+	mutex_unlock(&penv->dev_lock);
 
-exit:
 	return rc;
 }
 
+static int wcnss_node_release(struct inode *inode, struct file *file)
+{
+	return 0;
+}
 
 static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
 				void *ss_handle)
@@ -3383,7 +3441,7 @@ static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
 		if (pdev && pwlanconfig)
 			wcnss_wlan_power(&pdev->dev, pwlanconfig,
 					WCNSS_WLAN_SWITCH_OFF, NULL);
-		wcnss_pronto_log_debug_regs();
+		wcnss_pronto_dump_regs();
 		wcnss_disable_pc_remove_req();
 	} else if (SUBSYS_BEFORE_SHUTDOWN == code) {
 		wcnss_disable_pc_add_req();
@@ -3401,6 +3459,7 @@ static const struct file_operations wcnss_node_fops = {
 	.open = wcnss_node_open,
 	.read = wcnss_wlan_read,
 	.write = wcnss_wlan_write,
+	.release = wcnss_node_release,
 };
 
 static struct miscdevice wcnss_misc = {
@@ -3428,6 +3487,13 @@ wcnss_wlan_probe(struct platform_device *pdev)
 	}
 	penv->pdev = pdev;
 
+	penv->user_cal_data =
+		devm_kzalloc(&pdev->dev, MAX_CALIBRATED_DATA_SIZE, GFP_KERNEL);
+	if (!penv->user_cal_data) {
+		dev_err(&pdev->dev, "Failed to alloc memory for cal data.\n");
+		return -ENOMEM;
+	}
+
 	/* register sysfs entries */
 	ret = wcnss_create_sysfs(&pdev->dev);
 	if (ret) {
@@ -3447,6 +3513,11 @@ wcnss_wlan_probe(struct platform_device *pdev)
 	mutex_init(&penv->vbat_monitor_mutex);
 	mutex_init(&penv->pm_qos_mutex);
 	init_waitqueue_head(&penv->read_wait);
+
+	penv->user_cal_rcvd = 0;
+	penv->user_cal_read = 0;
+	penv->user_cal_exp_size = 0;
+	penv->user_cal_available = false;
 
 	/* Since we were built into the kernel we'll be called as part
 	 * of kernel initialization.  We don't know if userspace

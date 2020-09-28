@@ -600,7 +600,7 @@ static int binder_update_page_range(struct binder_proc *proc, int allocate,
 		flush_cache_vmap((unsigned long)page_addr,
 				(unsigned long)page_addr + PAGE_SIZE);
 		if (ret != 1) {
-			pr_err("%d: binder_alloc_buf failed to map page at %p in kernel\n",
+			pr_err("%d: binder_alloc_buf failed to map page at %pK in kernel\n",
 			       proc->pid, page_addr);
 			goto err_map_kernel_failed;
 		}
@@ -1288,7 +1288,6 @@ static void binder_transaction_buffer_release(struct binder_proc *proc,
 		case BINDER_TYPE_WEAK_HANDLE: {
 			struct binder_ref *ref = binder_get_ref(proc, fp->handle,
 						fp->type == BINDER_TYPE_HANDLE);
-
 			if (ref == NULL) {
 				pr_err("transaction release %d bad handle %d\n",
 				 debug_id, fp->handle);
@@ -1381,7 +1380,6 @@ static void binder_transaction(struct binder_proc *proc,
 	} else {
 		if (tr->target.handle) {
 			struct binder_ref *ref;
-
 			ref = binder_get_ref(proc, tr->target.handle, true);
 			if (ref == NULL) {
 				binder_user_error("%d:%d got transaction to invalid handle\n",
@@ -1593,7 +1591,6 @@ static void binder_transaction(struct binder_proc *proc,
 		case BINDER_TYPE_WEAK_HANDLE: {
 			struct binder_ref *ref = binder_get_ref(proc, fp->handle,
 						fp->type == BINDER_TYPE_HANDLE);
-
 			if (ref == NULL) {
 				binder_user_error("%d:%d got transaction with invalid handle, %d\n",
 						proc->pid,
@@ -1712,8 +1709,16 @@ static void binder_transaction(struct binder_proc *proc,
 	list_add_tail(&t->work.entry, target_list);
 	tcomplete->type = BINDER_WORK_TRANSACTION_COMPLETE;
 	list_add_tail(&tcomplete->entry, &thread->todo);
-	if (target_wait)
-		wake_up_interruptible(target_wait);
+	if (target_wait) {
+		if (reply || !(t->flags & TF_ONE_WAY)) {
+			preempt_disable();
+			wake_up_interruptible_sync(target_wait);
+			preempt_enable_no_resched();
+		}
+		else {
+			wake_up_interruptible(target_wait);
+		}
+	}
 	return;
 
 err_get_unused_fd_failed:
@@ -2095,7 +2100,7 @@ static int binder_thread_write(struct binder_proc *proc,
 				}
 			}
 			binder_debug(BINDER_DEBUG_DEAD_BINDER,
-				     "%d:%d BC_DEAD_BINDER_DONE %016llx found %p\n",
+				     "%d:%d BC_DEAD_BINDER_DONE %016llx found %pK\n",
 				     proc->pid, thread->pid, (u64)cookie,
 				     death);
 			if (death == NULL) {
@@ -2709,6 +2714,9 @@ static int binder_ioctl_set_ctx_mgr(struct file *filp)
 		ret = -EBUSY;
 		goto out;
 	}
+	ret = security_binder_set_context_mgr(proc->tsk);
+	if (ret < 0)
+		goto out;
 	if (uid_valid(binder_context_mgr_uid)) {
 		if (!uid_eq(binder_context_mgr_uid, curr_euid)) {
 			pr_err("BINDER_SET_CONTEXT_MGR bad uid %d != %d\n",
@@ -2773,9 +2781,6 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	case BINDER_SET_CONTEXT_MGR:
 		ret = binder_ioctl_set_ctx_mgr(filp);
 		if (ret)
-			goto err;
-		ret = security_binder_set_context_mgr(proc->tsk);
-		if (ret < 0)
 			goto err;
 		break;
 	case BINDER_THREAD_EXIT:
@@ -3360,7 +3365,7 @@ static void print_binder_node(struct seq_file *m, struct binder_node *node)
 
 static void print_binder_ref(struct seq_file *m, struct binder_ref *ref)
 {
-	seq_printf(m, "  ref %d: desc %d %snode %d s %d w %d d %p\n",
+	seq_printf(m, "  ref %d: desc %d %snode %d s %d w %d d %pK\n",
 		   ref->debug_id, ref->desc, ref->node->proc ? "" : "dead ",
 		   ref->node->debug_id, ref->strong, ref->weak, ref->death);
 }

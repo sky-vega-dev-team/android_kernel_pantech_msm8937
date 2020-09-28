@@ -178,9 +178,7 @@ struct wcd9xxx_pdata {
 	int irq_base;
 	int num_irqs;
 	int reset_gpio;
-#ifdef CONFIG_PANTECH_SND_QCOM_PATCH      
 	struct device_node *wcd_rst_np;
-#endif
 	struct wcd9xxx_amic amic_settings;
 	struct slim_device slimbus_slave_device;
 	struct wcd9xxx_micbias_setting micbias;
@@ -189,6 +187,7 @@ struct wcd9xxx_pdata {
 	u32 mclk_rate;
 	u32 dmic_sample_rate;
 	u32 mad_dmic_sample_rate;
+	u32 ecpp_dmic_sample_rate;
 	u32 dmic_clk_drv;
 	enum codec_variant cdc_variant;
 	u16 use_pinctrl;

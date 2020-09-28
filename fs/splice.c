@@ -186,6 +186,9 @@ ssize_t splice_to_pipe(struct pipe_inode_info *pipe,
 	unsigned int spd_pages = spd->nr_pages;
 	int ret, do_wakeup, page_nr;
 
+	if (!spd_pages)
+		return 0;
+
 	ret = 0;
 	do_wakeup = 0;
 	page_nr = 0;
@@ -951,7 +954,7 @@ iter_file_splice_write(struct pipe_inode_info *pipe, struct file *out,
 	int nbufs = pipe->buffers;
 	struct bio_vec *array = kcalloc(nbufs, sizeof(struct bio_vec),
 					GFP_KERNEL);
-	ssize_t ret;
+	ssize_t ret = 0;
 
 	if (unlikely(!array))
 		return -ENOMEM;

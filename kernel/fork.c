@@ -339,6 +339,8 @@ static struct task_struct *dup_task_struct(struct task_struct *orig)
 	if (err)
 		goto free_ti;
 
+	tsk->flags &= ~PF_SU;
+
 	tsk->stack = ti;
 #ifdef CONFIG_SECCOMP
 	/*
@@ -756,8 +758,7 @@ struct mm_struct *mm_access(struct task_struct *task, unsigned int mode)
 
 	mm = get_task_mm(task);
 	if (mm && mm != current->mm &&
-			!ptrace_may_access(task, mode) &&
-			!capable(CAP_SYS_RESOURCE)) {
+			!ptrace_may_access(task, mode)) {
 		mmput(mm);
 		mm = ERR_PTR(-EACCES);
 	}
@@ -1823,13 +1824,21 @@ static int check_unshare_flags(unsigned long unshare_flags)
 				CLONE_NEWUSER|CLONE_NEWPID))
 		return -EINVAL;
 	/*
-	 * Not implemented, but pretend it works if there is nothing to
-	 * unshare. Note that unsharing CLONE_THREAD or CLONE_SIGHAND
-	 * needs to unshare vm.
+	 * Not implemented, but pretend it works if there is nothing
+	 * to unshare.  Note that unsharing the address space or the
+	 * signal handlers also need to unshare the signal queues (aka
+	 * CLONE_THREAD).
 	 */
 	if (unshare_flags & (CLONE_THREAD | CLONE_SIGHAND | CLONE_VM)) {
-		/* FIXME: get_task_mm() increments ->mm_users */
-		if (atomic_read(&current->mm->mm_users) > 1)
+		if (!thread_group_empty(current))
+			return -EINVAL;
+	}
+	if (unshare_flags & (CLONE_SIGHAND | CLONE_VM)) {
+		if (atomic_read(&current->sighand->count) > 1)
+			return -EINVAL;
+	}
+	if (unshare_flags & CLONE_VM) {
+		if (!current_is_single_threaded())
 			return -EINVAL;
 	}
 
@@ -1898,15 +1907,15 @@ SYSCALL_DEFINE1(unshare, unsigned long, unshare_flags)
 	if (unshare_flags & CLONE_NEWUSER)
 		unshare_flags |= CLONE_THREAD | CLONE_FS;
 	/*
-	 * If unsharing a thread from a thread group, must also unshare vm.
-	 */
-	if (unshare_flags & CLONE_THREAD)
-		unshare_flags |= CLONE_VM;
-	/*
 	 * If unsharing vm, must also unshare signal handlers.
 	 */
 	if (unshare_flags & CLONE_VM)
 		unshare_flags |= CLONE_SIGHAND;
+	/*
+	 * If unsharing a signal handlers, must also unshare the signal queues.
+	 */
+	if (unshare_flags & CLONE_SIGHAND)
+		unshare_flags |= CLONE_THREAD;
 	/*
 	 * If unsharing namespace, must also unshare filesystem information.
 	 */

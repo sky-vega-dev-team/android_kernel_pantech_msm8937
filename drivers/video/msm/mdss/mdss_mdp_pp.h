@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -66,6 +66,12 @@
 	GAMUT_T2_SIZE + GAMUT_T3_SIZE + GAMUT_T4_SIZE + \
 	GAMUT_T5_SIZE + GAMUT_T6_SIZE + GAMUT_T7_SIZE)
 
+/* Total 5 QSEED3 filters: Direction filter + Y plane cir and sep + UV plane
+ * cir and  sep filters
+ */
+#define QSEED3_FILTERS		5
+
+#define QSEED3_LUT_REGIONS	4
 
 enum pp_block_opmodes {
 	PP_OPMODE_VIG = 1,
@@ -78,7 +84,8 @@ enum pp_config_block {
 	SSPP_DMA,
 	SSPP_VIG,
 	DSPP,
-	LM
+	LM,
+	PPB
 };
 
 struct mdp_pp_feature_ops {
@@ -146,28 +153,23 @@ struct mdss_pp_res_type {
 	struct mdp_hist_lut_data enhist_disp_cfg[MDSS_BLOCK_DISP_NUM];
 	struct mdp_dither_cfg_data dither_disp_cfg[MDSS_BLOCK_DISP_NUM];
 	struct mdp_gamut_cfg_data gamut_disp_cfg[MDSS_BLOCK_DISP_NUM];
-	uint16_t gamut_tbl[MDSS_BLOCK_DISP_NUM][GAMUT_TOTAL_TABLE_SIZE];
+	uint16_t gamut_tbl[MDSS_BLOCK_DISP_NUM][GAMUT_TOTAL_TABLE_SIZE * 3];
 	u32 hist_data[MDSS_BLOCK_DISP_NUM][HIST_V_SIZE];
 	struct pp_sts_type pp_disp_sts[MDSS_BLOCK_DISP_NUM];
 	/* physical info */
 	struct pp_hist_col_info *dspp_hist;
 	/*
-	 * The pp_data_res will be a pointer to newer MDP revisions of the
+	 * The pp_data_v1_7 will be a pointer to newer MDP revisions of the
 	 * pp_res, which will hold the cfg_payloads of each feature in a single
 	 * struct.
 	 */
-	void *pp_data_res;
+	void *pp_data_v1_7;
+	void *pp_data_v3;
 };
 
-#if defined(CONFIG_ARCH_MSM8996) || defined(CONFIG_ARCH_MSM8937)
-void *pp_get_driver_ops(struct mdp_pp_driver_ops *ops);
-#else
-static inline void *pp_get_driver_ops(struct mdp_pp_driver_ops *ops)
-{
-	memset(ops, 0, sizeof(struct mdp_pp_driver_ops));
-	return NULL;
-}
-#endif
+void *pp_get_driver_ops_v1_7(struct mdp_pp_driver_ops *ops);
+void *pp_get_driver_ops_v3(struct mdp_pp_driver_ops *ops);
+
 
 static inline void pp_sts_set_split_bits(u32 *sts, u32 bits)
 {

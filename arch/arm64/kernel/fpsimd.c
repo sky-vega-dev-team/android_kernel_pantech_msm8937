@@ -28,6 +28,7 @@
 
 #include <asm/fpsimd.h>
 #include <asm/cputype.h>
+#include <asm/app_api.h>
 
 #define FPEXC_IOF	(1 << 0)
 #define FPEXC_DZF	(1 << 1)
@@ -35,6 +36,8 @@
 #define FPEXC_UFF	(1 << 3)
 #define FPEXC_IXF	(1 << 4)
 #define FPEXC_IDF	(1 << 7)
+
+#define FP_SIMD_BIT	31
 
 /*
  * In order to reduce the number of times the FPSIMD state is needlessly saved
@@ -93,6 +96,16 @@ static DEFINE_PER_CPU(int, fpsimd_stg_enable);
 
 static int fpsimd_settings = 0x1; /* default = 0x1 */
 module_param(fpsimd_settings, int, 0644);
+
+void fpsimd_settings_enable(void)
+{
+	set_app_setting_bit(FP_SIMD_BIT);
+}
+
+void fpsimd_settings_disable(void)
+{
+	clear_app_setting_bit(FP_SIMD_BIT);
+}
 
 /*
  * Trapped FP/ASIMD access.
@@ -320,7 +333,7 @@ static struct notifier_block fpsimd_cpu_pm_notifier_block = {
 	.notifier_call = fpsimd_cpu_pm_notifier,
 };
 
-static void fpsimd_pm_init(void)
+static void __init fpsimd_pm_init(void)
 {
 	cpu_pm_register_notifier(&fpsimd_cpu_pm_notifier_block);
 }
@@ -363,21 +376,15 @@ static inline void fpsimd_hotplug_init(void) { }
  */
 static int __init fpsimd_init(void)
 {
-	u64 pfr = read_cpuid(ID_AA64PFR0_EL1);
-
-	if (pfr & (0xf << 16)) {
+	if (elf_hwcap & HWCAP_FP) {
+		fpsimd_pm_init();
+		fpsimd_hotplug_init();
+	} else {
 		pr_notice("Floating-point is not implemented\n");
-		return 0;
 	}
-	elf_hwcap |= HWCAP_FP;
 
-	if (pfr & (0xf << 20))
+	if (!(elf_hwcap & HWCAP_ASIMD))
 		pr_notice("Advanced SIMD is not implemented\n");
-	else
-		elf_hwcap |= HWCAP_ASIMD;
-
-	fpsimd_pm_init();
-	fpsimd_hotplug_init();
 
 	return 0;
 }

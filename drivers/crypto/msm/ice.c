@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -97,19 +97,16 @@ struct ice_device {
 static int qti_ice_setting_config(struct request *req,
 		struct platform_device *pdev,
 		struct ice_crypto_setting *crypto_data,
-		struct ice_data_setting *setting,
-		bool *configured)
+		struct ice_data_setting *setting)
 {
 	struct ice_device *ice_dev = NULL;
 
-	*configured = false;
 	ice_dev = platform_get_drvdata(pdev);
 
 	if (!ice_dev) {
 		pr_debug("%s no ICE device\n", __func__);
 
 		/* make the caller finish peacfully */
-		*configured = true;
 		return 0;
 	}
 
@@ -119,8 +116,6 @@ static int qti_ice_setting_config(struct request *req,
 	}
 
 	if ((short)(crypto_data->key_index) >= 0) {
-
-		*configured = true;
 
 		memcpy(&setting->crypto_data, crypto_data,
 				sizeof(setting->crypto_data));
@@ -838,7 +833,7 @@ static int qcom_ice_restore_config(void)
 static int qcom_ice_init_clocks(struct ice_device *ice)
 {
 	int ret = -EINVAL;
-	struct ice_clk_info *clki;
+	struct ice_clk_info *clki = NULL;
 	struct device *dev = ice->pdev;
 	struct list_head *head = &ice->clk_list_head;
 
@@ -882,7 +877,7 @@ out:
 static int qcom_ice_enable_clocks(struct ice_device *ice, bool enable)
 {
 	int ret = 0;
-	struct ice_clk_info *clki;
+	struct ice_clk_info *clki = NULL;
 	struct device *dev = ice->pdev;
 	struct list_head *head = &ice->clk_list_head;
 
@@ -1368,14 +1363,15 @@ static int qcom_ice_reset(struct  platform_device *pdev)
 	return qcom_ice_finish_power_collapse(ice_dev);
 }
 
-static int qcom_ice_config(struct platform_device *pdev, struct request *req,
-		struct ice_data_setting *setting)
+static int qcom_ice_config_start(struct platform_device *pdev,
+		struct request *req,
+		struct ice_data_setting *setting, bool async)
 {
 	struct ice_crypto_setting *crypto_data;
 	struct ice_crypto_setting pfk_crypto_data = {0};
 	union map_info *info;
 	int ret = 0;
-	bool configured = 0;
+	bool is_pfe = false;
 
 	if (!pdev || !req || !setting) {
 		pr_err("%s: Invalid params passed\n", __func__);
@@ -1397,25 +1393,17 @@ static int qcom_ice_config(struct platform_device *pdev, struct request *req,
 		return 0;
 	}
 
-	ret = pfk_load_key(req->bio, &pfk_crypto_data);
-	if (0 == ret) {
-		ret = qti_ice_setting_config(req, pdev, &pfk_crypto_data,
-			setting, &configured);
-
-		if (0 == ret) {
-			/**
-			 * if configuration was complete, we are done, no need
-			 * to go further with FDE
-			 */
-			if (configured)
-				return 0;
-		} else {
-			/**
-			 * there was an error with configuring the setting,
-			 * exit with error
-			 */
+	ret = pfk_load_key_start(req->bio, &pfk_crypto_data, &is_pfe, async);
+	if (is_pfe) {
+		if (ret) {
+			if (ret != -EBUSY && ret != -EAGAIN)
+				pr_err("%s error %d while configuring ice key for PFE\n",
+						__func__, ret);
 			return ret;
 		}
+
+		return qti_ice_setting_config(req, pdev,
+				&pfk_crypto_data, setting);
 	}
 
 	/*
@@ -1438,8 +1426,8 @@ static int qcom_ice_config(struct platform_device *pdev, struct request *req,
 			return -EINVAL;
 		}
 
-		return qti_ice_setting_config(req, pdev, crypto_data,
-			setting, &configured);
+		return qti_ice_setting_config(req, pdev,
+				crypto_data, setting);
 	}
 
 	/*
@@ -1449,6 +1437,36 @@ static int qcom_ice_config(struct platform_device *pdev, struct request *req,
 	 */
 	return 0;
 }
+EXPORT_SYMBOL(qcom_ice_config_start);
+
+static int qcom_ice_config_end(struct request *req)
+{
+	int ret = 0;
+	bool is_pfe = false;
+
+	if (!req) {
+		pr_err("%s: Invalid params passed\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!req->bio) {
+		/* It is not an error to have a request with no  bio */
+		return 0;
+	}
+
+	ret = pfk_load_key_end(req->bio, &is_pfe);
+	if (is_pfe) {
+		if (ret != 0)
+			pr_err("%s error %d while end configuring ice key for PFE\n",
+								__func__, ret);
+		return ret;
+	}
+
+
+	return 0;
+}
+EXPORT_SYMBOL(qcom_ice_config_end);
+
 
 static int qcom_ice_status(struct platform_device *pdev)
 {
@@ -1481,7 +1499,8 @@ struct qcom_ice_variant_ops qcom_ice_ops = {
 	.reset            = qcom_ice_reset,
 	.resume           = qcom_ice_resume,
 	.suspend          = qcom_ice_suspend,
-	.config           = qcom_ice_config,
+	.config_start     = qcom_ice_config_start,
+	.config_end       = qcom_ice_config_end,
 	.status           = qcom_ice_status,
 	.debug            = qcom_ice_debug,
 };
@@ -1509,13 +1528,16 @@ struct platform_device *qcom_ice_get_pdevice(struct device_node *node)
 
 	list_for_each_entry(ice_dev, &ice_devices, list) {
 		if (ice_dev->pdev->of_node == node) {
-			pr_info("%s: found ice device %p\n", __func__, ice_dev);
+			pr_info("%s: found ice device %pK\n", __func__,
+			ice_dev);
+			ice_pdev = to_platform_device(ice_dev->pdev);
 			break;
 		}
 	}
 
-	ice_pdev = to_platform_device(ice_dev->pdev);
-	pr_info("%s: matching platform device %p\n", __func__, ice_pdev);
+	if(ice_pdev)
+		pr_info("%s: matching platform device %pK\n", __func__, ice_pdev);
+
 out:
 	return ice_pdev;
 }
@@ -1534,11 +1556,11 @@ static struct ice_device *get_ice_device_from_storage_type
 	list_for_each_entry(ice_dev, &ice_devices, list) {
 		if (!strcmp(ice_dev->ice_instance_type, storage_type)) {
 			pr_info("%s: found ice device %p\n", __func__, ice_dev);
-			break;
+			return ice_dev;
 		}
 	}
 out:
-	return ice_dev;
+	return NULL;
 }
 
 static int enable_ice_setup(struct ice_device *ice_dev)
@@ -1582,7 +1604,18 @@ static int enable_ice_setup(struct ice_device *ice_dev)
 out_clocks:
 	qcom_ice_enable_clocks(ice_dev, false);
 out_reg:
-	regulator_disable(ice_dev->reg);
+	if (ice_dev->is_regulator_available) {
+		if (qcom_ice_get_vreg(ice_dev)) {
+			pr_err("%s: Could not get regulator\n", __func__);
+			goto out;
+		}
+		ret = regulator_disable(ice_dev->reg);
+		if (ret) {
+			pr_err("%s:%pK: Could not disable regulator\n",
+					__func__, ice_dev);
+			goto out;
+		}
+	}
 out:
 	return ret;
 }
@@ -1632,6 +1665,9 @@ int qcom_ice_setup_ice_hw(const char *storage_type, int enable)
 	struct ice_device *ice_dev = NULL;
 
 	ice_dev = get_ice_device_from_storage_type(storage_type);
+	if (ice_dev == ERR_PTR(-EPROBE_DEFER))
+		return -EPROBE_DEFER;
+
 	if (!ice_dev)
 		return ret;
 

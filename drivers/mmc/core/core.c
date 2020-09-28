@@ -464,6 +464,10 @@ static int mmc_devfreq_set_target(struct device *dev,
 	struct mmc_devfeq_clk_scaling *clk_scaling;
 	int err = 0;
 	int abort;
+	unsigned long pflags = current->flags;
+
+	/* Ensure scaling would happen even in memory pressure conditions */
+	current->flags |= PF_MEMALLOC;
 
 	if (!(host && freq)) {
 		pr_err("%s: unexpected host/freq parameter\n", __func__);
@@ -522,6 +526,7 @@ static int mmc_devfreq_set_target(struct device *dev,
 	mmc_host_clk_release(host);
 	mmc_release_host(host);
 out:
+	tsk_restore_flags(current, pflags, PF_MEMALLOC);
 	return err;
 }
 
@@ -1476,6 +1481,12 @@ int mmc_cmdq_halt(struct mmc_host *host, bool halt)
 {
 	int err = 0;
 
+	if (mmc_host_cq_disable(host)) {
+		pr_debug("%s: %s: CQE is already disabled\n",
+				mmc_hostname(host), __func__);
+		return 0;
+	}
+
 	if ((halt && mmc_host_halt(host)) ||
 			(!halt && !mmc_host_halt(host))) {
 		pr_debug("%s: %s: CQE is already %s\n", mmc_hostname(host),
@@ -1577,7 +1588,6 @@ struct mmc_async_req *mmc_start_req(struct mmc_host *host,
 				    struct mmc_async_req *areq, int *error)
 {
 	int err = 0;
-	int start_err = 0;
 	struct mmc_async_req *data = host->areq;
 
 	/* Prepare a new request */
@@ -1609,7 +1619,7 @@ struct mmc_async_req *mmc_start_req(struct mmc_host *host,
 		trace_mmc_blk_rw_start(areq->mrq->cmd->opcode,
 				       areq->mrq->cmd->arg,
 				       areq->mrq->data);
-		start_err = __mmc_start_data_req(host, areq->mrq);
+		__mmc_start_data_req(host, areq->mrq);
 	}
 
 	if (host->areq)
@@ -1800,8 +1810,13 @@ int mmc_read_bkops_status(struct mmc_card *card)
 	if (err)
 		goto out;
 
-	card->ext_csd.raw_bkops_status = ext_csd[EXT_CSD_BKOPS_STATUS];
-	card->ext_csd.raw_exception_status = ext_csd[EXT_CSD_EXP_EVENTS_STATUS];
+	card->ext_csd.raw_bkops_status = ext_csd[EXT_CSD_BKOPS_STATUS] &
+		MMC_BKOPS_URGENCY_MASK;
+	card->ext_csd.raw_exception_status =
+		ext_csd[EXT_CSD_EXP_EVENTS_STATUS] & (EXT_CSD_URGENT_BKOPS |
+						      EXT_CSD_DYNCAP_NEEDED |
+						      EXT_CSD_SYSPOOL_EXHAUSTED
+						      | EXT_CSD_PACKED_FAILURE);
 out:
 	kfree(ext_csd);
 	return err;
@@ -1890,9 +1905,11 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 	 * Address this by setting the read timeout to a "reasonably high"
 	 * value. For the cards tested, 300ms has proven enough. If necessary,
 	 * this value can be increased if other problematic cards require this.
+	 * Certain Hynix 5.x cards giving read timeout even with 300ms.
+	 * Increasing further to max value (4s).
 	 */
 	if (mmc_card_long_read_time(card) && data->flags & MMC_DATA_READ) {
-		data->timeout_ns = 300000000;
+		data->timeout_ns = 4000000000u;
 		data->timeout_clks = 0;
 	}
 
@@ -2029,6 +2046,10 @@ void mmc_get_card(struct mmc_card *card)
 {
 	pm_runtime_get_sync(&card->dev);
 	mmc_claim_host(card->host);
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
+	if (mmc_bus_needs_resume(card->host))
+		mmc_resume_bus(card->host);
+#endif
 }
 EXPORT_SYMBOL(mmc_get_card);
 
@@ -2755,6 +2776,40 @@ static inline void mmc_bus_put(struct mmc_host *host)
 	spin_unlock_irqrestore(&host->lock, flags);
 }
 
+int mmc_resume_bus(struct mmc_host *host)
+{
+	unsigned long flags;
+	int err = 0;
+
+	if (!mmc_bus_needs_resume(host))
+		return -EINVAL;
+
+	pr_debug("%s: Starting deferred resume\n", mmc_hostname(host));
+	spin_lock_irqsave(&host->lock, flags);
+	host->bus_resume_flags &= ~MMC_BUSRESUME_NEEDS_RESUME;
+	spin_unlock_irqrestore(&host->lock, flags);
+
+	mmc_bus_get(host);
+	if (host->bus_ops && !host->bus_dead && host->card) {
+		mmc_power_up(host, host->card->ocr);
+		BUG_ON(!host->bus_ops->resume);
+		host->bus_ops->resume(host);
+		if (mmc_card_cmdq(host->card)) {
+			err = mmc_cmdq_halt(host, false);
+			if (err)
+				pr_err("%s: %s: unhalt failed: %d\n",
+				       mmc_hostname(host), __func__, err);
+			else
+				mmc_card_clr_suspended(host->card);
+		}
+	}
+
+	mmc_bus_put(host);
+	pr_debug("%s: Deferred resume completed\n", mmc_hostname(host));
+	return 0;
+}
+EXPORT_SYMBOL(mmc_resume_bus);
+
 /*
  * Assign a mmc bus handler to a host. Only one bus handler may control a
  * host at any given time.
@@ -2820,6 +2875,13 @@ static void _mmc_detect_change(struct mmc_host *host, unsigned long delay,
 		pm_wakeup_event(mmc_dev(host), 5000);
 
 	host->detect_change = 1;
+	/*
+	 * Change in cd_gpio state, so make sure detection part is
+	 * not overided because of manual resume.
+	 */
+	if (cd_irq && mmc_bus_manual_resume(host))
+		host->ignore_bus_resume_flags = true;
+
 	mmc_schedule_delayed_work(&host->detect, delay);
 }
 
@@ -3708,6 +3770,7 @@ EXPORT_SYMBOL(mmc_detect_card_removed);
 
 void mmc_rescan(struct work_struct *work)
 {
+	unsigned long flags;
 	struct mmc_host *host =
 		container_of(work, struct mmc_host, detect.work);
 
@@ -3716,8 +3779,12 @@ void mmc_rescan(struct work_struct *work)
 		host->trigger_card_event = false;
 	}
 
-	if (host->rescan_disable)
+	spin_lock_irqsave(&host->lock, flags);
+	if (host->rescan_disable) {
+		spin_unlock_irqrestore(&host->lock, flags);
 		return;
+	}
+	spin_unlock_irqrestore(&host->lock, flags);
 
 	/* If there is a non-removable card registered, only scan once */
 	if ((host->caps & MMC_CAP_NONREMOVABLE) && host->rescan_entered)
@@ -3735,6 +3802,8 @@ void mmc_rescan(struct work_struct *work)
 		host->bus_ops->detect(host);
 
 	host->detect_change = 0;
+	if (host->ignore_bus_resume_flags)
+		host->ignore_bus_resume_flags = false;
 
 	/*
 	 * Let mmc_bus_put() free the bus/bus_ops if we've found that
@@ -3988,6 +4057,11 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 
 		spin_lock_irqsave(&host->lock, flags);
 		host->rescan_disable = 0;
+		if (mmc_bus_manual_resume(host) &&
+				!host->ignore_bus_resume_flags) {
+			spin_unlock_irqrestore(&host->lock, flags);
+			break;
+		}
 		spin_unlock_irqrestore(&host->lock, flags);
 		_mmc_detect_change(host, 0, false);
 

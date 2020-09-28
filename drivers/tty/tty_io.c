@@ -2570,30 +2570,6 @@ static int tiocgsid(struct tty_struct *tty, struct tty_struct *real_tty, pid_t _
 	return put_user(pid_vnr(real_tty->session), p);
 }
 
-#ifdef CONFIG_PANTECH_SND //Google Security Patch 2016.06 Information Disclosure Vulnerability in Kernel Teletype Driver (CVE-2016-0723)
-/**
-*	tiocgetd	-	get line discipline
-*     @tty: tty device
-*     @p: pointer to user data
-*
-*     Retrieves the line discipline id directly from the ldisc.
-*
-*     Locking: waits for ldisc reference (in case the line discipline
-*     is changing or the tty is being hungup)
-*/
-    
-static int tiocgetd(struct tty_struct *tty, int __user *p)
-{
-      struct tty_ldisc *ld;
-      int ret;
-    
-      ld = tty_ldisc_ref_wait(tty);
-      ret = put_user(ld->ops->num, p);
-      tty_ldisc_deref(ld);
-      return ret;
-}
-#endif
-
 /**
  *	tiocsetd	-	set line discipline
  *	@tty: tty device
@@ -2614,6 +2590,28 @@ static int tiocsetd(struct tty_struct *tty, int __user *p)
 
 	ret = tty_set_ldisc(tty, ldisc);
 
+	return ret;
+}
+
+/**
+ *	tiocgetd	-	get line discipline
+ *	@tty: tty device
+ *	@p: pointer to user data
+ *
+ *	Retrieves the line discipline id directly from the ldisc.
+ *
+ *	Locking: waits for ldisc reference (in case the line discipline
+ *		is changing or the tty is being hungup)
+ */
+
+static int tiocgetd(struct tty_struct *tty, int __user *p)
+{
+	struct tty_ldisc *ld;
+	int ret;
+
+	ld = tty_ldisc_ref_wait(tty);
+	ret = put_user(ld->ops->num, p);
+	tty_ldisc_deref(ld);
 	return ret;
 }
 
@@ -2831,11 +2829,7 @@ long tty_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case TIOCGSID:
 		return tiocgsid(tty, real_tty, p);
 	case TIOCGETD:
-#ifdef CONFIG_PANTECH_SND // Google Security Patch 2016.06 Information Disclosure Vulnerability in Kernel Teletype Driver (CVE-2016-0723)
-        return tiocgetd(tty, p);
-#else
-		return put_user(tty->ldisc->ops->num, (int __user *)p);
-#endif
+		return tiocgetd(tty, p);
 	case TIOCSETD:
 		return tiocsetd(tty, p);
 	case TIOCVHANGUP:

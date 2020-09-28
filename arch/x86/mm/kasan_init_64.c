@@ -11,6 +11,8 @@
 extern pgd_t early_level4_pgt[PTRS_PER_PGD];
 extern struct range pfn_mapped[E820_X_MAX];
 
+extern unsigned char kasan_zero_page[PAGE_SIZE];
+
 static int __init map_range(struct range *range)
 {
 	unsigned long start;

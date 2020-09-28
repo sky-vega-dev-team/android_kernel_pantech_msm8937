@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -454,10 +454,10 @@ static int kryo_regulator_retention_set_bypass(struct regulator_dev *rdev,
 	/* Ensure write above completes before proceeding */
 	mb();
 
-	if (kvreg->version < MSM8996_CPUSS_VER_1P1) {
+	if (enable == BHS_MODE && kvreg->version < MSM8996_CPUSS_VER_1P1) {
 		/* No status register, delay worst case */
 		udelay(PWR_GATE_SWITCH_TIMEOUT_US);
-	} else {
+	} else if (enable == BHS_MODE) {
 		while (timeout > 0) {
 			reg_val = readl_relaxed(kvreg->pm_apcc_base
 						+ APCC_PGS_RET_STATUS);
@@ -811,7 +811,7 @@ static int kryo_regulator_retention_init(struct kryo_regulator *kvreg,
 	struct device *dev = &pdev->dev;
 	struct regulator_init_data *init_data;
 	struct regulator_config reg_config = {};
-	int rc;
+	int rc = 0;
 
 	init_data = of_get_regulator_init_data(dev, ret_node);
 	if (!init_data) {

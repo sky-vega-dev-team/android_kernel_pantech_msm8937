@@ -510,7 +510,7 @@ sg_read(struct file *filp, char __user *buf, size_t count, loff_t * ppos)
 		old_hdr->result = EIO;
 		break;
 	case DID_ERROR:
-		old_hdr->result = (srp->sense_b[0] == 0 && 
+		old_hdr->result = (srp->sense_b[0] == 0 &&
 				  hp->masked_status == GOOD) ? 0 : EIO;
 		break;
 	default:
@@ -652,7 +652,8 @@ sg_write(struct file *filp, const char __user *buf, size_t count, loff_t * ppos)
 	else
 		hp->dxfer_direction = (mxsize > 0) ? SG_DXFER_FROM_DEV : SG_DXFER_NONE;
 	hp->dxfer_len = mxsize;
-	if (hp->dxfer_direction == SG_DXFER_TO_DEV)
+	if ((hp->dxfer_direction == SG_DXFER_TO_DEV) ||
+	    (hp->dxfer_direction == SG_DXFER_TO_FROM_DEV))
 		hp->dxferp = (char __user *)buf + cmd_size;
 	else
 		hp->dxferp = NULL;
@@ -874,8 +875,10 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 			return -ENXIO;
 		if (!access_ok(VERIFY_WRITE, p, SZ_SG_IO_HDR))
 			return -EFAULT;
+		mutex_lock(&sfp->parentdp->open_rel_lock);
 		result = sg_new_write(sfp, filp, p, SZ_SG_IO_HDR,
 				 1, read_only, 1, &srp);
+		mutex_unlock(&sfp->parentdp->open_rel_lock);
 		if (result < 0)
 			return result;
 		result = wait_event_interruptible(sfp->read_wait,
@@ -917,6 +920,7 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 				val = (int) sfp->reserve.bufflen;
 				sg_remove_scat(sfp, &sfp->reserve);
 				sg_build_reserve(sfp, val);
+				mutex_unlock(&sfp->parentdp->open_rel_lock);
 			}
 		} else {
 			if (atomic_read(&sdp->detaching))
@@ -984,8 +988,8 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 		result = get_user(val, ip);
 		if (result)
 			return result;
-                if (val < 0)
-                        return -EINVAL;
+		if (val < 0)
+			return -EINVAL;
 		val = min_t(int, val,
 			    max_sectors_bytes(sdp->device->request_queue));
 		if (val != sfp->reserve.bufflen) {
@@ -993,6 +997,7 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 				return -EBUSY;
 			sg_remove_scat(sfp, &sfp->reserve);
 			sg_build_reserve(sfp, val);
+			mutex_unlock(&sfp->parentdp->open_rel_lock);
 		}
 		return 0;
 	case SG_GET_RESERVED_SIZE:
@@ -1019,6 +1024,8 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 		result = get_user(val, ip);
 		if (result)
 			return result;
+		if (val > SG_MAX_CDB_SIZE)
+			return -ENOMEM;
 		sfp->next_cmd_len = (val > 0) ? val : 0;
 		return 0;
 	case SG_GET_VERSION_NUM:
@@ -1045,8 +1052,8 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 				if (srp) {
 					rinfo[val].req_state = srp->done + 1;
 					rinfo[val].problem =
-					    srp->header.masked_status & 
-					    srp->header.host_status & 
+					    srp->header.masked_status &
+					    srp->header.host_status &
 					    srp->header.driver_status;
 					if (srp->done)
 						rinfo[val].duration =
@@ -1067,7 +1074,7 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 				}
 			}
 			read_unlock_irqrestore(&sfp->rq_list_lock, iflags);
-			result = __copy_to_user(p, rinfo, 
+			result = __copy_to_user(p, rinfo,
 						SZ_SG_REQ_INFO * SG_MAX_QUEUE);
 			result = result ? -EFAULT : 0;
 			kfree(rinfo);
@@ -1169,14 +1176,14 @@ static long sg_compat_ioctl(struct file *filp, unsigned int cmd_in, unsigned lon
 		return -ENXIO;
 
 	sdev = sdp->device;
-	if (sdev->host->hostt->compat_ioctl) { 
+	if (sdev->host->hostt->compat_ioctl) {
 		int ret;
 
 		ret = sdev->host->hostt->compat_ioctl(sdev, cmd_in, (void __user *)arg);
 
 		return ret;
 	}
-	
+
 	return -ENOIOCTLCMD;
 }
 #endif
@@ -1302,7 +1309,7 @@ sg_mmap(struct file *filp, struct vm_area_struct *vma)
 	}
 
 	sfp->mmap_called = 1;
-	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
+	vma->vm_flags |= VM_IO | VM_DONTEXPAND | VM_DONTDUMP;
 	vma->vm_private_data = sfp;
 	vma->vm_ops = &sg_mmap_vm_ops;
 	return 0;
@@ -1660,7 +1667,7 @@ init_sg(void)
 	else
 		def_reserved_size = sg_big_buff;
 
-	rc = register_chrdev_region(MKDEV(SCSI_GENERIC_MAJOR, 0), 
+	rc = register_chrdev_region(MKDEV(SCSI_GENERIC_MAJOR, 0),
 				    SG_MAX_DEVS, "sg");
 	if (rc)
 		return rc;
@@ -1787,6 +1794,9 @@ sg_start_req(Sg_request *srp, unsigned char *cmd)
 		else
 			md->from_user = 0;
 	}
+
+	if (unlikely(iov_count > UIO_MAXIOV))
+		return -EINVAL;
 
 	if (iov_count) {
 		int len, size = sizeof(struct sg_iovec) * iov_count;
@@ -2342,7 +2352,7 @@ static const struct file_operations adio_fops = {
 };
 
 static int sg_proc_single_open_dressz(struct inode *inode, struct file *file);
-static ssize_t sg_proc_write_dressz(struct file *filp, 
+static ssize_t sg_proc_write_dressz(struct file *filp,
 		const char __user *buffer, size_t count, loff_t *off);
 static const struct file_operations dressz_fops = {
 	.owner = THIS_MODULE,
@@ -2482,7 +2492,7 @@ static int sg_proc_single_open_adio(struct inode *inode, struct file *file)
 	return single_open(file, sg_proc_seq_show_int, &sg_allow_dio);
 }
 
-static ssize_t 
+static ssize_t
 sg_proc_write_adio(struct file *filp, const char __user *buffer,
 		   size_t count, loff_t *off)
 {
@@ -2503,7 +2513,7 @@ static int sg_proc_single_open_dressz(struct inode *inode, struct file *file)
 	return single_open(file, sg_proc_seq_show_int, &sg_big_buff);
 }
 
-static ssize_t 
+static ssize_t
 sg_proc_write_dressz(struct file *filp, const char __user *buffer,
 		     size_t count, loff_t *off)
 {
@@ -2663,7 +2673,7 @@ static void sg_proc_debug_helper(struct seq_file *s, Sg_device * sdp)
 			hp = &srp->header;
 			new_interface = (hp->interface_id == '\0') ? 0 : 1;
 			if (srp->res_used) {
-				if (new_interface && 
+				if (new_interface &&
 				    (SG_FLAG_MMAP_IO & hp->flags))
 					cp = "     mmap>> ";
 				else

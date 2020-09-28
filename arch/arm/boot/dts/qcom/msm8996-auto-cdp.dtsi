@@ -11,7 +11,7 @@
  */
 
 #include "msm8996-pinctrl.dtsi"
-#include "msm8996-camera-sensor-adp.dtsi"
+#include "msm8996-camera-sensor-cdp.dtsi"
 #include "msm8996-wsa881x.dtsi"
 
 / {
@@ -28,6 +28,10 @@
 	};
 };
 
+&eeprom0 {
+	status = "disabled";
+};
+
 &ufs_ice {
 	status = "ok";
 };
@@ -42,6 +46,23 @@
 
 &ufs1 {
 	status = "ok";
+};
+
+&spi_9 {
+	status = "ok";
+};
+
+&spi_10 {
+	status = "ok";
+};
+
+&spi_0 {
+	spi_codec@0 {
+		compatible = "qcom,spi-msm-codec-slave";
+		reg = <0>;
+		spi-max-frequency = <2000000>;
+		spi-cpha;
+	};
 };
 
 &uartblsp2dm1 {
@@ -83,14 +104,16 @@
 	qcom,vdd-io-current-level = <200 22000>;
 
 	pinctrl-names = "active", "sleep";
-	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
-	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
+	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on
+		     &sdc2_cd_on_sbc>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off
+		     &sdc2_cd_on_sbc>;
 
 	qcom,clk-rates = <400000 20000000 25000000
 				50000000 100000000 200000000>;
 	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
 
-	cd-gpios = <&tlmm 95 0x1>;
+	cd-gpios = <&tlmm 38 0x1>;
 
 	status = "ok";
 };
@@ -293,46 +316,63 @@
 
 #include "msm8996-mdss-panels.dtsi"
 
+&pmx_mdss {
+	mdss_dsi_active: mdss_dsi_active {
+		mux {
+			pins = "gpio8",  "gpio70";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio8",  "gpio70";
+			drive-strength = <8>; /* 8 mA */
+			bias-disable = <0>; /* no pull */
+			output-high;
+		};
+	};
+
+	mdss_dsi_suspend: mdss_dsi_suspend {
+		mux {
+			pins = "gpio8",  "gpio70";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio8",  "gpio70";
+			drive-strength = <2>; /* 2 mA */
+			bias-pull-down; /* pull down */
+		};
+	};
+};
+
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
 };
 
 &mdss_dsi {
-	hw-config = "single_dsi";
+	hw-config = "split_dsi";
 };
 
 &mdss_dsi0 {
-	qcom,dsi-pref-prim-pan = <&dsi_adv7533_720p>;
+	qcom,dsi-pref-prim-pan = <&dsi_dual_nt35597_video>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
-
-	qcom,panel-supply-entries {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			qcom,panel-supply-entry@0 {
-				reg = <0>;
-				qcom,supply-name = "vdd";
-				qcom,supply-min-voltage = <3300000>;
-				qcom,supply-max-voltage = <3300000>;
-				qcom,supply-enable-load = <100000>;
-				qcom,supply-disable-load = <100>;
-			};
-
-			qcom,panel-supply-entry@1 {
-				reg = <1>;
-				qcom,supply-name = "vddio";
-				qcom,supply-min-voltage = <1800000>;
-				qcom,supply-max-voltage = <1800000>;
-				qcom,supply-enable-load = <100000>;
-				qcom,supply-disable-load = <100>;
-			};
-	};
+	qcom,platform-enable-gpio = <&tlmm 70 0>;
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+	qcom,platform-reset-gpio = <&tlmm 8 0>;
+	qcom,platform-bklight-en-gpio = <&pm8994_gpios 10 0>;
 };
 
 &mdss_dsi1 {
-	status = "disabled";
+	qcom,dsi-pref-prim-pan = <&dsi_dual_nt35597_video>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	qcom,platform-enable-gpio = <&tlmm 70 0>;
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+	qcom,platform-reset-gpio = <&tlmm 8 0>;
+	qcom,platform-bklight-en-gpio = <&pm8994_gpios 10 0>;
 };
 
 &dsi_dual_sharp_video {
@@ -358,7 +398,7 @@
 	qcom,cont-splash-enabled;
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 	qcom,partial-update-enabled;
-	qcom,panel-roi-alignment = <720 128 720 64 720 64>;
+	qcom,panel-roi-alignment = <720 128 720 128 1440 128>;
 };
 
 &dsi_nt35597_dsc_video {
@@ -404,9 +444,41 @@
 		qcom,invert = <0>;
 		status = "okay";
 	};
+
+	mpp@a500 { /* MPP 6 */
+		qcom,mode = <1>;		/* Digital output */
+		qcom,output-type = <0>;		/* CMOS logic */
+		qcom,vin-sel = <2>;		/* S4 1.8V */
+		qcom,src-sel = <0>;		/* Constant */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		status = "okay";
+	};
+
+	mpp@a700 { /* MPP 8 */
+		/* USB 5V regulator enable */
+		qcom,mode = <1>;		/* Digital output */
+		qcom,output-type = <0>;		/* CMOS logic */
+		qcom,vin-sel = <2>;		/* S4 1.8V */
+		qcom,src-sel = <0>;		/* Constant */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		status = "okay";
+	};
 };
 
 &soc {
+	qcom,ntn_avb {
+		compatible = "qcom,ntn_avb";
+
+		ntn-rst-gpio = <&pm8994_gpios 13 0>;
+
+		vdd-ntn-hsic-supply = <&pm8994_l25>;
+		vdd-ntn-pci-supply = <&pm8994_s4>;
+		vdd-ntn-io-supply = <&pm8994_s4>;
+
+		qcom,ntn-rst-delay-msec = <100>;
+		qcom,ntn-rc-num = <1>;
+	};
+
 	i2c@75ba000 {
 		synaptics@20 {
 			compatible = "synaptics,dsx";
@@ -476,6 +548,49 @@
 		};
 	};
 
+	pinctrl@01010000 {
+		pcie2 {
+			pcie2_perst_default: pcie2_perst_default {
+				mux {
+					pins = "gpio90";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio90";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+
+			pcie2_wake_default: pcie2_wake_default {
+				mux {
+					pins = "gpio54";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio54";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+
+			pcie2_wake_sleep: pcie2_wake_sleep {
+				mux {
+					pins = "gpio54";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio54";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+	};
+
 	gen-vkeys {
 		compatible = "qcom,gen-vkeys";
 		label = "synaptics_dsx";
@@ -528,13 +643,15 @@
 
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
-				<&afe>, <&lsm>, <&routing>, <&compr>;
+				<&afe>, <&lsm>, <&routing>, <&compr>,
+				<&loopback1>;
 		asoc-platform-names = "msm-pcm-dsp.0", "msm-pcm-dsp.1",
 				"msm-pcm-dsp.2", "msm-voip-dsp",
 				"msm-pcm-voice", "msm-pcm-loopback",
 				"msm-compress-dsp", "msm-pcm-hostless",
 				"msm-pcm-afe", "msm-lsm-client",
-				"msm-pcm-routing", "msm-compr-dsp";
+				"msm-pcm-routing", "msm-compr-dsp",
+				"msm-pcm-loopback.1";
 		asoc-cpu = <&dai_pri_auxpcm>, <&dai_sec_auxpcm>, <&dai_hdmi>,
 				<&dai_mi2s>, <&dai_mi2s_quat>,
 				<&afe_pcm_rx>, <&afe_pcm_tx>,
@@ -575,6 +692,26 @@
 		interrupt-names = "vbus_det_irq";
 	};
 
+	loopback1: qcom,msm-pcm-loopback-low-latency {
+		compatible = "qcom,msm-pcm-loopback";
+		qcom,msm-pcm-loopback-low-latency;
+	};
+
+	usb_vbus_vreg: usb_vbus_vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "usb_vbus_vreg";
+		gpio = <&pm8994_mpps 8 0>;
+		enable-active-high;
+	};
+
+	usb2_otg_switch: usb2_otg_switch {
+		compatible = "regulator-fixed";
+		vin-supply = <&usb_vbus_vreg>;
+		regulator-name = "usb2_otg_vreg";
+		gpio = <&pm8994_gpios 12 0>;
+		enable-active-high;
+	};
+
 	qcom,msm-dai-mi2s {
 		dai_mi2s_quat: qcom,msm-dai-q6-mi2s-quat {
 			pinctrl-names = "default", "sleep";
@@ -587,6 +724,10 @@
 		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&quat_tdm_dout_active>;
 		pinctrl-1 = <&quat_tdm_dout_sleep>;
+	};
+
+	qcom,msm-ssc-sensors {
+		status = "disabled";
 	};
 };
 
@@ -623,15 +764,7 @@
 		status = "okay";
 	};
 
-	gpio@c900 { /* GPIO 10 - NFC CLK _REQ*/
-		qcom,mode = <0>;
-		qcom,vin-sel = <2>;
-		qcom,src-sel = <0>;
-		qcom,master-en = <1>;
-		status = "okay";
-	};
-
-	gpio@cd00 { /* GPIO 14 - lcd_bklt_reg_en */
+	gpio@c900 { /* GPIO 10 - lcd_bklt_reg_en */
 		qcom,mode = <1>;	/* DIGITAL OUT */
 		qcom,output-type = <0>;		/* CMOS logic */
 		qcom,invert = <1>;	/* output hight initially */
@@ -673,14 +806,22 @@
 		status = "okay";
 	};
 
-	gpio@cc00 { /* GPIO 13 - HPH_EN0 */
-		qcom,mode = <1>;
-		qcom,output-type = <0>;
+	gpio@cb00 { /* GPIO 12 - USB enb2 (otg switch) */
+		qcom,mode = <1>;	/* DIGITAL OUT */
+		qcom,vin-sel = <2>;	/* 1.8 */
+		qcom,src-sel = <0>;	/* GPIO */
+		qcom,master-en = <1>;	/* Enable GPIO */
+		status = "okay";
+	};
+
+	gpio@cc00 { /* GPIO 13 - NTN_RST */
+		qcom,mode = <1>; /* DIGITAL OUT */
+		qcom,output-type = <0>; /* CMOS logic */
 		qcom,pull = <5>;
-		qcom,vin-sel = <2>;
+		qcom,vin-sel = <2>; /* 1.8 */
 		qcom,out-strength = <1>;
-		qcom,src-sel = <2>;
-		qcom,master-en = <1>;
+		qcom,src-sel = <0>; /* GPIO */
+		qcom,master-en = <1>; /* Enable GPIO */
 		status = "okay";
 	};
 
@@ -728,6 +869,7 @@
 
 &usb2s {
 	status = "ok";
+	vbus_dwc3-supply = <&usb2_otg_switch>;
 	dwc3@7600000 {
 		dr_mode = "host";
 	};
@@ -735,17 +877,17 @@
 
 &usb3 {
 	interrupt-parent = <&usb3>;
-	interrupts = <0 1 2>;
+	interrupts = <0 1 2 3>;
 	#interrupt-cells = <1>;
 	interrupt-map-mask = <0x0 0xffffffff>;
-	interrupt-map = <0x0 0 &intc 0 133 0
-			 0x0 1 &intc 0 180 0
-			 0x0 2 &spmi_bus 0x0 0x0 0x9 0x0>;
-	interrupt-names = "hs_phy_irq", "pwr_event_irq", "pmic_id_irq";
+	interrupt-map = <0x0 0 &intc 0 0 347 0
+			 0x0 1 &intc 0 0 243 0
+			 0x0 2 &intc 0 0 180 0
+			 0x0 3 &spmi_bus 0x0 0x0 0x9 0x0>;
+	interrupt-names = "hs_phy_irq", "ss_phy_irq", "pwr_event_irq",
+				"pmic_id_irq";
 
 	vbus_dwc3-supply = <&usb_otg_switch>;
-	vdda33-supply = <&pm8994_l24>;
-	vdda18-supply = <&pm8994_l12>;
 };
 
 &blsp1_uart2 {
@@ -761,7 +903,7 @@
 
 &i2c_7 {
 	silabs4705@11 { /* SiLabs FM chip, slave id 0x11*/
-		status = "ok";
+		status = "disabled";
 		compatible = "silabs,si4705";
 		reg = <0x11>;
 		vdd-supply = <&pm8994_s4>;
@@ -795,7 +937,6 @@
 		qcom,nq-irq = <&tlmm 9 0x00>;
 		qcom,nq-ven = <&tlmm 12 0x00>;
 		qcom,nq-firm = <&pm8994_gpios 7 0x00>;
-		qcom,nq-clkreq = <&pm8994_gpios 10 0x00>;
 		interrupt-parent = <&tlmm>;
 		qcom,clk-src = "BBCLK2";
 		interrupts = <9 0>;
@@ -812,6 +953,10 @@
 	sound-9335 {
 		/delete-property/ qcom,hph-en1-gpio;
 	};
+};
+
+&slim_msm {
+	status = "disabled";
 };
 
 /delete-node/  &led_flash0;
@@ -843,6 +988,32 @@
 	/delete-property/ vin-supply;
 };
 
+&pcie0 {
+	/delete-property/ qcom,l1-supported;
+	/delete-property/ qcom,l1ss-supported;
+	/delete-property/ qcom,aux-clk-sync;
+};
+
+&pcie1 {
+	qcom,msi-gicm-addr = <0x09BD0040>;
+	qcom,msi-gicm-base = <0x240>;
+
+	/delete-property/ qcom,l1-supported;
+	/delete-property/ qcom,l1ss-supported;
+	/delete-property/ qcom,aux-clk-sync;
+	/delete-property/ qcom,ep-wakeirq;
+};
+
+&pcie2 {
+	perst-gpio = <&tlmm 90 0>;
+	wake-gpio = <&tlmm 54 0>;
+
+	/delete-property/ qcom,l1-supported;
+	/delete-property/ qcom,l1ss-supported;
+	/delete-property/ qcom,aux-clk-sync;
+	/delete-property/ qcom,ep-wakeirq;
+};
+
 &wsa881x_211 {
 	/delete-property/ qcom,spkr-sd-n-gpio;
 };
@@ -858,3 +1029,5 @@
 &wsa881x_214 {
 	/delete-property/ qcom,spkr-sd-n-gpio;
 };
+
+

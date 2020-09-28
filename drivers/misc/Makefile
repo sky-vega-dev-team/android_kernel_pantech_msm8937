@@ -71,3 +71,4 @@ obj-$(CONFIG_USB_EXT_TYPE_C_TI)		+= type-c-ti.o
 obj-$(CONFIG_NFC_NXP_PN5XX) += pn5xx_i2c.o
 #CONFIG_PANTECH_PS_WIFI_COM_PREF_LOGGING
 obj-$(CONFIG_PANTECH_PS_WIFI_COM_PREF_LOGGING) += wifi_log.o
+obj-$(CONFIG_QPNP_MISC) 	+= qpnp-misc.o

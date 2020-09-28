@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -117,19 +117,31 @@ void diag_notify_md_client(uint8_t peripheral, int data)
 	if (driver->logging_mode != DIAG_MEMORY_DEVICE_MODE)
 		return;
 
+	mutex_lock(&driver->md_session_lock);
 	memset(&info, 0, sizeof(struct siginfo));
 	info.si_code = SI_QUEUE;
 	info.si_int = (PERIPHERAL_MASK(peripheral) | data);
 	info.si_signo = SIGCONT;
 	if (driver->md_session_map[peripheral] &&
-	    driver->md_session_map[peripheral]->task) {
-		stat = send_sig_info(info.si_signo, &info,
-				     driver->md_session_map[peripheral]->task);
-		if (stat)
-			pr_err("diag: Err sending signal to memory device client, signal data: 0x%x, stat: %d\n",
-			       info.si_int, stat);
+		driver->md_session_map[peripheral]->task) {
+		if (driver->md_session_map[peripheral]->pid ==
+			driver->md_session_map[peripheral]->task->tgid) {
+			DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
+				"md_session %d pid = %d, md_session %d task tgid = %d\n",
+				peripheral,
+				driver->md_session_map[peripheral]->pid,
+				peripheral,
+				driver->md_session_map[peripheral]->task->tgid);
+			stat = send_sig_info(info.si_signo, &info,
+				driver->md_session_map[peripheral]->task);
+			if (stat)
+				pr_err("diag: Err sending signal to memory device client, signal data: 0x%x, stat: %d\n",
+					info.si_int, stat);
+		} else
+			pr_err("diag: md_session_map[%d] data is corrupted, signal data: 0x%x, stat: %d\n",
+				peripheral, info.si_int, stat);
 	}
-
+	mutex_unlock(&driver->md_session_lock);
 }
 
 static void process_pd_status(uint8_t *buf, uint32_t len,
@@ -496,6 +508,7 @@ static void process_ssid_range_report(uint8_t *buf, uint32_t len,
 	/* Don't account for pkt_id and length */
 	read_len += header_len - (2 * sizeof(uint32_t));
 
+	mutex_lock(&driver->msg_mask_lock);
 	driver->max_ssid_count[peripheral] = header->count;
 	for (i = 0; i < header->count && read_len < len; i++) {
 		ssid_range = (struct diag_ssid_range_t *)ptr;
@@ -539,6 +552,7 @@ static void process_ssid_range_report(uint8_t *buf, uint32_t len,
 		}
 		driver->msg_mask_tbl_count += 1;
 	}
+	mutex_unlock(&driver->msg_mask_lock);
 }
 
 static void diag_build_time_mask_update(uint8_t *buf,
@@ -563,11 +577,11 @@ static void diag_build_time_mask_update(uint8_t *buf,
 		       __func__, range->ssid_first, range->ssid_last);
 		return;
 	}
-
+	mutex_lock(&driver->msg_mask_lock);
 	build_mask = (struct diag_msg_mask_t *)(driver->build_time_mask->ptr);
 	num_items = range->ssid_last - range->ssid_first + 1;
 
-	for (i = 0; i < driver->msg_mask_tbl_count; i++, build_mask++) {
+	for (i = 0; i < driver->bt_msg_mask_tbl_count; i++, build_mask++) {
 		if (build_mask->ssid_first != range->ssid_first)
 			continue;
 		found = 1;
@@ -586,7 +600,7 @@ static void diag_build_time_mask_update(uint8_t *buf,
 
 	if (found)
 		goto end;
-	new_size = (driver->msg_mask_tbl_count + 1) *
+	new_size = (driver->bt_msg_mask_tbl_count + 1) *
 		   sizeof(struct diag_msg_mask_t);
 	temp = krealloc(driver->build_time_mask->ptr, new_size, GFP_KERNEL);
 	if (!temp) {
@@ -601,8 +615,10 @@ static void diag_build_time_mask_update(uint8_t *buf,
 		       __func__, err);
 		goto end;
 	}
-	driver->msg_mask_tbl_count += 1;
+	driver->bt_msg_mask_tbl_count += 1;
 end:
+	mutex_unlock(&driver->msg_mask_lock);
+
 	return;
 }
 
@@ -1087,7 +1103,7 @@ int diag_send_peripheral_buffering_mode(struct diag_buffering_mode_t *params)
 	driver->buffering_mode[peripheral].mode = params->mode;
 	driver->buffering_mode[peripheral].low_wm_val = params->low_wm_val;
 	driver->buffering_mode[peripheral].high_wm_val = params->high_wm_val;
-	if (mode == DIAG_BUFFERING_MODE_STREAMING)
+	if (params->mode == DIAG_BUFFERING_MODE_STREAMING)
 		driver->buffering_flag[peripheral] = 0;
 fail:
 	mutex_unlock(&driver->mode_lock);

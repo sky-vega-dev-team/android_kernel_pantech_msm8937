@@ -72,7 +72,9 @@
 #include <linux/fs_struct.h>
 #include <linux/compat.h>
 #include <linux/ctype.h>
+#include <linux/string.h>
 #include <linux/uaccess.h>
+#include <uapi/linux/limits.h>
 
 #include "audit.h"
 
@@ -1044,7 +1046,7 @@ static void audit_log_execve_info(struct audit_context *context,
 	if (!buf_head) {
 		audit_panic("out of memory for argv string");
 		return;
- 	}
+	}
 	buf = buf_head;
 
 	audit_log_format(*ab, "argc=%d", context->execve.argc);
@@ -1056,7 +1058,6 @@ static void audit_log_execve_info(struct audit_context *context,
 	encode = false;
 	iter = 0;
 	arg = 0;
-
 	do {
 		/* NOTE: we don't ever want to trust this value for anything
 		 *       serious, but the audit record format insists we
@@ -1109,7 +1110,6 @@ static void audit_log_execve_info(struct audit_context *context,
 
 			/* length of the buffer in the audit record? */
 			len_abuf = (encode ? len_buf * 2 : len_buf + 2);
-
 		}
 
 		/* write as much as we can to the audit log */
@@ -1184,7 +1184,6 @@ static void audit_log_execve_info(struct audit_context *context,
 
 out:
 	kfree(buf_head);
-
 }
 
 static void show_special(struct audit_context *context, int *call_panic)
@@ -1859,8 +1858,7 @@ void __audit_inode(struct filename *name, const struct dentry *dentry,
 	}
 
 	list_for_each_entry_reverse(n, &context->names_list, list) {
-		/* does the name pointer match? */
-		if (!n->name || n->name->name != name->name)
+		if (!n->name || strcmp(n->name->name, name->name))
 			continue;
 
 		/* match the correct record type */
@@ -1875,12 +1873,48 @@ void __audit_inode(struct filename *name, const struct dentry *dentry,
 	}
 
 out_alloc:
-	/* unable to find the name from a previous getname(). Allocate a new
-	 * anonymous entry.
-	 */
-	n = audit_alloc_name(context, AUDIT_TYPE_NORMAL);
+	/* unable to find an entry with both a matching name and type */
+	n = audit_alloc_name(context, AUDIT_TYPE_UNKNOWN);
 	if (!n)
 		return;
+	/* unfortunately, while we may have a path name to record with the
+	 * inode, we can't always rely on the string lasting until the end of
+	 * the syscall so we need to create our own copy, it may fail due to
+	 * memory allocation issues, but we do our best */
+	if (name) {
+		/* we can't use getname_kernel() due to size limits */
+		size_t len = strlen(name->name) + 1;
+		struct filename *new = __getname();
+
+		if (unlikely(!new))
+			goto out;
+
+		if (len <= (PATH_MAX - sizeof(*new))) {
+			new->name = (char *)(new) + sizeof(*new);
+			new->separate = false;
+		} else if (len <= PATH_MAX) {
+			/* this looks odd, but is due to final_putname() */
+			struct filename *new2;
+
+			new2 = kmalloc(sizeof(*new2), GFP_KERNEL);
+			if (unlikely(!new2)) {
+				__putname(new);
+				goto out;
+			}
+			new2->name = (char *)new;
+			new2->separate = true;
+			new = new2;
+		} else {
+			/* we should never get here, but let's be safe */
+			__putname(new);
+			goto out;
+		}
+		strlcpy((char *)new->name, name->name, len);
+		new->uptr = NULL;
+		new->aname = n;
+		n->name = new;
+		n->name_put = true;
+	}
 out:
 	if (parent) {
 		n->name_len = n->name ? parent_len(n->name->name) : AUDIT_NAME_FULL;

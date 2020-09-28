@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,8 @@
 #include <linux/atomic.h>
 #include <linux/of.h>
 #include <linux/input.h>
+#include <linux/pm_runtime.h>
+#include <linux/pm_wakeup.h>
 #include <uapi/linux/qbt1000.h>
 #include <soc/qcom/scm.h>
 #include "qseecom_kernel.h"
@@ -58,6 +60,7 @@ enum sensor_connection_types {
  * user space will provide new value upon tz app load
  */
 static uint32_t g_app_buf_size = SZ_256K;
+static char const *const FP_APP_NAME = "fingerpr";
 
 struct qbt1000_drvdata {
 	struct class	*qbt1000_class;
@@ -83,7 +86,10 @@ struct qbt1000_drvdata {
 	uint32_t	ssc_subsys_id;
 	uint32_t	ssc_spi_port;
 	uint32_t	ssc_spi_port_slave_index;
+	struct wakeup_source w_lock;
+	struct qseecom_handle *app_handle;
 };
+#define W_LOCK_DELAY_MS (2000)
 
 /**
  * get_cmd_rsp_buffers() - Function sets cmd & rsp buffer pointers and
@@ -103,14 +109,16 @@ static int get_cmd_rsp_buffers(struct qseecom_handle *hdl,
 	uint32_t *rsp_len)
 {
 	/* 64 bytes alignment for QSEECOM */
-	*cmd_len = ALIGN(*cmd_len, 64);
-	*rsp_len = ALIGN(*rsp_len, 64);
+	uint64_t aligned_cmd_len = ALIGN((uint64_t)*cmd_len, 64);
+	uint64_t aligned_rsp_len = ALIGN((uint64_t)*rsp_len, 64);
 
-	if ((*rsp_len + *cmd_len) > g_app_buf_size)
+	if ((aligned_rsp_len + aligned_cmd_len) > (uint64_t)g_app_buf_size)
 		return -ENOMEM;
 
 	*cmd = hdl->sbuf;
+	*cmd_len = aligned_cmd_len;
 	*rsp = hdl->sbuf + *cmd_len;
+	*rsp_len = aligned_rsp_len;
 
 	return 0;
 }
@@ -747,14 +755,15 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	void __user *priv_arg = (void __user *)arg;
 	struct qbt1000_drvdata *drvdata;
 
+	drvdata = file->private_data;
+
 	if (IS_ERR(priv_arg)) {
 		dev_err(drvdata->dev, "%s: invalid user space pointer %lu\n",
 			__func__, arg);
 		return -EINVAL;
 	}
 
-	drvdata = file->private_data;
-
+	pm_runtime_get_sync(drvdata->dev);
 	mutex_lock(&drvdata->mutex);
 	if (((drvdata->sensor_conn_type == SPI) && (!drvdata->clock_state)) ||
 	    ((drvdata->sensor_conn_type == SSC_SPI) && (!drvdata->ssc_state))) {
@@ -768,6 +777,7 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	case QBT1000_LOAD_APP:
 	{
 		struct qbt1000_app app;
+		struct qseecom_handle *app_handle;
 
 		if (copy_from_user(&app, priv_arg,
 			sizeof(app)) != 0) {
@@ -778,13 +788,55 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			goto end;
 		}
 
+		if (!app.app_handle) {
+			dev_err(drvdata->dev, "%s: LOAD app_handle is null\n",
+				__func__);
+			rc = -EINVAL;
+			goto end;
+		}
+
+		if (strcmp(app.name, FP_APP_NAME)) {
+			dev_err(drvdata->dev, "%s: Invalid app name\n",
+				__func__);
+			rc = -EINVAL;
+			goto end;
+		}
+
+		if (drvdata->app_handle) {
+			dev_err(drvdata->dev, "%s: LOAD app already loaded, unloading first\n",
+				__func__);
+			rc = qseecom_shutdown_app(&drvdata->app_handle);
+			if (rc != 0) {
+				dev_err(drvdata->dev, "%s: LOAD current app failed to shutdown\n",
+					  __func__);
+				goto end;
+			}
+		}
+
+		app.name[MAX_NAME_SIZE - 1] = '\0';
+
 		/* start the TZ app */
-		rc = qseecom_start_app(app.app_handle, app.name, app.size);
+		rc = qseecom_start_app(&drvdata->app_handle,
+				app.name, app.size);
 		if (rc == 0) {
 			g_app_buf_size = app.size;
 		} else {
-			dev_err(drvdata->dev, "%s: App %s failed to load\n",
-				__func__, app.name);
+			dev_err(drvdata->dev, "%s: Fingerprint Trusted App failed to load\n",
+				__func__);
+			goto end;
+		}
+
+		/* copy a fake app handle to user */
+		app_handle = drvdata->app_handle ?
+			(struct qseecom_handle *)123456 : 0;
+		rc = copy_to_user((void __user *)app.app_handle, &app_handle,
+			sizeof(*app.app_handle));
+
+		if (rc != 0) {
+			dev_err(drvdata->dev,
+				"%s: Failed copy 2us LOAD rc:%d\n",
+				 __func__, rc);
+			rc = -ENOMEM;
 			goto end;
 		}
 
@@ -793,28 +845,59 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	case QBT1000_UNLOAD_APP:
 	{
 		struct qbt1000_app app;
+		struct qseecom_handle *app_handle = 0;
 
 		if (copy_from_user(&app, priv_arg,
 			sizeof(app)) != 0) {
 			rc = -ENOMEM;
 			dev_err(drvdata->dev,
-				"%s: Failed copy from user space-LOAD\n",
+				"%s: Failed copy from user space-UNLOAD\n",
 				 __func__);
 			goto end;
 		}
 
-		/* if the app hasn't been loaded already, return err */
 		if (!app.app_handle) {
+			dev_err(drvdata->dev, "%s: UNLOAD app_handle is null\n",
+				__func__);
+			rc = -EINVAL;
+			goto end;
+		}
+
+		rc = copy_from_user(&app_handle, app.app_handle,
+			sizeof(app_handle));
+
+		if (rc != 0) {
+			dev_err(drvdata->dev,
+				"%s: Failed copy from user space-UNLOAD handle rc:%d\n",
+				 __func__, rc);
+			rc = -ENOMEM;
+			goto end;
+		}
+
+		/* if the app hasn't been loaded already, return err */
+		if (!drvdata->app_handle) {
 			dev_err(drvdata->dev, "%s: App not loaded\n",
 				__func__);
 			rc = -EINVAL;
 			goto end;
 		}
 
-		rc = qseecom_shutdown_app(app.app_handle);
+		rc = qseecom_shutdown_app(&drvdata->app_handle);
 		if (rc != 0) {
 			dev_err(drvdata->dev, "%s: App failed to shutdown\n",
 				__func__);
+			goto end;
+		}
+
+		/* copy the app handle (should be null) to user */
+		rc = copy_to_user((void __user *)app.app_handle, &app_handle,
+			sizeof(*app.app_handle));
+
+		if (rc != 0) {
+			dev_err(drvdata->dev,
+				"%s: Failed copy 2us UNLOAD rc:%d\n",
+				 __func__, rc);
+			rc = -ENOMEM;
 			goto end;
 		}
 
@@ -840,7 +923,7 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		}
 
 		/* if the app hasn't been loaded already, return err */
-		if (!tzcmd.app_handle) {
+		if (!drvdata->app_handle) {
 			dev_err(drvdata->dev, "%s: App not loaded\n",
 				__func__);
 			rc = -EINVAL;
@@ -850,13 +933,20 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		/* init command and response buffers and align lengths */
 		aligned_cmd_len = tzcmd.req_buf_len;
 		aligned_rsp_len = tzcmd.rsp_buf_len;
-		rc = get_cmd_rsp_buffers(tzcmd.app_handle,
+		rc = get_cmd_rsp_buffers(drvdata->app_handle,
 			(void **)&aligned_cmd,
 			&aligned_cmd_len,
 			(void **)&aligned_rsp,
 			&aligned_rsp_len);
 		if (rc != 0)
 			goto end;
+
+		if (!aligned_cmd) {
+			dev_err(drvdata->dev, "%s: Null command buffer\n",
+				__func__);
+			rc = -EINVAL;
+			goto end;
+		}
 
 		rc = copy_from_user(aligned_cmd, (void __user *)tzcmd.req_buf,
 				tzcmd.req_buf_len);
@@ -868,7 +958,7 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		}
 
 		/* send cmd to TZ */
-		rc = qseecom_send_command(tzcmd.app_handle,
+		rc = qseecom_send_command(drvdata->app_handle,
 			aligned_cmd,
 			aligned_cmd_len,
 			aligned_rsp,
@@ -899,6 +989,8 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	}
 
 end:
+	pm_runtime_mark_last_busy(drvdata->dev);
+	pm_runtime_put_autosuspend(drvdata->dev);
 	mutex_unlock(&drvdata->mutex);
 	return rc;
 }
@@ -1006,8 +1098,10 @@ int qbt1000_create_input_device(struct qbt1000_drvdata *drvdata)
 
 	drvdata->in_dev->evbit[0] = BIT_MASK(EV_KEY) |  BIT_MASK(EV_ABS);
 	drvdata->in_dev->keybit[BIT_WORD(BTN_TOUCH)] = BIT_MASK(BTN_TOUCH);
-	drvdata->in_dev->keybit[BIT_WORD(KEY_HOMEPAGE)] =
-		BIT_MASK(KEY_HOMEPAGE);
+
+	/* enable all 256 key events except to key 00 which is "KEY_RESERVED" */
+	memset(drvdata->in_dev->keybit, 0xFE,
+		   BIT_WORD(0x100)*sizeof(unsigned long));
 
 	input_set_abs_params(drvdata->in_dev, ABS_X,
 			     0,
@@ -1085,7 +1179,7 @@ static int qbt1000_read_spi_conn_properties(struct device_node *node,
 					dev_err(drvdata->dev,
 						"%s: Failed get %s\n",
 						__func__, clock_name);
-					return rc;
+				return rc;
 			}
 
 			if (!strcmp(clock_name, "spi_clk"))
@@ -1217,6 +1311,10 @@ static int qbt1000_probe(struct platform_device *pdev)
 	atomic_set(&drvdata->available, 1);
 
 	mutex_init(&drvdata->mutex);
+	wakeup_source_init(&drvdata->w_lock, "qbt_wake_source");
+	pm_runtime_set_autosuspend_delay(dev, W_LOCK_DELAY_MS);
+	pm_runtime_use_autosuspend(dev);
+	pm_runtime_enable(dev);
 
 	rc = qbt1000_dev_register(drvdata);
 	if (rc < 0)
@@ -1257,9 +1355,10 @@ static int qbt1000_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int qbt1000_suspend(struct platform_device *pdev, pm_message_t state)
+static int qbt1000_suspend(struct device *dev)
 {
 	int rc = 0;
+	struct platform_device *pdev = to_platform_device(dev);
 	struct qbt1000_drvdata *drvdata = platform_get_drvdata(pdev);
 
 	/*
@@ -1278,18 +1377,44 @@ static int qbt1000_suspend(struct platform_device *pdev, pm_message_t state)
 	return rc;
 }
 
+static int qbt1000_runtime_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct qbt1000_drvdata *drvdata = platform_get_drvdata(pdev);
+
+	__pm_relax(&drvdata->w_lock);
+
+	return 0;
+};
+
+static int qbt1000_runtime_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct qbt1000_drvdata *drvdata = platform_get_drvdata(pdev);
+
+	__pm_stay_awake(&drvdata->w_lock);
+
+	return 0;
+};
+
 static struct of_device_id qbt1000_match[] = {
 	{ .compatible = "qcom,qbt1000" },
 	{}
 };
 
+static const struct dev_pm_ops qbt1000_dev_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(qbt1000_suspend, NULL)
+	SET_RUNTIME_PM_OPS(qbt1000_runtime_suspend,
+			   qbt1000_runtime_resume, NULL)
+};
+
 static struct platform_driver qbt1000_plat_driver = {
 	.probe = qbt1000_probe,
 	.remove = qbt1000_remove,
-	.suspend = qbt1000_suspend,
 	.driver = {
 		.name = "qbt1000",
 		.owner = THIS_MODULE,
+		.pm = &qbt1000_dev_pm_ops,
 		.of_match_table = qbt1000_match,
 	},
 };

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,8 +22,6 @@
 #define KGSL_PWRFLAGS_OFF  0
 
 #define KGSL_PWRLEVEL_TURBO 0
-#define KGSL_PWRLEVEL_NOMINAL 1
-#define KGSL_PWRLEVEL_LAST_OFFSET 2
 
 #define KGSL_PWR_ON	0xFFFF
 
@@ -118,10 +116,12 @@ struct kgsl_regulator {
  * @previous_pwrlevel - The power level before transition
  * @thermal_pwrlevel - maximum powerlevel constraint from thermal
  * @default_pwrlevel - device wake up power level
+ * @restrict_pwrlevel - maximum power level jump to restrict
  * @max_pwrlevel - maximum allowable powerlevel per the user
  * @min_pwrlevel - minimum allowable powerlevel per the user
  * @num_pwrlevels - number of available power levels
  * @interval_timeout - timeout in jiffies to be idle before a power event
+ * @clock_times - Each GPU frequency's accumulated active time in us
  * @strtstp_sleepwake - true if the device supports low latency GPU start/stop
  * @regulators - array of pointers to kgsl_regulator structs
  * @pcl - bus scale identifier
@@ -132,6 +132,7 @@ struct kgsl_regulator {
  * @l2pc_cpus_qos - qos structure to avoid L2PC on CPUs
  * @pm_qos_req_dma - the power management quality of service structure
  * @pm_qos_active_latency - allowed CPU latency in microseconds when active
+ * @pm_qos_cpu_mask_latency - allowed CPU mask latency in microseconds
  * @pm_qos_wakeup_latency - allowed CPU latency in microseconds during wakeup
  * @bus_control - true if the bus calculation is independent
  * @bus_mod - modifier from the current power level for the bus vote
@@ -154,12 +155,14 @@ struct kgsl_regulator {
  * @deep_nap_timer - Timer struct for entering deep nap
  * @deep_nap_timeout - Timeout for entering deep nap
  * @gx_retention - true if retention voltage is allowed
+ * @tsens_name - pointer to temperature sensor name of GPU temperature sensor
  */
 
 struct kgsl_pwrctrl {
 	int interrupt_num;
 	struct clk *grp_clks[KGSL_MAX_CLKS];
 	struct clk *dummy_mx_clk;
+	struct clk *gpu_bimc_int_clk;
 	unsigned long power_flags;
 	unsigned long ctrl_flags;
 	struct kgsl_pwrlevel pwrlevels[KGSL_MAX_PWRLEVELS];
@@ -167,11 +170,13 @@ struct kgsl_pwrctrl {
 	unsigned int previous_pwrlevel;
 	unsigned int thermal_pwrlevel;
 	unsigned int default_pwrlevel;
+	unsigned int restrict_pwrlevel;
 	unsigned int wakeup_maxpwrlevel;
 	unsigned int max_pwrlevel;
 	unsigned int min_pwrlevel;
 	unsigned int num_pwrlevels;
 	unsigned long interval_timeout;
+	u64 clock_times[KGSL_MAX_PWRLEVELS];
 	bool strtstp_sleepwake;
 	struct kgsl_regulator regulators[KGSL_MAX_REGULATORS];
 	uint32_t pcl;
@@ -182,6 +187,7 @@ struct kgsl_pwrctrl {
 	struct pm_qos_request l2pc_cpus_qos;
 	struct pm_qos_request pm_qos_req_dma;
 	unsigned int pm_qos_active_latency;
+	unsigned int pm_qos_cpu_mask_latency;
 	unsigned int pm_qos_wakeup_latency;
 	bool bus_control;
 	int bus_mod;
@@ -204,6 +210,9 @@ struct kgsl_pwrctrl {
 	struct timer_list deep_nap_timer;
 	uint32_t deep_nap_timeout;
 	bool gx_retention;
+	unsigned int gpu_bimc_int_clk_freq;
+	bool gpu_bimc_interface_enabled;
+	const char *tsens_name;
 };
 
 int kgsl_pwrctrl_init(struct kgsl_device *device);

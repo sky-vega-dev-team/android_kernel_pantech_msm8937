@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -50,7 +50,7 @@ static int diag_dbgfs_bridgeinfo_index;
 static int diag_dbgfs_finished;
 static int diag_dbgfs_dci_data_index;
 static int diag_dbgfs_dci_finished;
-
+static struct mutex diag_dci_dbgfs_mutex;
 static ssize_t diag_dbgfs_read_status(struct file *file, char __user *ubuf,
 				      size_t count, loff_t *ppos)
 {
@@ -151,6 +151,7 @@ static ssize_t diag_dbgfs_read_dcistats(struct file *file,
 	buf_size = ksize(buf);
 	bytes_remaining = buf_size;
 
+	mutex_lock(&diag_dci_dbgfs_mutex);
 	if (diag_dbgfs_dci_data_index == 0) {
 		bytes_written =
 			scnprintf(buf, buf_size,
@@ -206,8 +207,8 @@ static ssize_t diag_dbgfs_read_dcistats(struct file *file,
 		}
 		temp_data++;
 	}
-
 	diag_dbgfs_dci_data_index = (i >= DIAG_DCI_DEBUG_CNT) ? 0 : i + 1;
+	mutex_unlock(&diag_dci_dbgfs_mutex);
 	bytes_written = simple_read_from_buffer(ubuf, count, ppos, buf,
 								bytes_in_buf);
 	kfree(buf);
@@ -268,8 +269,10 @@ static ssize_t diag_dbgfs_read_table(struct file *file, char __user *ubuf,
 	struct list_head *temp;
 	struct diag_cmd_reg_t *item = NULL;
 
+	mutex_lock(&driver->cmd_reg_mutex);
 	if (diag_dbgfs_table_index == driver->cmd_reg_count) {
 		diag_dbgfs_table_index = 0;
+		mutex_unlock(&driver->cmd_reg_mutex);
 		return 0;
 	}
 
@@ -278,6 +281,7 @@ static ssize_t diag_dbgfs_read_table(struct file *file, char __user *ubuf,
 	buf = kzalloc(sizeof(char) * buf_size, GFP_KERNEL);
 	if (ZERO_OR_NULL_PTR(buf)) {
 		pr_err("diag: %s, Error allocating memory\n", __func__);
+		mutex_unlock(&driver->cmd_reg_mutex);
 		return -ENOMEM;
 	}
 	buf_size = ksize(buf);
@@ -322,6 +326,7 @@ static ssize_t diag_dbgfs_read_table(struct file *file, char __user *ubuf,
 			break;
 	}
 	diag_dbgfs_table_index = i;
+	mutex_unlock(&driver->cmd_reg_mutex);
 
 	*ppos = 0;
 	ret = simple_read_from_buffer(ubuf, count, ppos, buf, bytes_in_buffer);
@@ -428,7 +433,7 @@ static ssize_t diag_dbgfs_read_usbinfo(struct file *file, char __user *ubuf,
 		bytes_written = scnprintf(buf+bytes_in_buffer, bytes_remaining,
 			"id: %d\n"
 			"name: %s\n"
-			"hdl: %p\n"
+			"hdl: %pK\n"
 			"connected: %d\n"
 			"diag state: %d\n"
 			"enabled: %d\n"
@@ -527,7 +532,7 @@ static ssize_t diag_dbgfs_read_smdinfo(struct file *file, char __user *ubuf,
 			bytes_written = scnprintf(buf+bytes_in_buffer,
 				bytes_remaining,
 				"name\t\t:\t%s\n"
-				"hdl\t\t:\t%p\n"
+				"hdl\t\t:\t%pK\n"
 				"inited\t\t:\t%d\n"
 				"opened\t\t:\t%d\n"
 				"diag_state\t:\t%d\n"
@@ -633,7 +638,7 @@ static ssize_t diag_dbgfs_read_socketinfo(struct file *file, char __user *ubuf,
 			bytes_written = scnprintf(buf+bytes_in_buffer,
 				bytes_remaining,
 				"name\t\t:\t%s\n"
-				"hdl\t\t:\t%p\n"
+				"hdl\t\t:\t%pK\n"
 				"inited\t\t:\t%d\n"
 				"opened\t\t:\t%d\n"
 				"diag_state\t:\t%d\n"
@@ -823,9 +828,9 @@ static ssize_t diag_dbgfs_read_mhiinfo(struct file *file, char __user *ubuf,
 			"bridge index: %s\n"
 			"mempool: %s\n"
 			"read ch opened: %d\n"
-			"read ch hdl: %p\n"
+			"read ch hdl: %pK\n"
 			"write ch opened: %d\n"
-			"write ch hdl: %p\n"
+			"write ch hdl: %pK\n"
 			"read work pending: %d\n"
 			"read done work pending: %d\n"
 			"open work pending: %d\n"
@@ -900,9 +905,9 @@ static ssize_t diag_dbgfs_read_bridge(struct file *file, char __user *ubuf,
 			"type: %d\n"
 			"inited: %d\n"
 			"ctxt: %d\n"
-			"dev_ops: %p\n"
-			"dci_read_buf: %p\n"
-			"dci_read_ptr: %p\n"
+			"dev_ops: %pK\n"
+			"dci_read_buf: %pK\n"
+			"dci_read_ptr: %pK\n"
 			"dci_read_len: %d\n\n",
 			info->id,
 			info->name,
@@ -1061,9 +1066,9 @@ int diag_debugfs_init(void)
 		pr_warn("diag: could not allocate memory for dci debug info\n");
 
 	mutex_init(&dci_stat_mutex);
+	mutex_init(&diag_dci_dbgfs_mutex);
 	return 0;
 err:
-	kfree(dci_traffic);
 	debugfs_remove_recursive(diag_dbgfs_dent);
 	return -ENOMEM;
 }
@@ -1077,6 +1082,7 @@ void diag_debugfs_cleanup(void)
 
 	kfree(dci_traffic);
 	mutex_destroy(&dci_stat_mutex);
+	mutex_destroy(&diag_dci_dbgfs_mutex);
 }
 #else
 int diag_debugfs_init(void) { return 0; }

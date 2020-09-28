@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -37,6 +37,9 @@
 /* QCE max number of descriptor in a descriptor list */
 #define QCE_MAX_NUM_DESC    128
 #define SPS_MAX_PKT_SIZE  (32 * 1024  - 64)
+
+/* default bam ipc log level */
+#define QCE_BAM_DEFAULT_IPC_LOGLVL 2
 
 /* State of consumer/producer Pipe */
 enum qce_pipe_st_enum {
@@ -211,7 +214,7 @@ struct ce_sps_data {
 };
 
 struct ce_request_info {
-	bool in_use;
+	atomic_t in_use;
 	bool in_prog;
 	enum qce_xfer_type_enum	xfer_type;
 	struct ce_sps_data ce_sps;
@@ -228,6 +231,7 @@ struct ce_request_info {
 	dma_addr_t phy_ota_src;
 	dma_addr_t phy_ota_dst;
 	unsigned int ota_size;
+	unsigned int req_len;
 };
 
 struct qce_driver_stats {

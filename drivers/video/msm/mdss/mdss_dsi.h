@@ -19,7 +19,6 @@
 #include <linux/irqreturn.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/gpio.h>
-#include <linux/mutex.h>
 
 #include "mdss_panel.h"
 #include "mdss_dsi_cmd.h"
@@ -149,6 +148,7 @@ enum dsi_pm_type {
 #define CTRL_STATE_PANEL_INIT		BIT(0)
 #define CTRL_STATE_MDP_ACTIVE		BIT(1)
 #define CTRL_STATE_DSI_ACTIVE		BIT(2)
+#define CTRL_STATE_PANEL_LP		BIT(3)
 
 #define DSI_NON_BURST_SYNCH_PULSE	0
 #define DSI_NON_BURST_SYNCH_EVENT	1
@@ -280,6 +280,10 @@ struct dsi_shared_data {
 	struct msm_bus_scale_pdata *bus_scale_table;
 	u32 bus_handle;
 	u32 bus_refcount;
+
+	/* Shared mutex for pm_qos ref count */
+	struct mutex pm_qos_lock;
+	u32 pm_qos_req_cnt;
 };
 
 struct mdss_dsi_data {
@@ -387,6 +391,7 @@ struct dsi_err_container {
 #define MDSS_DSI_COMMAND_COMPRESSION_MODE_CTRL	0x02a8
 #define MDSS_DSI_COMMAND_COMPRESSION_MODE_CTRL2	0x02ac
 #define MDSS_DSI_COMMAND_COMPRESSION_MODE_CTRL3	0x02b0
+#define MSM_DBA_CHIP_NAME_MAX_LEN				20
 
 struct mdss_dsi_ctrl_pdata {
 	int ndx;	/* panel_num */
@@ -427,17 +432,6 @@ struct mdss_dsi_ctrl_pdata {
 	int disp_en_gpio;
 	int bklt_en_gpio;
 	int mode_gpio;
-	struct mutex		bklt_dsc_mutex;
-#if defined (CONFIG_F_SKYDISP_EF71_SS)
-	int bl_en_gpio;
-#if (CONFIG_BOARD_VER < CONFIG_TP10)//DISPLAY_SKYDISP_LABIBB
-	int lcd_vcip_reg_en_gpio;
-	//int lcd_vcin_reg_en_gpio;
-	int lcd_vcip_reg_en_mpps;   // LCD_USED_VCIP_MPPS
-#endif
-	int lcd_vddio_reg_en_gpio;
-	int lcd_vddio_switch_en_gpio;	
-#endif	
 	int bklt_ctrl;	/* backlight ctrl */
 	bool pwm_pmi;
 	int pwm_period;
@@ -467,6 +461,7 @@ struct mdss_dsi_ctrl_pdata {
 	u32 dsi_irq_mask;
 	struct mdss_hw *dsi_hw;
 	struct mdss_intf_recovery *recovery;
+	struct mdss_intf_recovery *mdp_callback;
 
 	struct dsi_panel_cmds on_cmds;
 	struct dsi_panel_cmds post_dms_on_cmds;
@@ -475,18 +470,6 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds status_cmds;
 	u32 *status_valid_params;
 	u32 *status_cmds_rlen;
-#ifdef CONFIG_F_SKYDISP_CABC_CONTROL
-	struct dsi_panel_cmds cabc_cmds;
-#endif
-		
-#ifdef CONFIG_F_SKYDISP_GAMMA_CONTROL
-	struct dsi_panel_cmds gamma_cmds_20;
-        struct dsi_panel_cmds gamma_cmds_22;
-        struct dsi_panel_cmds gamma_cmds_24;
-#endif
-
-
-		
 	u32 *status_value;
 	unsigned char *return_buf;
 	u32 groups; /* several alternative values to compare */
@@ -497,7 +480,7 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds cmd2video;
 
 	char pps_buf[DSC_PPS_LEN];	/* dsc pps */
-	
+
 	struct dcs_cmd_list cmdlist;
 	struct completion dma_comp;
 	struct completion mdp_comp;
@@ -536,6 +519,7 @@ struct mdss_dsi_ctrl_pdata {
 	bool cmd_cfg_restore;
 	bool do_unicast;
 
+	bool idle_enabled;
 	int horizontal_idle_cnt;
 	struct panel_horizontal_idle *line_idle;
 	struct mdss_util_intf *mdss_util;
@@ -544,22 +528,27 @@ struct mdss_dsi_ctrl_pdata {
 	void *clk_mngr;
 	void *dsi_clk_handle;
 	void *mdp_clk_handle;
-	int m_vote_cnt;
+	int m_dsi_vote_cnt;
+	int m_mdp_vote_cnt;
 	/* debugfs structure */
 	struct mdss_dsi_debugfs_info *debugfs_info;
 
 	struct dsi_err_container err_cont;
 
-
-	bool ds_registered;
-
 	struct kobject *kobj;
 	int fb_node;
 
+	/* DBA data */
 	struct workqueue_struct *workq;
 	struct delayed_work dba_work;
+	char bridge_name[MSM_DBA_CHIP_NAME_MAX_LEN];
+	uint32_t bridge_index;
+	bool ds_registered;
+
 	bool timing_db_mode;
 	bool update_phy_timing; /* flag to recalculate PHY timings */
+
+	bool phy_power_off;
 };
 
 struct dsi_status_data {
@@ -586,7 +575,7 @@ void mdss_dsi_cmd_mode_ctrl(int enable);
 void mdp4_dsi_cmd_trigger(void);
 void mdss_dsi_cmd_mdp_start(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_cmd_bta_sw_trigger(struct mdss_panel_data *pdata);
-void mdss_dsi_ack_err_status(struct mdss_dsi_ctrl_pdata *ctrl);
+bool mdss_dsi_ack_err_status(struct mdss_dsi_ctrl_pdata *ctrl);
 int mdss_dsi_clk_ctrl(struct mdss_dsi_ctrl_pdata *ctrl, void *clk_handle,
 	enum mdss_dsi_clk_type clk_type, enum mdss_dsi_clk_state clk_state);
 void mdss_dsi_clk_req(struct mdss_dsi_ctrl_pdata *ctrl,
@@ -598,6 +587,7 @@ int mdss_dsi_wait_for_lane_idle(struct mdss_dsi_ctrl_pdata *ctrl);
 
 irqreturn_t mdss_dsi_isr(int irq, void *ptr);
 irqreturn_t hw_vsync_handler(int irq, void *data);
+void disable_esd_thread(void);
 void mdss_dsi_irq_handler_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 
 void mdss_dsi_set_tx_power_mode(int mode, struct mdss_panel_data *pdata);
@@ -648,9 +638,8 @@ int mdss_dsi_bta_status_check(struct mdss_dsi_ctrl_pdata *ctrl);
 int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl);
 bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type);
 void mdss_dsi_ctrl_setup(struct mdss_dsi_ctrl_pdata *ctrl);
-void mdss_dsi_dln0_phy_err(struct mdss_dsi_ctrl_pdata *ctrl, bool print_en);
+bool mdss_dsi_dln0_phy_err(struct mdss_dsi_ctrl_pdata *ctrl, bool print_en);
 void mdss_dsi_lp_cd_rx(struct mdss_dsi_ctrl_pdata *ctrl);
-void mdss_dsi_get_hw_revision(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_read_phy_revision(struct mdss_dsi_ctrl_pdata *ctrl);
 int mdss_dsi_panel_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl, char cmd0,
 		char cmd1, void (*fxn)(int), char *rbuf, int len);
@@ -673,6 +662,10 @@ void mdss_dsi_panel_dsc_pps_send(struct mdss_dsi_ctrl_pdata *ctrl,
 void mdss_dsi_dsc_config(struct mdss_dsi_ctrl_pdata *ctrl,
 	struct dsc_desc *dsc);
 void mdss_dsi_dfps_config_8996(struct mdss_dsi_ctrl_pdata *ctrl);
+void mdss_dsi_set_burst_mode(struct mdss_dsi_ctrl_pdata *ctrl);
+void mdss_dsi_set_reg(struct mdss_dsi_ctrl_pdata *ctrl, int off,
+	u32 mask, u32 val);
+int mdss_dsi_phy_pll_reset_status(struct mdss_dsi_ctrl_pdata *ctrl);
 
 static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
 {
@@ -888,47 +881,5 @@ static inline bool mdss_dsi_cmp_panel_reg(struct dsi_buf status_buf,
 {
 	return status_buf.data[i] == status_val[i];
 }
-
-#ifdef CONFIG_F_SKYDISP_SILENT_BOOT
-static inline void mdss_dsi_set_silentreboot_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int flag)
-{
-	ctrl_pdata->panel_data.silent_flag = flag;
-}
-
-static inline int mdss_dsi_get_silentreboot_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
-{
-	return ctrl_pdata->panel_data.silent_flag;
-}
-
-static inline void mdss_dsi_set_silent_backlight_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int flag)
-{
-	ctrl_pdata->panel_data.silent_backlight = flag;
-}
-
-static inline int mdss_dsi_get_silent_backlight_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
-{
-	return ctrl_pdata->panel_data.silent_backlight;
-}
-#else
-static inline void mdss_dsi_set_silentreboot_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int flag)
-{
-	
-}
-
-static inline int mdss_dsi_get_silentreboot_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
-{
-	return 0;
-}
-
-static inline void mdss_dsi_set_silent_backlight_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int flag)
-{
-	
-}
-
-static inline int mdss_dsi_get_silent_backlight_flag(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
-{
-	return 0;
-}
-#endif /* CONFIG_F_SKYDISP_SILENT_BOOT */
 
 #endif /* MDSS_DSI_H */

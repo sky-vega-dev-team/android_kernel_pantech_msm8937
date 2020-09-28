@@ -741,7 +741,7 @@ static int soc_pcm_prepare(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_platform *platform = rtd->platform;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	struct snd_soc_dai *codec_dai;
+	struct snd_soc_dai *codec_dai = NULL;
 	int i, ret = 0;
 
 	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
@@ -780,6 +780,12 @@ static int soc_pcm_prepare(struct snd_pcm_substream *substream)
 				goto out;
 			}
 		}
+	}
+
+	if (!codec_dai) {
+		dev_err(codec_dai->dev, "ASoC: DAI not found\n");
+		ret = -EINVAL;
+		goto out;
 	}
 
 	if (cpu_dai->driver->ops && cpu_dai->driver->ops->prepare) {
@@ -1775,7 +1781,8 @@ int dpcm_be_dai_hw_free(struct snd_soc_pcm_runtime *fe, int stream)
 		    (be->dpcm[stream].state != SND_SOC_DPCM_STATE_PREPARE) &&
 		    (be->dpcm[stream].state != SND_SOC_DPCM_STATE_HW_FREE) &&
 		    (be->dpcm[stream].state != SND_SOC_DPCM_STATE_PAUSED) &&
-		    (be->dpcm[stream].state != SND_SOC_DPCM_STATE_STOP))
+		    (be->dpcm[stream].state != SND_SOC_DPCM_STATE_STOP) &&
+		    (be->dpcm[stream].state != SND_SOC_DPCM_STATE_SUSPEND))
 			continue;
 
 		dev_dbg(be->dev, "ASoC: hw_free BE %s\n",
@@ -2319,6 +2326,10 @@ void dpcm_be_dai_prepare_async(struct snd_soc_pcm_runtime *fe, int stream,
 							    dpcm, domain);
 		} else {
 			dpcm_async[i++] = dpcm;
+			if (i == DPCM_MAX_BE_USERS) {
+				dev_dbg(fe->dev, "ASoC: MAX backend users!\n");
+				break;
+			}
 		}
 	}
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011, 2013, 2016 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -150,7 +150,6 @@ int subsys_notif_queue_notification(void *subsys_handle,
 					enum subsys_notif_type notif_type,
 					void *data)
 {
-	int ret = 0;
 	struct subsys_notif_info *subsys =
 		(struct subsys_notif_info *) subsys_handle;
 
@@ -160,10 +159,9 @@ int subsys_notif_queue_notification(void *subsys_handle,
 	if (notif_type < 0 || notif_type >= SUBSYS_NOTIF_TYPE_COUNT)
 		return -EINVAL;
 
-		ret = srcu_notifier_call_chain(
+	return srcu_notifier_call_chain(
 			&subsys->subsys_notif_rcvr_list, notif_type,
 			data);
-	return ret;
 }
 EXPORT_SYMBOL(subsys_notif_queue_notification);
 
@@ -196,7 +194,7 @@ static int subsys_notifier_test_call(struct notifier_block *this,
 	switch (code) {
 
 	default:
-		printk(KERN_WARNING "%s: Notification %s from subsystem %p\n",
+		pr_warn("%s: Notification %s from subsystem %pK\n",
 			__func__, notif_to_string(code), data);
 	break;
 
@@ -212,7 +210,7 @@ static struct notifier_block nb = {
 static void subsys_notif_reg_test_notifier(const char *subsys_name)
 {
 	void *handle = subsys_notif_register_notifier(subsys_name, &nb);
-	printk(KERN_WARNING "%s: Registered test notifier, handle=%p",
+	pr_warn("%s: Registered test notifier, handle=%pK",
 			__func__, handle);
 }
 #endif

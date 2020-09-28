@@ -48,6 +48,11 @@ static void hub_event(struct work_struct *work);
 /* synchronize hub-port add/remove and peering operations */
 DEFINE_MUTEX(usb_port_peer_mutex);
 
+static bool skip_extended_resume_delay = 1;
+module_param(skip_extended_resume_delay, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(skip_extended_resume_delay,
+		"removes extra delay added to finish bus resume");
+
 /* cycle leds on hubs that aren't blinking for attention */
 static bool blinkenlights = 0;
 module_param (blinkenlights, bool, S_IRUGO);
@@ -613,6 +618,12 @@ void usb_kick_hub_wq(struct usb_device *hdev)
 		kick_hub_wq(hub);
 }
 
+void usb_flush_hub_wq(void)
+{
+	flush_workqueue(hub_wq);
+}
+EXPORT_SYMBOL(usb_flush_hub_wq);
+
 /*
  * Let the USB core know that a USB 3.0 device has sent a Function Wake Device
  * Notification, which indicates it had initiated remote wakeup.
@@ -1037,12 +1048,11 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 	unsigned delay;
 
 	/* Continue a partial initialization */
-#ifdef CONFIG_PANTECH_SIO_BUG_FIX //Android security CVE-2015-8816
 	if (type == HUB_INIT2 || type == HUB_INIT3) {
 		device_lock(hub->intfdev);
 
 		/* Was the hub disconnected while we were waiting? */
-		if(hub->disconnected) {
+		if (hub->disconnected) {
 			device_unlock(hub->intfdev);
 			kref_put(&hub->kref, hub_release);
 			return;
@@ -1052,12 +1062,7 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 		goto init3;
 	}
 	kref_get(&hub->kref);
-#else
-	if (type == HUB_INIT2)
-		goto init2;
-	if (type == HUB_INIT3)
-		goto init3;
-#endif
+
 	/* The superspeed hub except for root hub has to use Hub Depth
 	 * value as an offset into the route string to locate the bits
 	 * it uses to determine the downstream port number. So hub driver
@@ -1254,9 +1259,7 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 			queue_delayed_work(system_power_efficient_wq,
 					&hub->init_work,
 					msecs_to_jiffies(delay));
-#ifdef CONFIG_PANTECH_SIO_BUG_FIX //Android security CVE-2015-8816
 			device_unlock(hub->intfdev);
-#endif
 			return;		/* Continues at init3: below */
 		} else {
 			msleep(delay);
@@ -1279,12 +1282,10 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 	if (type <= HUB_INIT3)
 		usb_autopm_put_interface_async(to_usb_interface(hub->intfdev));
 
-#ifdef CONFIG_PANTECH_SIO_BUG_FIX //Android security CVE-2015-8816
 	if (type == HUB_INIT2 || type == HUB_INIT3)
 		device_unlock(hub->intfdev);
 
 	kref_put(&hub->kref, hub_release);
-#endif
 }
 
 /* Implement the continuations for the delays above */
@@ -3457,7 +3458,9 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 		/* drive resume for USB_RESUME_TIMEOUT msec */
 		dev_dbg(&udev->dev, "usb %sresume\n",
 				(PMSG_IS_AUTO(msg) ? "auto-" : ""));
-		msleep(USB_RESUME_TIMEOUT);
+		if (!skip_extended_resume_delay)
+			usleep_range(USB_RESUME_TIMEOUT * 1000,
+					(USB_RESUME_TIMEOUT + 1) * 1000);
 
 		/* Virtual root hubs can trigger on GET_PORT_STATUS to
 		 * stop resume signaling.  Then finish the resume
@@ -3466,7 +3469,7 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 		status = hub_port_status(hub, port1, &portstatus, &portchange);
 
 		/* TRSMRCY = 10 msec */
-		msleep(10);
+		usleep_range(10000, 10500);
 	}
 
  SuspendCleared:
@@ -4403,7 +4406,9 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 	for (i = 0; i < GET_DESCRIPTOR_TRIES; (++i, msleep(100))) {
 		bool did_new_scheme = false;
 
-		if (use_new_scheme(udev, retry_counter)) {
+		if (use_new_scheme(udev, retry_counter) &&
+			!((hcd->driver->flags & HCD_RT_OLD_ENUM) &&
+				!hdev->parent)) {
 			struct usb_device_descriptor *buf;
 			int r = 0;
 

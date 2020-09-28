@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -42,11 +42,11 @@ enum {
 	MDSS_PLL_TARGET_8996,
 	MDSS_PLL_TARGET_8952,
 	MDSS_PLL_TARGET_8937,
-	MDSS_PLL_TARGET_TITANIUM,
+	MDSS_PLL_TARGET_8953,
 	MDSS_PLL_TARGET_8909,
 };
 
-#define DFPS_MAX_NUM_OF_FRAME_RATES 10
+#define DFPS_MAX_NUM_OF_FRAME_RATES 20
 
 struct dfps_panel_info {
 	uint32_t enabled;
@@ -70,6 +70,7 @@ struct dfps_info {
 	struct dfps_panel_info panel_dfps;
 	struct dfps_codes_info codes_dfps[DFPS_MAX_NUM_OF_FRAME_RATES];
 	void *dfps_fb_base;
+	uint32_t chip_serial;
 };
 
 struct mdss_pll_resources {
@@ -134,8 +135,14 @@ struct mdss_pll_resources {
 
 	/*
 	 * caching the pll trim codes in the case of dynamic refresh
+	 * or cmd mode idle screen.
 	 */
 	int		cache_pll_trim_codes[2];
+
+	/*
+	 * caching the pll trim codes rate
+	 */
+	s64		cache_pll_trim_codes_rate;
 
 	/*
 	 * for maintaining the status of saving trim codes

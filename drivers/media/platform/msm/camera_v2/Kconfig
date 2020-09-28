@@ -121,11 +121,6 @@ config MSM_ISPIF_V2
           This module acts as a crossbar between CSID and VFE. Output
           of any CID of CSID can be routed to of pixel
           or raw data interface in VFE.
-	  
-comment "PANTECH_CAMERA Configuration"
-config PANTECH_CAMERA
-	bool "PANTECH CAMERA DRIVERS"
-	default n
 
 config IMX134
 	bool "Sensor IMX134 (BAYER 8M)"

@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2007-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,6 +23,7 @@
 #include "mdss_debug.h"
 
 #define MDSS_SMMU_COMPATIBLE "qcom,smmu"
+#define SMMU_CBN_FSYNR1		0x6c
 
 struct mdss_iommu_map_type {
 	char *client_name;
@@ -60,14 +61,15 @@ static inline bool is_mdss_smmu_compatible_device(const char *str)
  * mdss_smmu_is_valid_domain_type()
  *
  * Used to check if rotator smmu domain is defined or not by checking if
- * vbif base is defined. As those are associated.
+ * vbif base is defined and wb rotator exists. As those are associated.
  */
 static inline bool mdss_smmu_is_valid_domain_type(struct mdss_data_type *mdata,
 		int domain_type)
 {
 	if ((domain_type == MDSS_IOMMU_DOMAIN_ROT_UNSECURE ||
 			domain_type == MDSS_IOMMU_DOMAIN_ROT_SECURE) &&
-			!mdss_mdp_is_nrt_vbif_base_defined(mdata))
+			(!mdss_mdp_is_wb_rotator_supported(mdata) ||
+			!mdss_mdp_is_nrt_vbif_base_defined(mdata)))
 		return false;
 	return true;
 }
@@ -199,7 +201,7 @@ static inline void mdss_smmu_unmap_dma_buf(struct sg_table *table, int domain,
 }
 
 static inline int mdss_smmu_dma_alloc_coherent(struct device *dev, size_t size,
-		dma_addr_t *phys, dma_addr_t *iova, void *cpu_addr,
+		dma_addr_t *phys, dma_addr_t *iova, void **cpu_addr,
 		gfp_t gfp, int domain)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();

@@ -69,11 +69,9 @@
 	status = "okay";
 };
 
-//FEATURE_PANTECH_SND_QCOM_PATCH START
 &wcd_rst_gpio {
 	status = "okay";
 };
-//FEATURE_PANTECH_SND_QCOM_PATCH END
 
 &int_codec {
 	status = "disabled";

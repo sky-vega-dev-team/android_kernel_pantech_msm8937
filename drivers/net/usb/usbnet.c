@@ -47,7 +47,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/debugfs.h>
 #include <linux/types.h>
-#include <linux/ipa.h>
+#include <linux/ipa_odu_bridge.h>
 #define DRIVER_VERSION		"22-Aug-2005"
 
 
@@ -851,7 +851,7 @@ int usbnet_stop (struct net_device *net)
 {
 	struct usbnet		*dev = netdev_priv(net);
 	struct driver_info	*info = dev->driver_info;
-	int			retval, pm;
+	int			retval, pm, mpn;
 
 	clear_bit(EVENT_DEV_OPEN, &dev->flags);
 	netif_stop_queue (net);
@@ -882,6 +882,8 @@ int usbnet_stop (struct net_device *net)
 
 	usbnet_purge_paused_rxq(dev);
 
+	mpn = !test_and_clear_bit(EVENT_NO_RUNTIME_PM, &dev->flags);
+
 	/* deferred work (task, timer, softirq) must also stop.
 	 * can't flush_scheduled_work() until we drop rtnl (later),
 	 * else workers could deadlock; so make workers a NOP.
@@ -892,8 +894,7 @@ int usbnet_stop (struct net_device *net)
 	if (!pm)
 		usb_autopm_put_interface(dev->intf);
 
-	if (info->manage_power &&
-	    !test_and_clear_bit(EVENT_NO_RUNTIME_PM, &dev->flags))
+	if (info->manage_power && mpn)
 		info->manage_power(dev, 0);
 	else
 		usb_autopm_put_interface(dev->intf);
@@ -1682,7 +1683,7 @@ static void usbnet_ipa_cleanup_rm(struct usbnet *dev)
 
 	ret =  ipa_rm_release_resource(IPA_RM_RESOURCE_ODU_ADAPT_PROD);
 	if (ret) {
-		if (ret != EINPROGRESS)
+		if (ret != -EINPROGRESS)
 			dev_err(&dev->udev->dev,
 				"Release ODU PROD resource failed:%d\n", ret);
 
@@ -1693,6 +1694,9 @@ static void usbnet_ipa_cleanup_rm(struct usbnet *dev)
 			dev_err(&dev->udev->dev,
 				"Timeout releasing ODU prod resource\n");
 	}
+
+	ipa_rm_delete_dependency(IPA_RM_RESOURCE_ODU_ADAPT_PROD,
+				 IPA_RM_RESOURCE_APPS_CONS);
 
 	ret = ipa_rm_delete_resource(IPA_RM_RESOURCE_ODU_ADAPT_PROD);
 	if (ret)
@@ -1848,9 +1852,12 @@ static int usbnet_ipa_setup_rm(struct usbnet *dev)
 
 	init_completion(&dev->rm_prod_granted_comp);
 
+	ipa_rm_add_dependency(IPA_RM_RESOURCE_ODU_ADAPT_PROD,
+			      IPA_RM_RESOURCE_APPS_CONS);
+
 	ret =  ipa_rm_request_resource(IPA_RM_RESOURCE_ODU_ADAPT_PROD);
 	if (ret) {
-		if (ret != EINPROGRESS) {
+		if (ret != -EINPROGRESS) {
 			dev_err(&dev->udev->dev,
 				"Request ODU PROD resource failed: %d\n", ret);
 			goto delete_cons;
@@ -1864,6 +1871,8 @@ static int usbnet_ipa_setup_rm(struct usbnet *dev)
 			ret = -ETIMEDOUT;
 			goto delete_cons;
 		}
+		/* return success when it is not timeout */
+		ret = 0;
 	}
 
 	return ret;
@@ -2202,7 +2211,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	if (status)
 		goto free_padding_pkt;
 	netif_info(dev, probe, dev->net,
-		   "register '%s' at usb-%s-%s, %s, %pM\n",
+		   "register '%s' at usb-%s-%s, %s, %pKM\n",
 		   udev->dev.driver->name,
 		   xdev->bus->bus_name, xdev->devpath,
 		   dev->driver_info->description,
