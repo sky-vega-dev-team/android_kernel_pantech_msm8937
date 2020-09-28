@@ -46,6 +46,9 @@ config MSMB_CAMERA_DEBUG
 
 if MSMB_CAMERA
 source "drivers/media/platform/msm/camera_v2/Kconfig"
+if PANTECH
+source "drivers/media/platform/msm/camera_v2-ef71/Kconfig"
+endif
 endif # MSMB_CAMERA
 source "drivers/media/platform/msm/dvb/Kconfig"
 source "drivers/media/platform/msm/broadcast/Kconfig"
