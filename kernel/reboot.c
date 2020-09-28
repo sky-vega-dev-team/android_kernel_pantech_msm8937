@@ -16,8 +16,8 @@
 #include <linux/syscalls.h>
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
-#include "sky_rawdata.h"
-#include "logsystem_ssr.h"
+#include <linux/sky_rawdata.h>
+#include <linux/logsystem_ssr.h>
 
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes

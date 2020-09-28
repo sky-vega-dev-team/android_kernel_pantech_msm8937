@@ -112,53 +112,95 @@ dtb-$(CONFIG_ARCH_MDMCALIFORNIUM) += mdmcalifornium-sim.dtb \
 	mdmcalifornium-emmc-mtp.dtb \
 	mdmcalifornium-nand-mtp.dtb
 
-ifeq ($(CONFIG_MACH_MSM8937_EF71IE),y)   
+ifeq ($(CONFIG_MACH_MSM8937_EF71S),y)   
 ifeq ($(CONFIG_BOARD_VER),$(CONFIG_PT10))
-dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-$(TARGET_BUILD_PROJECT)-pt10.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-ef71ie-pt10.dtb \ 
+	msm8937-ef71s-pt10.dtb \
+	msm8937-ef71k-pt10.dtb
 else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_PT20))
-dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-$(TARGET_BUILD_PROJECT)-pt20.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-ef71ie-pt20.dtb \
+	msm8937-ef71s-pt20.dtb \
+	msm8937-ef71k-pt20.dtb
 else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_WS10))
-dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-$(TARGET_BUILD_PROJECT)-ws10.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-ef71ie-ws10.dtb \
+	msm8937-ef71s-ws10.dtb \
+	msm8937-ef71k-ws10.dtb
 else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_WS20))
-dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-$(TARGET_BUILD_PROJECT)-ws20.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-ef71ie-ws20.dtb \
+	msm8937-ef71s-ws20.dtb \
+	msm8937-ef71k-ws20.dtb
 else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_TP10))
-dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-$(TARGET_BUILD_PROJECT)-tp10.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-ef71ie-tp10.dtb \
+	msm8937-ef71s-tp10.dtb \
+	msm8937-ef71k-tp10.dtb
 else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_TP20))
-dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-$(TARGET_BUILD_PROJECT)-tp20.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-ef71ie-tp20.dtb \
+	msm8937-ef71s-tp20.dtb \
+	msm8937-ef71k-tp20.dtb
 else
-dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-$(TARGET_BUILD_PROJECT)-pp10.dtb
-endif
-else ifeq ($(CONFIG_MACH_MSM8937_EF71S),y)  
-ifeq ($(CONFIG_BOARD_VER),$(CONFIG_PT10))
-dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-$(TARGET_BUILD_PROJECT)-pt10.dtb
-else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_PT20))
-dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-$(TARGET_BUILD_PROJECT)-pt20.dtb
-else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_WS10))
-dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-$(TARGET_BUILD_PROJECT)-ws10.dtb
-else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_WS20))
-dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-$(TARGET_BUILD_PROJECT)-ws20.dtb
-else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_TP10))
-dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-$(TARGET_BUILD_PROJECT)-tp10.dtb
-else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_TP20))
-dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-$(TARGET_BUILD_PROJECT)-tp20.dtb
-else
-dtb-$(CONFIG_MACH_MSM8937_EF71S) += msm8937-$(TARGET_BUILD_PROJECT)-pp10.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-ef71ie-pp10.dtb \
+	msm8937-ef71s-pp10.dtb\
+	msm8937-ef71k-pp10.dtb
 endif
 else ifeq ($(CONFIG_MACH_MSM8937_EF71K),y)  
 ifeq ($(CONFIG_BOARD_VER),$(CONFIG_PT10))
-dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-$(TARGET_BUILD_PROJECT)-pt10.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-ef71ie-pt10.dtb \ 
+	msm8937-ef71s-pt10.dtb \
+	msm8937-ef71k-pt10.dtb
 else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_PT20))
-dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-$(TARGET_BUILD_PROJECT)-pt20.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-ef71ie-pt20.dtb \
+	msm8937-ef71s-pt20.dtb \
+	msm8937-ef71k-pt20.dtb
 else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_WS10))
-dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-$(TARGET_BUILD_PROJECT)-ws10.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-ef71ie-ws10.dtb \
+	msm8937-ef71s-ws10.dtb \
+	msm8937-ef71k-ws10.dtb
 else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_WS20))
-dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-$(TARGET_BUILD_PROJECT)-ws20.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-ef71ie-ws20.dtb \
+	msm8937-ef71s-ws20.dtb \
+	msm8937-ef71k-ws20.dtb
 else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_TP10))
-dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-$(TARGET_BUILD_PROJECT)-tp10.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-ef71ie-tp10.dtb \
+	msm8937-ef71s-tp10.dtb \
+	msm8937-ef71k-tp10.dtb
 else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_TP20))
-dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-$(TARGET_BUILD_PROJECT)-tp20.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-ef71ie-tp20.dtb \
+	msm8937-ef71s-tp20.dtb \
+	msm8937-ef71k-tp20.dtb
 else
-dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-$(TARGET_BUILD_PROJECT)-pp10.dtb
+dtb-$(CONFIG_MACH_MSM8937_EF71K) += msm8937-ef71ie-pp10.dtb \
+	msm8937-ef71s-pp10.dtb\
+	msm8937-ef71k-pp10.dtb
+endif
+else ifeq ($(CONFIG_MACH_MSM8937_EF71IE),y)  
+ifeq ($(CONFIG_BOARD_VER),$(CONFIG_PT10))
+dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-ef71ie-pt10.dtb \ 
+	msm8937-ef71s-pt10.dtb \
+	msm8937-ef71k-pt10.dtb
+else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_PT20))
+dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-ef71ie-pt20.dtb \
+	msm8937-ef71s-pt20.dtb \
+	msm8937-ef71k-pt20.dtb
+else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_WS10))
+dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-ef71ie-ws10.dtb \
+	msm8937-ef71s-ws10.dtb \
+	msm8937-ef71k-ws10.dtb
+else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_WS20))
+dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-ef71ie-ws20.dtb \
+	msm8937-ef71s-ws20.dtb \
+	msm8937-ef71k-ws20.dtb
+else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_TP10))
+dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-ef71ie-tp10.dtb \
+	msm8937-ef71s-tp10.dtb \
+	msm8937-ef71k-tp10.dtb
+else ifeq ($(CONFIG_BOARD_VER),$(CONFIG_TP20))
+dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-ef71ie-tp20.dtb \
+	msm8937-ef71s-tp20.dtb \
+	msm8937-ef71k-tp20.dtb
+else
+dtb-$(CONFIG_MACH_MSM8937_EF71IE) += msm8937-ef71ie-pp10.dtb \
+	msm8937-ef71s-pp10.dtb\
+	msm8937-ef71k-pp10.dtb
 endif
 else
 dtb-$(CONFIG_ARCH_MSM8937) += msm8937-rumi.dtb \

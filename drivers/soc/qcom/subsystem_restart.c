@@ -49,8 +49,8 @@
 #include <linux/kmod.h>
 #include <linux/workqueue.h>
 #include <linux/kobject.h> //20160105 added for noti to UI
-#include "sky_rawdata.h"
-#include "logsystem_ssr.h"
+#include <linux/sky_rawdata.h>
+#include <linux/logsystem_ssr.h>
 
 extern int pantech_is_usbdump_enabled(void);
 static int start_ssr_app = 0;
@@ -1244,8 +1244,8 @@ void ssr_subsys_coupled_action( const char *name, struct subsys_device *dev )
         snprintf( ssr_reason, sizeof(ssr_reason), "0x0" );
     }
 #else
-/* vendor/pantech/app/LogNotificatinActivity ¿Í string ¸ÂÃß¾î¾ß µÊ. */
-/* ¼öÁ¤ Ãß°¡ »çÇ× ¾øÀ½ ±×´ë·Î ÁøÇà */
+/* vendor/pantech/app/LogNotificatinActivity ì™€ string ë§ì¶”ì–´ì•¼ ë¨. */
+/* ìˆ˜ì • ì¶”ê°€ ì‚¬í•­ ì—†ìŒ ê·¸ëŒ€ë¡œ ì§„í–‰ */
     if(!strncmp(name, "lpass", 5)) 
     {
         snprintf( ssr_reason, sizeof(ssr_reason), "LPASS" );
@@ -1264,7 +1264,7 @@ void ssr_subsys_coupled_action( const char *name, struct subsys_device *dev )
     }
     else if(!strncmp(name, "modem", 5)) 
     {
-        snprintf( ssr_reason, sizeof(ssr_reason), "MODEM" );   //reset µÊ.
+        snprintf( ssr_reason, sizeof(ssr_reason), "MODEM" );   //reset ë¨.
     }
     else if(!strncmp(name, "external_modem", 14))
     {

@@ -40,7 +40,7 @@
 #include <linux/ktime.h>
 #include "pmic-voter.h"
 #if defined(CONFIG_PANTECH_PMIC_CHARGER_AUTO_PWR_ON)
-#include "sky_rawdata.h"
+#include <linux/sky_rawdata.h>
 #endif
 #ifdef CONFIG_PANTECH_PMIC_MONITOR_TEST
 #include <linux/ioctl.h>

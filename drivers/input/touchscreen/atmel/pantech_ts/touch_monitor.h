@@ -99,7 +99,7 @@ static int ioctl_debug(unsigned long arg)
 }
 
 #ifdef MXT_CFG_EF71
-#include "config/EF71/ef71_cfg_reference.h"
+#include "../config/EF71/ef71_cfg_reference.h"
 int mxt_verify_fw(struct mxt_cfg_info *cfg_info, const struct firmware *fw);
 static int mxt_write_config_from_bin(struct mxt_cfg_info *cfg_info);
 #endif
