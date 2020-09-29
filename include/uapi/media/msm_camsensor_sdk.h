@@ -1,4 +1,4 @@
-#ifdef CONFIG_MACH_MSM8937_EF71S
+#ifdef CONFIG_PANTECH_CAMERA
 #include "msm_camsensor_sdk-ef71.h"
 #else
 #ifndef __UAPI_LINUX_MSM_CAMSENSOR_SDK_H
