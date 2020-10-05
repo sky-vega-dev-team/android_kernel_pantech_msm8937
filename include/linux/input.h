@@ -375,6 +375,11 @@ void input_unregister_device(struct input_dev *);
 
 void input_reset_device(struct input_dev *);
 
+static inline bool input_device_enabled(struct input_dev *dev)
+{
+	return dev->users > 0;
+}
+
 int __must_check input_register_handler(struct input_handler *);
 void input_unregister_handler(struct input_handler *);
 
