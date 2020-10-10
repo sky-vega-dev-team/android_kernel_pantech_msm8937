@@ -55,13 +55,6 @@
 #include "console_cmdline.h"
 #include "braille.h"
 
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-#include <mach/pantech_sys_info.h>
-#define EXTRA_BUF_SIZE (TASK_COMM_LEN+16)
-#else
-#define EXTRA_BUF_SIZE 0
-#endif
-
 #ifdef CONFIG_EARLY_PRINTK_DIRECT
 extern void printascii(char *);
 #endif
@@ -238,7 +231,7 @@ struct printk_log {
 	u32 magic;		/* handle for ramdump analysis tools */
 #endif
 }
-#if 0//def CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
+#ifdef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 __packed __aligned(4)
 #endif
 ;
@@ -279,11 +272,7 @@ static u32 clear_idx;
 #define LOG_LINE_MAX		(1024 - PREFIX_MAX)
 
 /* record buffer */
-#if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
-#define LOG_ALIGN 4
-#else
 #define LOG_ALIGN __alignof__(struct printk_log)
-#endif
 #define __LOG_BUF_LEN (1 << CONFIG_LOG_BUF_SHIFT)
 static char __log_buf[__LOG_BUF_LEN] __aligned(LOG_ALIGN);
 static char *log_buf = __log_buf;
@@ -305,23 +294,6 @@ static u32 __log_align __used = LOG_ALIGN;
 #define LOG_MAGIC(msg) ((msg)->magic = 0x5d7aefca)
 #else
 #define LOG_MAGIC(msg)
-#endif
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-static pantech_log_header dmesg_header;
-pantech_log_header *get_pantech_klog_dump_address(void)
-{
-	dmesg_header.klog_buf_address = (unsigned long long)virt_to_phys((void*)log_buf);
-//    dmesg_header.klog_buf_address = (unsigned int*)virt_to_phys((void*)log_buf);
-//    dmesg_header.klog_end_idx = (unsigned int*)virt_to_phys((void*)&log_end);
-	dmesg_header.klog_size = (unsigned int)log_buf_len;
-	
-    return &dmesg_header;
-}
-
-// p15060
-void time_add_to_log( char *text, u16 *text_len );
-char time_buf[LOG_LINE_MAX] = {0,};
-char tmp_text[LOG_LINE_MAX] = {0,};
 #endif
 
 /* human readable text of the record */
@@ -457,22 +429,9 @@ static int log_store(int facility, int level,
 	struct printk_log *msg;
 	u32 size, pad_len;
 	u16 trunc_msg_len = 0;
-	// p15060
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-	u16  tmp_text_len = 0;
-
-	memcpy( tmp_text, text, text_len );
-	tmp_text_len = text_len;
-	time_add_to_log( tmp_text, &tmp_text_len );
-#endif
 
 	/* number of '\0' padding bytes to next message */
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-	size = msg_used_size(tmp_text_len, dict_len, &pad_len);
-#else
 	size = msg_used_size(text_len, dict_len, &pad_len);
-#endif
-
 
 	if (log_make_free_space(size)) {
 		/* truncate the message if it is too long for empty buffer */
@@ -496,13 +455,8 @@ static int log_store(int facility, int level,
 
 	/* fill message */
 	msg = (struct printk_log *)(log_buf + log_next_idx);
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-	memcpy(log_text(msg), tmp_text, tmp_text_len);
-	msg->text_len = tmp_text_len;
-#else
 	memcpy(log_text(msg), text, text_len);
 	msg->text_len = text_len;
-#endif
 	if (trunc_msg_len) {
 		memcpy(log_text(msg) + text_len, trunc_msg, trunc_msg_len);
 		msg->text_len += trunc_msg_len;
@@ -1323,21 +1277,10 @@ int do_syslog(int type, char __user *buf, int len, bool from_file)
 	bool clear = false;
 	static int saved_console_loglevel = -1;
 	int error;
-// for dmesg user mode
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-    if (type >> 12 == 0xB04A)
-        type = type & 0xFFF;
-    else {
-        error = check_syslog_permissions(type, from_file);
-        if (error)
-            goto out;
-    }
-#else
 
 	error = check_syslog_permissions(type, from_file);
 	if (error)
 		goto out;
-#endif
 
 	switch (type) {
 	case SYSLOG_ACTION_CLOSE:	/* Close log */
@@ -1577,46 +1520,6 @@ static inline void printk_delay(void)
 		}
 	}
 }
-
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-void time_add_to_log( char *text, u16 *text_len )
-{
-	struct timespec time;
-	struct tm tmresult;
-	int current_cpu = -1;
-
-	time = __current_kernel_time();
-	time_to_tm(time.tv_sec,sys_tz.tz_minuteswest * 60* (-1),&tmresult);
-
-	current_cpu = smp_processor_id();
-
-	memset( time_buf, 0, LOG_LINE_MAX );
-	snprintf(time_buf, sizeof(time_buf), "[%02d-%02d %02d:%02d:%02d.%03lu]-CPU%1d[%c][%15s:%5d] %s",
-			tmresult.tm_mon+1,
-			tmresult.tm_mday,
-			tmresult.tm_hour,
-			tmresult.tm_min,
-			tmresult.tm_sec,
-			(unsigned long) time.tv_nsec/1000000,
-			current_cpu,
-			in_interrupt() ? 'I' : ' ',
-			current->comm,
-			task_pid_nr(current),
-			text
-			);
-
-	*text_len += (u16)strlen("[00-00 00:00:00.000]-CPU0[0][000000000000000:00000] ");
-	if( LOG_LINE_MAX <= *text_len )
-	{
-		*text_len = LOG_LINE_MAX;
-	}
-
-	memcpy( text, time_buf, *text_len );
-
-	return;
-}
-#endif
-
 
 /*
  * Continuation lines are buffered, and not committed to the record buffer

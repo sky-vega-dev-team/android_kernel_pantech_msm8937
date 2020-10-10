@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -39,7 +39,7 @@
 
 #define MAX_VDD_MSS_UV		1150000
 #define PROXY_TIMEOUT_MS	10000
-#define MAX_SSR_REASON_LEN	81U
+#define MAX_SSR_REASON_LEN	130U
 #define STOP_ACK_TIMEOUT_MS	1000
 
 #define subsys_to_drv(d) container_of(d, struct modem_data, subsys_desc)
@@ -222,6 +222,7 @@ static int pil_subsys_init(struct modem_data *drv,
 		goto err_subsys;
 	}
 
+	drv->q6->desc.subsys_dev = drv->subsys;
 	drv->ramdump_dev = create_ramdump_device("modem", &pdev->dev);
 	if (!drv->ramdump_dev) {
 		pr_err("%s: Unable to create a modem ramdump device.\n",
@@ -371,18 +372,6 @@ static int pil_mss_driver_probe(struct platform_device *pdev)
 		drv->subsys_desc.is_not_loadable = 1;
 	} else {
 		ret = pil_mss_loadable_init(drv, pdev);
-		/*
-		is_not_loadable = 1;
-		
-		if(is_not_loadable){
-			drv->subsys_desc.is_not_loadable = 1;
-			init_completion(&drv->stop_ack);
-			return 0;
-		}else{
-			ret = pil_mss_loadable_init(drv, pdev);
-		}
-		*/
-		
 		if (ret)
 			return ret;
 	}

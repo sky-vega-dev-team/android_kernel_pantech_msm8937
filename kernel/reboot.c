@@ -16,8 +16,6 @@
 #include <linux/syscalls.h>
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
-#include <linux/sky_rawdata.h>
-#include <linux/logsystem_ssr.h>
 
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
@@ -205,112 +203,6 @@ void migrate_to_reboot_cpu(void)
 	set_cpus_allowed_ptr(current, cpumask_of(cpu));
 }
 
-int kernel_rawdata_write_func(unsigned int offset, unsigned int write_size, char* write_buf)
-{
-	struct file *rawdata_filp;
-	mm_segment_t oldfs;
-	int rc;
-
-	oldfs = get_fs();
- 	set_fs(KERNEL_DS);
-
-    // always have to check rawdata partition, check /dev/block/platform/msm_sdcc.1/by-name
-    // GP : /dev/block/platform/7824900.sdhci/by-name -> /dev/block/mmcblk0p13
-	rawdata_filp = filp_open("/dev/block/mmcblk0p14", O_WRONLY | O_SYNC, 0);
-	if( IS_ERR(rawdata_filp) )
-	{
-		set_fs(oldfs);
-		pr_err("%s: filp_open error\n",__func__);
-		return -1;
-	}
-	set_fs(oldfs);
-	pr_info("%s: file open OK\n", __func__);
-
-	rawdata_filp->f_pos = offset;
-	if(((rawdata_filp->f_flags & O_ACCMODE) & O_RDONLY) != 0)
-	{
-		pr_err("%s: rawdata read - permission denied!\n", __func__);
-		filp_close(rawdata_filp, NULL);
-		return -1;
-	}
-
-	oldfs = get_fs();
-	set_fs(KERNEL_DS);
-	rc = rawdata_filp->f_op->write(rawdata_filp, write_buf, write_size, &rawdata_filp->f_pos);
-	if (rc < 0)
-	{
-		set_fs(oldfs);
-		pr_err("%s: write fail to rawdata = %d \n",__func__,rc);
-		filp_close(rawdata_filp, NULL);
-		return -1;
-	}
-	set_fs(oldfs);
-	filp_close(rawdata_filp, NULL);
-
-	return 0;
-}
-int kernel_rawdata_read_func(unsigned int offset, unsigned int read_size, char* read_buf)
-{
-	struct file *rawdata_filp;
-	mm_segment_t oldfs;
-	int rc;
-
-	oldfs = get_fs();
-	set_fs(KERNEL_DS);
-
-    // always have to check rawdata partition, check /dev/block/platform/msm_sdcc.1/by-name
-    // GP : /dev/block/platform/7824900.sdhci/by-name -> /dev/block/mmcblk0p13
-	rawdata_filp = filp_open("/dev/block/mmcblk0p14", O_RDONLY | O_SYNC, 0);
-	if( IS_ERR(rawdata_filp) )
-	{
-		set_fs(oldfs);
-		pr_err("%s: filp_open error\n",__func__);
-		return -1;
-	}
-	set_fs(oldfs);
-	pr_info("%s: file open OK\n", __func__);
-
-	rawdata_filp->f_pos = offset;
-	if(((rawdata_filp->f_flags & O_ACCMODE) & O_RDONLY) != 0)
-	{
-		pr_err("%s: rawdata read - permission denied!\n", __func__);
-		filp_close(rawdata_filp, NULL);
-		return -1;
-	}
-
-	oldfs = get_fs();
-	set_fs(KERNEL_DS);
-	rc = rawdata_filp->f_op->read(rawdata_filp, read_buf, read_size, &rawdata_filp->f_pos);
-	if (rc < 0)
-	{
-		set_fs(oldfs);
-		pr_err("%s: read fail from rawdata = %d \n",__func__,rc);
-		filp_close(rawdata_filp, NULL);
-		return -1;
-	}
-	set_fs(oldfs);
-	filp_close(rawdata_filp, NULL);
-
-	return 0;
-}
-
-void kernel_restart_rawdata_setting(void)
-{
-       char buf[SSR_SETTING_BACKUP_LENGTH];
-	sky_ssr_info_type *p_sky_ssr_info;
-	   
-       if(kernel_rawdata_read_func(SSR_SETTING_BACKUP_START, sizeof(buf), buf) < 0) {
-	    printk("%s : failed to read charging count flag.\n", __func__);
-	}else{
-	    p_sky_ssr_info = (sky_ssr_info_type*)buf;
-           p_sky_ssr_info->reboot_setting = 1;
-	
-	    if(kernel_rawdata_write_func(SSR_SETTING_BACKUP_START, sizeof(buf), buf) < 0) {
-		printk("%s : charging_count flag setting failed.\n", __func__);
-	    }
-	}
-}
-
 /**
  *	kernel_restart - reboot the system
  *	@cmd: pointer to buffer containing command to execute for restart
@@ -321,9 +213,6 @@ void kernel_restart_rawdata_setting(void)
  */
 void kernel_restart(char *cmd)
 {
-
-       kernel_restart_rawdata_setting();
-
 	kernel_restart_prepare(cmd);
 	migrate_to_reboot_cpu();
 	syscore_shutdown();

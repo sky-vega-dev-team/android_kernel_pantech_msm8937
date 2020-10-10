@@ -73,7 +73,7 @@ struct lp5523_chip *pan_led;
 #ifdef OFFLINE_CHARGER_LED_CONTROL
 static struct timer_list offline_led_check_timer;
 static void offline_led_check_timer_func(unsigned long data);
-extern int get_batt_status(void);
+//extern int get_batt_status(void);
 #define POWER_SUPPLY_STATUS_CHARGING       1
 #define POWER_SUPPLY_STATUS_DISCHARGING    2
 #define POWER_SUPPLY_STATUS_NOT_CHARGING   3
@@ -1858,8 +1858,8 @@ static void lp5523_led_brightness_work(struct work_struct *work)
 			break;
 #ifdef OFFLINE_CHARGER_LED_CONTROL		  
 		case EF59_LED_OFFLINE_LED_CHECK :
-			ret=get_batt_status();
-			pan_err("get_batt_status ret -> %d\n",ret);
+			//ret=get_batt_status();
+			//pan_err("get_batt_status ret -> %d\n",ret);
 			switch(ret){
 			case POWER_SUPPLY_STATUS_CHARGING:
 				if(offline_led_state==1){

@@ -24,26 +24,12 @@
 #include <linux/init.h>
 #include <linux/nmi.h>
 #include <linux/console.h>
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-#include <mach/pantech_sys.h>
-#include <asm/system_misc.h>
-#include <mach/pantech_restart.h>
-#endif
-
-#if defined(CONFIG_PANTECH_DEBUG)
-#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
-#include <mach/pantech_debug.h>
-#endif
-#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/exception.h>
 
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
-
-/* Machine specific panic information string */
-char *mach_panic_string;
 
 int panic_on_oops = CONFIG_PANIC_ON_OOPS_VALUE;
 static unsigned long tainted_mask;
@@ -52,9 +38,6 @@ static int pause_on_oops_flag;
 static DEFINE_SPINLOCK(pause_on_oops_lock);
 static bool crash_kexec_post_notifiers;
 
-#ifndef CONFIG_PANIC_TIMEOUT
-#define CONFIG_PANIC_TIMEOUT 0
-#endif
 int panic_timeout = CONFIG_PANIC_TIMEOUT;
 EXPORT_SYMBOL_GPL(panic_timeout);
 
@@ -96,9 +79,6 @@ void panic(const char *fmt, ...)
 	long i, i_next = 0;
 	int state = 0;
 
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-    pantech_sys_reset_reason_set(SYS_RESET_REASON_LINUX);
-#endif
 	trace_kernel_panic(0);
 	/*
 	 * Disable local interrupts. This will prevent panic_smp_self_stop
@@ -121,33 +101,12 @@ void panic(const char *fmt, ...)
 	if (!spin_trylock(&panic_lock))
 		panic_smp_self_stop();
 
-#if defined(CONFIG_PANTECH_DEBUG)
-#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
-    if(pantech_debug_enable)
-        pantechdbg_sched_msg("!!panic!!");
-#endif
-#endif
 	console_verbose();
 	bust_spinlocks(1);
 	va_start(args, fmt);
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
-// p15060
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-    if( 1 == user_fault )
-    {
-        strcat( buf, " - USER_RAMDUMP" );
-    }
-    else if( 2 == user_fault )
-    {
-        strcat( buf, " - FRAME_RAMDUMP" );
-    }
-#endif
-//	pr_emerg("Kernel panic - not syncing: %s\n", buf);
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-    __save_regs_and_mmu_in_panic();
-#endif
-    
+	pr_emerg("Kernel panic - not syncing: %s\n", buf);
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	/*
 	 * Avoid nested stack-dumping if a panic occurs during oops processing
@@ -456,11 +415,6 @@ late_initcall(init_oops_id);
 void print_oops_end_marker(void)
 {
 	init_oops_id();
-
-	if (mach_panic_string)
-		printk(KERN_WARNING "Board Information: %s\n",
-		       mach_panic_string);
-
 	pr_warn("---[ end trace %016llx ]---\n", (unsigned long long)oops_id);
 }
 

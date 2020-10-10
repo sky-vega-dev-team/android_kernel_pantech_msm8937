@@ -1,6 +1,6 @@
 /* SIP extension for IP connection tracking.
  *
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
  * (C) 2005 by Christian Hentschel <chentschel@arnet.com.ar>
  * based on RR's ip_conntrack_ftp.c and other modules.
  * (C) 2007 United Security Providers
@@ -452,6 +452,9 @@ int proc_sip_segment(struct ctl_table *ctl, int write,
 	if (sip_segmentation_status == nf_ct_enable_sip_segmentation)
 		return ret;
 	if (nf_ct_enable_sip_segmentation) {
+		pr_debug("de-registering queue handler before register for sip\n");
+		nf_unregister_queue_handler();
+
 		pr_debug("registering queue handler\n");
 		nf_register_queue_handler(&nf_sip_qh);
 	} else {
@@ -1829,8 +1832,11 @@ static int process_sip_request(struct sk_buff *skb, unsigned int protoff,
 		handler = &sip_handlers[i];
 		if (handler->request == NULL)
 			continue;
-		if (*datalen < handler->len ||
+		if (*datalen < handler->len + 2 ||
 		    strncasecmp(*dptr, handler->method, handler->len))
+			continue;
+		if ((*dptr)[handler->len] != ' ' ||
+		    !isalpha((*dptr)[handler->len+1]))
 			continue;
 
 		if (ct_sip_get_header(ct, *dptr, 0, *datalen, SIP_HDR_CSEQ,
@@ -1929,6 +1935,10 @@ static int sip_help_tcp(struct sk_buff *skb, unsigned int protoff,
 	datalen_orig = datalen;
 
 	if (datalen < strlen("SIP/2.0 200"))
+		return NF_ACCEPT;
+
+	/* Check if the header contains SIP version */
+	if (!strnstr(dptr, "SIP/2.0", datalen))
 		return NF_ACCEPT;
 
 	/* here we save the original datalength and data offset of the skb, this
@@ -2168,6 +2178,10 @@ static int sip_help_udp(struct sk_buff *skb, unsigned int protoff,
 	dptr = skb->data + dataoff;
 	datalen = skb->len - dataoff;
 	if (datalen < strlen("SIP/2.0 200"))
+		return NF_ACCEPT;
+
+	/* Check if the header contains SIP version */
+	if (!strnstr(dptr, "SIP/2.0", datalen))
 		return NF_ACCEPT;
 
 	return process_sip_msg(skb, ct, protoff, dataoff, &dptr, &datalen);

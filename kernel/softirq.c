@@ -27,12 +27,6 @@
 #include <linux/tick.h>
 #include <linux/irq.h>
 
-#if defined(CONFIG_PANTECH_DEBUG)
-#ifdef CONFIG_PANTECH_DEBUG_IRQ_LOG  //p14291_pantech_dbg
-#include <mach/pantech_debug.h>
-#endif
-#endif
-
 #define CREATE_TRACE_POINTS
 #include <trace/events/irq.h>
 
@@ -488,16 +482,6 @@ static void tasklet_action(struct softirq_action *a)
 {
 	struct tasklet_struct *list;
 
-#if defined(CONFIG_PANTECH_DEBUG)
-#ifdef CONFIG_PANTECH_DEBUG_IRQ_LOG  //p14291_121102
-    int cpu = 0;
-    unsigned long long start_time;
-    
-    if(pantech_debug_enable)
-        cpu = smp_processor_id();
-#endif
-#endif
-
 	local_irq_disable();
 	list = __this_cpu_read(tasklet_vec.head);
 	__this_cpu_write(tasklet_vec.head, NULL);
@@ -515,15 +499,6 @@ static void tasklet_action(struct softirq_action *a)
 							&t->state))
 					BUG();
 				t->func(t->data);
-#if defined(CONFIG_PANTECH_DEBUG)
-#ifdef CONFIG_PANTECH_DEBUG_IRQ_LOG  //p14291_121102
-                if(pantech_debug_enable)
-                {
-                    start_time = cpu_clock(cpu);
-                    pantech_debug_irq_sched_log(-1, t->func, 4, start_time);
-                }
-#endif
-#endif
 				tasklet_unlock(t);
 				continue;
 			}

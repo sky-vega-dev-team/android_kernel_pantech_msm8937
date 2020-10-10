@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -215,6 +215,10 @@ static ssize_t ipa_ut_dbgfs_meta_test_write(struct file *file,
 	IPA_UT_DBG("Entry\n");
 
 	mutex_lock(&ipa_ut_ctx->lock);
+	if (file == NULL) {
+		rc = -EFAULT;
+		goto unlock_mutex;
+	}
 	suite = file->f_inode->i_private;
 	ipa_assert_on(!suite);
 	meta_type = (long)(file->private_data);
@@ -470,6 +474,10 @@ static ssize_t ipa_ut_dbgfs_test_write(struct file *file,
 	IPA_UT_DBG("Entry\n");
 
 	mutex_lock(&ipa_ut_ctx->lock);
+	if (file == NULL) {
+		rc = -EFAULT;
+		goto unlock_mutex;
+	}
 	test = file->f_inode->i_private;
 	ipa_assert_on(!test);
 
@@ -498,10 +506,16 @@ static ssize_t ipa_ut_dbgfs_test_write(struct file *file,
 		goto free_mem;
 	}
 
+	suite = test->suite;
+	if (!suite || !suite->meta_data) {
+		IPA_UT_ERR("test %s with invalid suite\n", test->name);
+		rc = -EINVAL;
+		goto free_mem;
+	}
+
 	IPA_ACTIVE_CLIENTS_INC_SPECIAL("IPA_UT");
 
-	suite = test->suite;
-	if (suite && suite->meta_data->setup) {
+	if (suite->meta_data->setup) {
 		IPA_UT_DBG("*** Suite '%s': Run setup ***\n",
 			suite->meta_data->name);
 		rc = suite->meta_data->setup(&suite->meta_data->priv);
@@ -530,7 +544,7 @@ static ssize_t ipa_ut_dbgfs_test_write(struct file *file,
 		pr_info("<<<<<<<<<<<=================\n");
 	}
 
-	if (suite && suite->meta_data->teardown) {
+	if (suite->meta_data->teardown) {
 		IPA_UT_DBG("*** Suite '%s': Run Teardown ***\n",
 			suite->meta_data->name);
 		rc = suite->meta_data->teardown(suite->meta_data->priv);

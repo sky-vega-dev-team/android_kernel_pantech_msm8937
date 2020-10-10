@@ -22,10 +22,6 @@
 #include "u_ether_configfs.h"
 #include "u_ecm.h"
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-#include "../f_pantech_android.h"
-#endif
-
 
 /*
  * This function is a "CDC Ethernet Networking Control Model" (CDC ECM)
@@ -608,9 +604,6 @@ static int ecm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	} else
 		goto fail;
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	usb_interface_enum_cb(ECM_TYPE_FLAG);
-#endif
 	return 0;
 fail:
 	return -EINVAL;

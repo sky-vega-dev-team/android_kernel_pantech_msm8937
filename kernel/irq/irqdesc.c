@@ -15,11 +15,7 @@
 #include <linux/radix-tree.h>
 #include <linux/bitmap.h>
 #include <linux/irqdomain.h>
-#if defined(CONFIG_PANTECH_DEBUG)
-#ifdef CONFIG_PANTECH_DEBUG_IRQ_LOG  //p14291_pantech_dbg
-#include <mach/pantech_debug.h>
-#endif
-#endif
+#include <linux/wakeup_reason.h>
 
 #include "internals.h"
 
@@ -345,29 +341,25 @@ void irq_init_desc(unsigned int irq)
 /**
  * generic_handle_irq - Invoke the handler for a particular irq
  * @irq:	The irq number to handle
- *
+ * returns:
+ * 	negative on error
+ *	0 when the interrupt handler was not called
+ *	1 when the interrupt handler was called
  */
+
 int generic_handle_irq(unsigned int irq)
 {
 	struct irq_desc *desc = irq_to_desc(irq);
 
 	if (!desc)
 		return -EINVAL;
-	generic_handle_irq_desc(irq, desc);
-#if defined(CONFIG_PANTECH_DEBUG)
-#ifdef CONFIG_PANTECH_DEBUG_IRQ_LOG  //p14291_pantech_dbg
-    if(pantech_debug_enable)
-    {
-        int cpu_temp = smp_processor_id();
-        unsigned long long start_time = cpu_clock(cpu_temp);
-        if (desc->action)
-            pantech_debug_irq_sched_log(irq, (void *)desc->action->handler, irqs_disabled(), start_time);
-        else
-            pantech_debug_irq_sched_log(irq, (void *)desc->handle_irq,irqs_disabled(), start_time);
-    }
-#endif
-#endif
-	return 0;
+
+	if (unlikely(logging_wakeup_reasons_nosync()))
+		return log_possible_wakeup_reason(irq,
+				desc,
+				generic_handle_irq_desc);
+
+	return generic_handle_irq_desc(irq, desc);
 }
 EXPORT_SYMBOL_GPL(generic_handle_irq);
 

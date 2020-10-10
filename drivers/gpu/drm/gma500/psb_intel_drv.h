@@ -223,6 +223,7 @@ extern void oaktrail_lvds_init(struct drm_device *dev,
 extern void oaktrail_wait_for_INTR_PKT_SENT(struct drm_device *dev);
 extern void oaktrail_dsi_init(struct drm_device *dev,
 			   struct psb_intel_mode_device *mode_dev);
+extern void oaktrail_lvds_i2c_init(struct drm_encoder *encoder);
 extern void mid_dsi_init(struct drm_device *dev,
 		    struct psb_intel_mode_device *mode_dev, int dsi_num);
 
@@ -251,7 +252,7 @@ extern int intelfb_remove(struct drm_device *dev,
 extern bool psb_intel_lvds_mode_fixup(struct drm_encoder *encoder,
 				      const struct drm_display_mode *mode,
 				      struct drm_display_mode *adjusted_mode);
-extern int psb_intel_lvds_mode_valid(struct drm_connector *connector,
+extern enum drm_mode_status psb_intel_lvds_mode_valid(struct drm_connector *connector,
 				     struct drm_display_mode *mode);
 extern int psb_intel_lvds_set_property(struct drm_connector *connector,
 					struct drm_property *property,

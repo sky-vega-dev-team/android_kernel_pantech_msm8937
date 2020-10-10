@@ -70,13 +70,6 @@
 
 #include "ci13xxx_udc.h"
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-extern void pantech_init_device_mode_change(void);
-extern bool b_pantech_usb_module;
-extern int pantech_vbus_connect(void);
-extern int pantech_vbus_disconnect(void);
-#endif
-
 /******************************************************************************
  * DEFINE
  *****************************************************************************/
@@ -1620,11 +1613,14 @@ done:
 }
 static DEVICE_ATTR(dtds, S_IWUSR, NULL, print_dtds);
 
+#define CI_PM_RESUME_RETRIES	5    /* Max Number of retries */
+
 static int ci13xxx_wakeup(struct usb_gadget *_gadget)
 {
 	struct ci13xxx *udc = container_of(_gadget, struct ci13xxx, gadget);
 	unsigned long flags;
 	int ret = 0;
+	static int retry_count;
 
 	trace();
 
@@ -1636,7 +1632,27 @@ static int ci13xxx_wakeup(struct usb_gadget *_gadget)
 	}
 	spin_unlock_irqrestore(udc->lock, flags);
 
-	pm_runtime_get_sync(&_gadget->dev);
+	ret = pm_runtime_get_sync(&_gadget->dev);
+	if (ret) {
+		/* pm_runtime_get_sync returns -EACCES error between
+		 * late_suspend and early_resume, wait for system resume to
+		 * finish and perform resume from work_queue again
+		 */
+		pr_debug("PM runtime get sync failed, ret %d\n", ret);
+		if (ret == -EACCES) {
+			pm_runtime_put_noidle(&_gadget->dev);
+			if (retry_count == CI_PM_RESUME_RETRIES) {
+				pr_err("pm_runtime_get_sync timed out\n");
+				retry_count = 0;
+				return 0;
+			}
+			retry_count++;
+			schedule_delayed_work(&udc->rw_work,
+					      REMOTE_WAKEUP_DELAY);
+			return 0;
+		}
+	}
+	retry_count = 0;
 
 	udc->udc_driver->notify_event(udc,
 		CI13XXX_CONTROLLER_REMOTE_WAKEUP_EVENT);
@@ -2260,6 +2276,12 @@ static void release_ep_request(struct ci13xxx_ep  *mEp,
 		mReq->map     = 0;
 	}
 
+	if (mReq->zptr) {
+		dma_pool_free(mEp->td_pool, mReq->zptr, mReq->zdma);
+		mReq->zptr = NULL;
+		mReq->zdma = 0;
+	}
+
 	if (mEp->multi_req) {
 		restore_original_req(mReq);
 		mEp->multi_req = false;
@@ -2321,6 +2343,12 @@ __acquires(mEp->lock)
 		release_ep_request(mEp, mReq);
 	}
 
+	if (mEp->last_zptr) {
+		dma_pool_free(mEp->td_pool, mEp->last_zptr, mEp->last_zdma);
+		mEp->last_zptr = NULL;
+		mEp->last_zdma = 0;
+	}
+
 	return 0;
 }
 
@@ -2354,12 +2382,6 @@ static int _gadget_stop_activity(struct usb_gadget *gadget)
 	_ep_nuke(&udc->ep0out);
 	_ep_nuke(&udc->ep0in);
 	spin_unlock_irqrestore(udc->lock, flags);
-
-	if (udc->ep0in.last_zptr) {
-		dma_pool_free(udc->ep0in.td_pool, udc->ep0in.last_zptr,
-				udc->ep0in.last_zdma);
-		udc->ep0in.last_zptr = NULL;
-	}
 
 	return 0;
 }
@@ -2989,12 +3011,6 @@ static int ep_disable(struct usb_ep *ep)
 
 	} while (mEp->dir != direction);
 
-	if (mEp->last_zptr) {
-		dma_pool_free(mEp->td_pool, mEp->last_zptr,
-				mEp->last_zdma);
-		mEp->last_zptr = NULL;
-	}
-
 	mEp->desc = NULL;
 	mEp->ep.desc = NULL;
 	mEp->ep.maxpacket = USHRT_MAX;
@@ -3086,8 +3102,11 @@ static int ep_queue(struct usb_ep *ep, struct usb_request *req,
 
 	trace("%pK, %pK, %X", ep, req, gfp_flags);
 
+	if (ep == NULL)
+		return -EINVAL;
+
 	spin_lock_irqsave(mEp->lock, flags);
-	if (ep == NULL || req == NULL || mEp->desc == NULL) {
+	if (req == NULL || mEp->desc == NULL) {
 		retval = -EINVAL;
 		goto done;
 	}
@@ -3173,6 +3192,7 @@ static int ep_queue(struct usb_ep *ep, struct usb_request *req,
 					__func__);
 			dev_dbg(mEp->device, "%s: Remote wakeup is not supported. ept #%d\n",
 					__func__, mEp->num);
+			mEp->multi_req = false;
 
 			retval = -EAGAIN;
 			goto done;
@@ -3225,12 +3245,16 @@ static int ep_dequeue(struct usb_ep *ep, struct usb_request *req)
 				__func__);
 		return -EAGAIN;
 	}
+
+	if (ep == NULL)
+		return -EINVAL;
+
 	spin_lock_irqsave(mEp->lock, flags);
 	/*
 	 * Only ep0 IN is exposed to composite.  When a req is dequeued
 	 * on ep0, check both ep0 IN and ep0 OUT queues.
 	 */
-	if (ep == NULL || req == NULL || mReq->req.status != -EALREADY ||
+	if (req == NULL || mReq->req.status != -EALREADY ||
 		mEp->desc == NULL || list_empty(&mReq->queue) ||
 		(list_empty(&mEp->qh.queue) && ((mEp->type !=
 			USB_ENDPOINT_XFER_CONTROL) ||
@@ -3257,6 +3281,19 @@ static int ep_dequeue(struct usb_ep *ep, struct usb_request *req)
 		mReq->map     = 0;
 	}
 	req->status = -ECONNRESET;
+
+	if (mEp->last_zptr) {
+		dma_pool_free(mEp->td_pool, mEp->last_zptr, mEp->last_zdma);
+		mEp->last_zptr = NULL;
+		mEp->last_zdma = 0;
+	}
+
+	if (mReq->zptr) {
+		dma_pool_free(mEp->td_pool, mReq->zptr, mReq->zdma);
+		mReq->zptr = NULL;
+		mReq->zdma = 0;
+	}
+
 	if (mEp->multi_req) {
 		restore_original_req(mReq);
 		mEp->multi_req = false;
@@ -3434,17 +3471,6 @@ static int ci13xxx_vbus_session(struct usb_gadget *_gadget, int is_active)
 		gadget_ready = 1;
 	spin_unlock_irqrestore(udc->lock, flags);
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-        printk(KERN_ERR "vbus_gadget %s!!!\n", is_active ? "connect" : "disconnect");
-#endif
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-			if(b_pantech_usb_module && udc->softconnect)
-				pantech_vbus_connect();
-#endif
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-			if(b_pantech_usb_module)
-				pantech_vbus_disconnect();
-#endif
 	if (!gadget_ready)
 		return 0;
 
@@ -3501,9 +3527,6 @@ static int ci13xxx_pullup(struct usb_gadget *_gadget, int is_active)
 {
 	struct ci13xxx *udc = container_of(_gadget, struct ci13xxx, gadget);
 	unsigned long flags;
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	pantech_init_device_mode_change();
-#endif
 
 	spin_lock_irqsave(udc->lock, flags);
 	udc->softconnect = is_active;

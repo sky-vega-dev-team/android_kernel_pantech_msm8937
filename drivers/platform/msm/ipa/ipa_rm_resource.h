@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016,2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -65,6 +65,7 @@ struct ipa_rm_resource {
 	u32				needed_bw;
 	enum ipa_rm_resource_state	state;
 	struct ipa_rm_peers_list	*peers_list;
+	struct ipa_rm_delayed_release_work_type *release_work;
 };
 
 /**
@@ -155,7 +156,8 @@ int ipa_rm_resource_producer_print_stat(
 int ipa_rm_resource_consumer_request_work(struct ipa_rm_resource_cons *consumer,
 		enum ipa_rm_resource_state prev_state,
 		u32 needed_bw,
-		bool notify_completion);
+		bool notify_completion,
+		bool dec_client_on_err);
 
 int ipa_rm_resource_consumer_release_work(
 		struct ipa_rm_resource_cons *consumer,

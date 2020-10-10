@@ -543,6 +543,12 @@ static void rndis_command_complete(struct usb_ep *ep, struct usb_request *req)
 	int				status;
 	rndis_init_msg_type		*buf;
 
+	if (req->status != 0) {
+		pr_err("%s: RNDIS command completion error:%d\n",
+				__func__, req->status);
+		return;
+	}
+
 	spin_lock(&_rndis_lock);
 	rndis = __rndis;
 	if (!rndis || !rndis->notify || !rndis->notify->driver_data) {
@@ -745,9 +751,6 @@ static int rndis_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	} else
 		goto fail;
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	usb_interface_enum_cb(RNDIS_TYPE_FLAG);
-#endif
 	return 0;
 fail:
 	return -EINVAL;
@@ -865,13 +868,6 @@ rndis_bind(struct usb_configuration *c, struct usb_function *f)
 	rndis_data_intf.iInterface = us[1].id;
 	rndis_iad_descriptor.iFunction = us[2].id;
 
-#if defined(CONFIG_ANDROID_PANTECH_USB_MANAGER)
-	if((pantech_usb_carrier != CARRIER_QUALCOMM) && (!isQdssEnable)){
-		rndis_data_intf.bInterfaceProtocol =  0xFF;
-	}else{
-		rndis_data_intf.bInterfaceProtocol = 0;
-	}
-#endif
 	/* allocate instance-specific interface IDs */
 	status = usb_interface_id(c, f);
 	if (status < 0)

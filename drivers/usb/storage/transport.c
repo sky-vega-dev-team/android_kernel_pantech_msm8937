@@ -119,31 +119,6 @@ static void usb_stor_blocking_completion(struct urb *urb)
 	complete(urb_done_ptr);
 }
 
-#if defined(CONFIG_ANDROID_PANTECH_USB_OTG_INTENT)
-static struct us_data *p_current_usb_us_data;
-static bool is_urb_waiting;
-static bool is_sg_waiting;
-extern void scsi_abort_eh_cmnd(struct scsi_cmnd *scmd);
-void pantech_us_data_complete(void)
-{
-	struct us_data *data = p_current_usb_us_data;
-
-	if(!data) {
-		printk(KERN_ERR "[%s]: data is null...\n", __func__);
-		return;
-	}
-
-	do{
-
-		if((is_urb_waiting || is_sg_waiting)){
-			scsi_abort_eh_cmnd(data->srb);
-			is_urb_waiting = false; is_sg_waiting = false;
-		}
-	
-	}while(0);
-}
-#endif
-
 /* This is the common part of the URB message submission code
  *
  * All URBs from the usb-storage driver involved in handling a queued scsi
@@ -195,17 +170,11 @@ static int usb_stor_msg_common(struct us_data *us, int timeout)
 			usb_unlink_urb(us->current_urb);
 		}
 	}
-#if defined(CONFIG_ANDROID_PANTECH_USB_OTG_INTENT)
- p_current_usb_us_data = us;
- is_urb_waiting = true;
-#endif
+ 
 	/* wait for the completion of the URB */
 	timeleft = wait_for_completion_interruptible_timeout(
 			&urb_done, timeout ? : MAX_SCHEDULE_TIMEOUT);
-#if defined(CONFIG_ANDROID_PANTECH_USB_OTG_INTENT)
- is_urb_waiting = false;
- p_current_usb_us_data = NULL;
-#endif
+ 
 	clear_bit(US_FLIDX_URB_ACTIVE, &us->dflags);
 
 	if (timeleft <= 0) {
@@ -479,15 +448,7 @@ static int usb_stor_bulk_transfer_sglist(struct us_data *us, unsigned int pipe,
 	}
 
 	/* wait for the completion of the transfer */
-#if defined(CONFIG_ANDROID_PANTECH_USB_OTG_INTENT)
-	p_current_usb_us_data = us;
-	is_sg_waiting = true;
-#endif
 	usb_sg_wait(&us->current_sg);
-#if defined(CONFIG_ANDROID_PANTECH_USB_OTG_INTENT)
-	is_sg_waiting = false;
-	p_current_usb_us_data = NULL;
-#endif
 	clear_bit(US_FLIDX_SG_ACTIVE, &us->dflags);
 
 	result = us->current_sg.status;

@@ -82,7 +82,7 @@ source "arch/arm64/include/cust/PSWIFI/Kconfig"
 
 config PANTECH_ERR_CRASH_LOGGING
     bool
-    default y
+    default n
 
 config PANTECH_DEBUG_ON
   bool

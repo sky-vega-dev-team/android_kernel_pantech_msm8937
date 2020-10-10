@@ -33,6 +33,7 @@ Required properties:
 			"qcom,rpmcc-8916"
 			"qcom,rpmcc-8936"
 			"qcom,rpmcc-8909"
+			"qcom,rpmcc-8909-pm660"
 			"qcom,cc-debug-8916"
 			"qcom,cc-debug-8936"
 			"qcom,cc-debug-8909"
@@ -70,14 +71,16 @@ Required properties:
 			"qcom,gpucc-8996-v3.0"
 			"qcom,gpucc-8996-pro"
 			"qcom,gcc-gfx-8953"
-			"qcom,gcc-californium"
-			"qcom,cc-debug-californium"
+			"qcom,gcc-gfx-sdm450"
+			"qcom,gcc-9650"
+			"qcom,cc-debug-9650"
 			"qcom,gcc-mdm9607"
 			"qcom,cc-debug-mdm9607"
 			"qcom,gcc-cobalt"
 			"qcom,cc-debug-cobalt"
 			"qcom,gpucc-cobalt"
 			"qcom,mmsscc-cobalt"
+			"qcom,gcc-sdx20"
 
 - reg:			Pairs of physical base addresses and region sizes of
 			memory mapped registers.

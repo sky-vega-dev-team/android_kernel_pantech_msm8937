@@ -55,6 +55,7 @@ obj-$(CONFIG_SRAM)		+= sram.o
 obj-y				+= mic/
 obj-$(CONFIG_GENWQE)		+= genwqe/
 obj-$(CONFIG_QSEECOM) += qseecom.o
+obj-$(CONFIG_PROFILER) += profiler.o
 obj-$(CONFIG_HDCP_QSEECOM) += hdcp.o
 ifdef CONFIG_COMPAT
 obj-$(CONFIG_QSEECOM) += compat_qseecom.o
@@ -62,7 +63,6 @@ endif
 obj-$(CONFIG_ECHO)		+= echo/
 obj-$(CONFIG_VEXPRESS_SYSCFG)	+= vexpress-syscfg.o
 obj-$(CONFIG_CXL_BASE)		+= cxl/
-obj-$(CONFIG_UID_CPUTIME) += uid_cputime.o
 obj-y				+= qcom/
 obj-$(CONFIG_TI_DRV2667) += ti_drv2667.o
 obj-$(CONFIG_USB_EXT_TYPE_C_PERICOM)	+= type-c-pericom.o
@@ -72,3 +72,8 @@ obj-$(CONFIG_NFC_NXP_PN5XX) += pn5xx_i2c.o
 #CONFIG_PANTECH_PS_WIFI_COM_PREF_LOGGING
 obj-$(CONFIG_PANTECH_PS_WIFI_COM_PREF_LOGGING) += wifi_log.o
 obj-$(CONFIG_QPNP_MISC) 	+= qpnp-misc.o
+obj-$(CONFIG_UID_SYS_STATS) += uid_sys_stats.o
+obj-$(CONFIG_MEMORY_STATE_TIME) += memory_state_time.o
+obj-$(CONFIG_APDS9930)		+= apds993x.o
+obj-$(CONFIG_UID_SYS_STATS) += uid_sys_stats.o
+obj-$(CONFIG_MEMORY_STATE_TIME) += memory_state_time.o

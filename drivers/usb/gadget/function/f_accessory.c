@@ -878,6 +878,12 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 	u16	w_length = le16_to_cpu(ctrl->wLength);
 	unsigned long flags;
 
+	/*
+	 * If instance is not created which is the case in power off charging
+	 * mode, dev will be NULL. Hence return error if it is the case.
+	 */
+	if (!dev)
+		return -ENODEV;
 /*
 	printk(KERN_INFO "acc_ctrlrequest "
 			"%02x.%02x v%04x i%04x l%u\n",
@@ -1230,9 +1236,6 @@ static int acc_function_set_alt(struct usb_function *f,
 
 	/* readers may be blocked waiting for us to go online */
 	wake_up(&dev->read_wq);
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	usb_interface_enum_cb(ACCESSORY_TYPE_FLAG);
-#endif
 	return 0;
 }
 

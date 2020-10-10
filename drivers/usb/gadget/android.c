@@ -36,22 +36,6 @@
 
 #include "gadget_chips.h"
 
-//#define FEATURE_PANTECH_USB_MTP
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-//for multi ethernet configuration: 
-//#define FEATURE_PANTECH_MULTI_ETHERNET
-#include <linux/switch.h>
-#include "f_pantech_android.h"
-enum carrier pantech_usb_carrier;
-bool b_pantech_usb_module = false;
-//LS2_USB tarial QDSS function enable
-bool isQdssEnable = false;
-#ifdef FEATURE_PANTECH_MULTI_ETHERNET
-static u8 pantech_ethaddr[14];//ETH_ALEN=6 ->14;
-#endif
-
-#endif
-
 #ifdef CONFIG_MEDIA_SUPPORT
 #include "f_uvc.h"
 #include "u_uvc.h"
@@ -74,11 +58,7 @@ static u8 pantech_ethaddr[14];//ETH_ALEN=6 ->14;
 #include "u_ctrl_hsic.c"
 #include "u_data_hsic.c"
 #include "f_ccid.c"
-#ifdef FEATURE_PANTECH_USB_MTP
-#include "f_mtp_pantech.c"
-#else
 #include "f_mtp.c"
-#endif
 #include "f_accessory.c"
 #include "f_charger.c"
 #define USB_ETH_RNDIS y
@@ -93,16 +73,6 @@ static u8 pantech_ethaddr[14];//ETH_ALEN=6 ->14;
 #include "u_qc_ether.c"
 #include "f_gsi.c"
 #include "f_mass_storage.h"
-#if defined(CONFIG_ANDROID_PANTECH_USB_MANAGER)
-#ifdef CONFIG_PANTECH_VERIZON
-#include "f_usbnet.c"
-#endif
-#include "f_obex_pantech.c"
-#endif
-
-#ifdef CONFIG_ANDROID_PANTECH_USB_ABNORMAL_CHARGER_INFO
-extern void set_pmic_usb_configured(void);
-#endif
 
 USB_ETHERNET_MODULE_PARAMETERS();
 #ifdef CONFIG_MEDIA_SUPPORT
@@ -160,10 +130,6 @@ struct android_usb_function {
 	int (*ctrlrequest)(struct android_usb_function *,
 					struct usb_composite_dev *,
 					const struct usb_ctrlrequest *);
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	bool current_enabled;
-	bool b_activated;
-#endif
 };
 
 struct android_usb_function_holder {
@@ -278,9 +244,6 @@ static struct android_configuration *alloc_android_config
 						(struct android_dev *dev);
 static void free_android_config(struct android_dev *dev,
 				struct android_configuration *conf);
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-struct android_dev *_android_dev;
-#endif
 
 static bool video_enabled;
 
@@ -289,9 +252,6 @@ static bool video_enabled;
 #define STRING_PRODUCT_IDX		1
 #define STRING_SERIAL_IDX		2
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-#define STRING_CONFIG_IDX   3
-#endif
 static char manufacturer_string[256];
 static char product_string[256];
 static char serial_string[256];
@@ -301,9 +261,6 @@ static struct usb_string strings_dev[] = {
 	[STRING_MANUFACTURER_IDX].s = manufacturer_string,
 	[STRING_PRODUCT_IDX].s = product_string,
 	[STRING_SERIAL_IDX].s = serial_string,
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	[STRING_CONFIG_IDX].s = "Pantech Android Composite Device",
-#endif
 	{  }			/* end of list */
 };
 
@@ -502,9 +459,6 @@ static void android_work(struct work_struct *data)
 		dev->curr_pm_qos_state = NO_USB_VOTE;
 	}
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	if(!b_pantech_usb_module){
-#endif
 	if (uevent_envp) {
 		/*
 		 * Some userspace modules, e.g. MTP, work correctly only if
@@ -525,12 +479,8 @@ static void android_work(struct work_struct *data)
 		 * Before sending out CONFIGURED uevent give function drivers
 		 * a chance to wakeup userspace threads and notify disconnect
 		 */
-		if (uevent_envp == configured){
+		if (uevent_envp == configured)
 			msleep(50);
-#ifdef CONFIG_ANDROID_PANTECH_USB_ABNORMAL_CHARGER_INFO
-			set_pmic_usb_configured();
-#endif
-		}
 
 		/* Do not notify on suspend / resume */
 		if (next_state != USB_SUSPENDED && next_state != USB_RESUMED) {
@@ -543,9 +493,6 @@ static void android_work(struct work_struct *data)
 		pr_info("%s: did not send uevent (%d %d %pK)\n", __func__,
 			 dev->connected, dev->sw_connected, cdev->config);
 	}
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-}
-#endif
 }
 
 #define MIN_DISCONNECT_DELAY_MS	30
@@ -625,9 +572,6 @@ static void android_disable(struct android_dev *dev)
 			usb_gadget_autopm_put_async(cdev->gadget);
 	}
 }
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-#include "pantech_android.c"
-#endif
 
 /*-------------------------------------------------------------------------*/
 /* Supported functions initialization */
@@ -1120,6 +1064,32 @@ static struct android_usb_function rmnet_function = {
 	.attributes	= rmnet_function_attributes,
 };
 
+static char gps_transport[MAX_XPORT_STR_LEN];
+
+static ssize_t gps_transport_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", gps_transport);
+}
+
+static ssize_t gps_transport_store(
+		struct device *device, struct device_attribute *attr,
+		const char *buff, size_t size)
+{
+	strlcpy(gps_transport, buff, sizeof(gps_transport));
+
+	return size;
+}
+
+static struct device_attribute dev_attr_gps_transport =
+					__ATTR(transport, S_IRUGO | S_IWUSR,
+							gps_transport_show,
+							gps_transport_store);
+
+static struct device_attribute *gps_function_attrbitutes[] = {
+					&dev_attr_gps_transport,
+					NULL };
+
 static void gps_function_cleanup(struct android_usb_function *f)
 {
 	gps_cleanup();
@@ -1130,10 +1100,13 @@ static int gps_function_bind_config(struct android_usb_function *f,
 {
 	int err;
 	static int gps_initialized;
+	char buf[MAX_XPORT_STR_LEN], *b;
 
 	if (!gps_initialized) {
+		strlcpy(buf, gps_transport, sizeof(buf));
+		b = strim(buf);
 		gps_initialized = 1;
-		err = gps_init_port();
+		err = gps_init_port(b);
 		if (err) {
 			pr_err("gps: Cannot init gps port");
 			return err;
@@ -1158,6 +1131,7 @@ static struct android_usb_function gps_function = {
 	.name		= "gps",
 	.cleanup	= gps_function_cleanup,
 	.bind_config	= gps_function_bind_config,
+	.attributes	= gps_function_attrbitutes,
 };
 
 /* ncm */
@@ -1997,6 +1971,7 @@ static struct android_usb_function qdss_function = {
 #define MAX_SERIAL_INSTANCES 4
 struct serial_function_config {
 	int instances_on;
+	bool serial_initialized;
 	struct usb_function *f_serial[MAX_SERIAL_INSTANCES];
 	struct usb_function_instance *f_serial_inst[MAX_SERIAL_INSTANCES];
 };
@@ -2123,8 +2098,9 @@ static int serial_function_bind_config(struct android_usb_function *f,
 	char *name, *xport_name = NULL;
 	char buf[32], *b, xport_name_buf[32], *tb;
 	int err = -1, i, ports = 0;
-	static int serial_initialized;
 	struct serial_function_config *config = f->config;
+	static bool transports_initialized;
+
 	strlcpy(buf, serial_transports, sizeof(buf));
 	b = strim(buf);
 
@@ -2137,7 +2113,7 @@ static int serial_function_bind_config(struct android_usb_function *f,
 		if (name) {
 			if (tb)
 				xport_name = strsep(&tb, ",");
-			if (!serial_initialized) {
+			if (!config->serial_initialized) {
 				err = gserial_init_port(ports, name,
 						xport_name);
 				if (err) {
@@ -2159,7 +2135,7 @@ static int serial_function_bind_config(struct android_usb_function *f,
 	 * switching composition from 1 serial function to 2 serial functions.
 	 * Mark 2nd port to use tty if user didn't specify transport.
 	 */
-	if ((config->instances_on == 1) && !serial_initialized) {
+	if ((config->instances_on == 1) && !config->serial_initialized) {
 		err = gserial_init_port(ports, "tty", "serial_tty");
 		if (err) {
 			pr_err("serial: Cannot open port '%s'", "tty");
@@ -2172,14 +2148,18 @@ static int serial_function_bind_config(struct android_usb_function *f,
 	if (ports > config->instances_on)
 		ports = config->instances_on;
 
-	if (serial_initialized)
+	if (config->serial_initialized)
 		goto bind_config;
 
-	err = gport_setup(c);
-	if (err) {
-		pr_err("serial: Cannot setup transports");
-		gserial_deinit_port();
-		goto out;
+	if (!transports_initialized) {
+		err = gport_setup(c);
+		if (err) {
+			pr_err("serial: Cannot setup transports");
+			gserial_deinit_port();
+			goto out;
+		}
+		/* transports are initialized once and shared across configs */
+		transports_initialized = true;
 	}
 
 	for (i = 0; i < config->instances_on; i++) {
@@ -2195,7 +2175,7 @@ static int serial_function_bind_config(struct android_usb_function *f,
 		}
 	}
 
-	serial_initialized = 1;
+	config->serial_initialized = true;
 
 bind_config:
 	for (i = 0; i < ports; i++) {
@@ -2230,6 +2210,13 @@ static struct android_usb_function serial_function = {
 	.cleanup	= serial_function_cleanup,
 	.bind_config	= serial_function_bind_config,
 	.attributes	= serial_function_attributes,
+};
+
+static struct android_usb_function serial_function_config2 = {
+	.name		= "serial_config2",
+	.init		= serial_function_init,
+	.cleanup	= serial_function_cleanup,
+	.bind_config	= serial_function_bind_config,
 };
 
 /* CCID */
@@ -2863,13 +2850,6 @@ static int mass_storage_function_init(struct android_usb_function *f,
 	}
 
 	fsg_mod_data.removable[0] = true;
-
-#ifdef CONFIG_ANDROID_PANTECH_USB_CDFREE
-	fsg_mod_data.removable[1] = true;
-	fsg_mod_data.cdrom[1] = true;
-	fsg_mod_data.ro[1] = true;
-#endif
-
 	fsg_config_from_params(&m_config, &fsg_mod_data, fsg_num_buffers);
 	fsg_opts = fsg_opts_from_func_inst(config->f_ms_inst);
 	ret = fsg_common_set_num_buffers(fsg_opts->common, fsg_num_buffers);
@@ -3315,6 +3295,7 @@ static struct android_usb_function *supported_functions[] = {
 	[ANDROID_DIAG] = &diag_function,
 	[ANDROID_QDSS_BAM] = &qdss_function,
 	[ANDROID_SERIAL] = &serial_function,
+	[ANDROID_SERIAL_CONFIG2] = &serial_function_config2,
 	[ANDROID_CCID] = &ccid_function,
 	[ANDROID_ACM] = &acm_function,
 	[ANDROID_MTP] = &mtp_function,
@@ -3335,13 +3316,6 @@ static struct android_usb_function *supported_functions[] = {
 	[ANDROID_RMNET_GSI] = &rmnet_gsi_function,
 	[ANDROID_MBIM_GSI] = &mbim_gsi_function,
 	[ANDROID_DPL_GSI] = &dpl_gsi_function,
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-#ifdef CONFIG_PANTECH_VERIZON
-	[ANDROID_USBNET] = &usbnet_function,
-#endif
-	[ANDROID_OBEX] =&pantech_obex_function,
-#endif
-
 	NULL
 };
 
@@ -3361,6 +3335,7 @@ static struct android_usb_function *default_functions[] = {
 	&diag_function,
 	&qdss_function,
 	&serial_function,
+	&serial_function_config2,
 	&ccid_function,
 	&acm_function,
 	&mtp_function,
@@ -3375,12 +3350,6 @@ static struct android_usb_function *default_functions[] = {
 	&charger_function,
 #ifdef CONFIG_SND_RAWMIDI
 	&midi_function,
-#endif
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-#ifdef CONFIG_PANTECH_VERIZON
-	&usbnet_function,
-#endif
-	&pantech_obex_function,
 #endif
 	NULL
 };
@@ -3673,117 +3642,6 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	int is_ffs;
 	int ffs_enabled = 0;
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	printk(KERN_ERR "[%s] called[%s] pantech_module[%d]\n", __func__, buff, b_pantech_usb_module);
-
-	if(!strcmp(buff, "none")){
-		printk(KERN_ERR "[%s] called[%s], command skip!!!\n", __func__, buff);
-		mutex_lock(&dev->mutex);
-		if (dev->enabled) {
-			android_disable(dev);
-			list_for_each_entry(conf, &dev->configs, list_item) 
-				list_for_each_entry(f_holder, &conf->enabled_functions, enabled_list) {
-					if (f_holder->f->disable)
-						f_holder->f->disable(f_holder->f);
-			}
-			dev->enabled = false;			
-		}
-		mutex_unlock(&dev->mutex);
-		return size;
-	}
-
-	if(b_pantech_usb_module){
-		strlcpy(buf, buff, sizeof(buf));
-		b = strim(buf);
-		printk(KERN_ERR "[%s] called[%s] android_enable_function_cb start!![%d]\n", __func__, buff, b_pantech_usb_module);
-		android_enable_function_cb(b);
-
-	} else {
-		mutex_lock(&dev->mutex);
-	if (dev->enabled) {
-		mutex_unlock(&dev->mutex);
-		return -EBUSY;
-	}
-
-	/* Clear previous enabled list */
-	list_for_each_entry(conf, &dev->configs, list_item) {
-		while (conf->enabled_functions.next !=
-				&conf->enabled_functions) {
-			f_holder = list_entry(conf->enabled_functions.next,
-					typeof(*f_holder),
-					enabled_list);
-			f_holder->f->android_dev = NULL;
-			list_del(&f_holder->enabled_list);
-			kfree(f_holder);
-		}
-		INIT_LIST_HEAD(&conf->enabled_functions);
-	}
-
-	strlcpy(buf, buff, sizeof(buf));
-	b = strim(buf);
-
-#ifdef CONFIG_ANDROID_PANTECH_USB_FACTORY_CABLE
-		if(strstr(b,"adb") == NULL)
-			atomic_set(&adb_enable_excl, 0);
-		else
-			atomic_set(&adb_enable_excl, 1);
-#endif
-
-	while (b) {
-		conf_str = strsep(&b, ":");
-		if (!conf_str)
-			continue;
-
-		/* If the next not equal to the head, take it */
-		if (curr_conf->next != &dev->configs)
-			conf = list_entry(curr_conf->next,
-					  struct android_configuration,
-					  list_item);
-		else
-			conf = alloc_android_config(dev);
-
-		curr_conf = curr_conf->next;
-		while (conf_str) {
-			name = strsep(&conf_str, ",");
-			is_ffs = 0;
-			strlcpy(aliases, dev->ffs_aliases, sizeof(aliases));
-			a = aliases;
-
-			while (a) {
-				char *alias = strsep(&a, ",");
-				if (alias && !strcmp(name, alias)) {
-					is_ffs = 1;
-					break;
-				}
-			}
-
-			if (is_ffs) {
-				if (ffs_enabled)
-					continue;
-				err = android_enable_function(dev, conf, "ffs");
-				if (err)
-					pr_err("android_usb: Cannot enable ffs (%d)",
-									err);
-				else
-					ffs_enabled = 1;
-				continue;
-			}
-			err = android_enable_function(dev, conf, name);
-			if (err)
-				pr_err("android_usb: Cannot enable '%s' (%d)",
-							name, err);
-		}
-	}
-
-	/* Free uneeded configurations if exists */
-	while (curr_conf->next != &dev->configs) {
-		conf = list_entry(curr_conf->next,
-				  struct android_configuration, list_item);
-		free_android_config(dev, conf);
-	}
-		mutex_unlock(&dev->mutex);
-	}
-#else
 	mutex_lock(&dev->mutex);
 
 	if (dev->enabled) {
@@ -3868,7 +3726,6 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 
 	mutex_unlock(&dev->mutex);
 
-#endif
 	return size;
 }
 
@@ -4028,30 +3885,6 @@ field ## _store(struct device *pdev, struct device_attribute *attr,	\
 }									\
 static DEVICE_ATTR(field, S_IRUGO | S_IWUSR, field ## _show, field ## _store);
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-#define DESCRIPTOR_ATTR(field, format_string)				\
-static ssize_t								\
-field ## _show(struct device *dev, struct device_attribute *attr,	\
-		char *buf)						\
-{									\
-	return snprintf(buf, PAGE_SIZE,					\
-			format_string, device_desc.field);		\
-}									\
-static ssize_t								\
-field ## _store(struct device *dev, struct device_attribute *attr,	\
-		const char *buf, size_t size)		       		\
-{									\
-	int value;					       		\
-	if (sscanf(buf, format_string, &value) == 1) {			\
-		printk(KERN_ERR "[%s]: value[%x]\n", __func__, value); \
-		if(!b_pantech_usb_module) device_desc.field = value;	 \
-		return size;						\
-	}								\
-	return -1;							\
-}									\
-static DEVICE_ATTR(field, S_IRUGO | S_IWUSR, field ## _show, field ## _store);
-
-#else
 #define DESCRIPTOR_ATTR(field, format_string)				\
 static ssize_t								\
 field ## _show(struct device *dev, struct device_attribute *attr,	\
@@ -4072,7 +3905,6 @@ field ## _store(struct device *dev, struct device_attribute *attr,	\
 	return -1;							\
 }									\
 static DEVICE_ATTR(field, S_IRUGO | S_IWUSR, field ## _show, field ## _store);
-#endif/*CONFIG_ANDROID_PANTECH_USB_MANAGER*/
 
 #define DESCRIPTOR_STRING_ATTR(field, buffer)				\
 static ssize_t								\
@@ -4212,11 +4044,6 @@ static int android_bind(struct usb_composite_dev *cdev)
 		return id;
 	strings_dev[STRING_SERIAL_IDX].id = id;
 	device_desc.iSerialNumber = id;
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	id = pantech_android_bind(cdev);
-	if (id < 0)
-		return id;
-#endif
 
 	dev->cdev = cdev;
 
@@ -4267,10 +4094,6 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 	req->complete = dev->setup_complete;
 	gadget->ep0->driver_data = cdev;
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	value = pantech_mode_ctrlrequest(cdev, c);
-	if(value < 0)
-#endif
 	list_for_each_entry(conf, &dev->configs, list_item)
 		list_for_each_entry(f_holder,
 				    &conf->enabled_functions,
@@ -4326,11 +4149,6 @@ static void android_disconnect(struct usb_composite_dev *cdev)
 
 	dev->connected = 0;
 	schedule_work(&dev->work);
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	if(b_pantech_usb_module){
-		usb_disconnect_cb();
-	}
-#endif
 }
 
 static struct usb_composite_driver android_usb_driver = {
@@ -4638,10 +4456,6 @@ static int android_probe(struct platform_device *pdev)
 		goto err_probe;
 	}
 
-#if defined(CONFIG_ANDROID_PANTECH_USB_MANAGER)
-	pantech_android_probe(android_dev);
-	_android_dev = android_dev;
-#endif
 	/* pm qos request to prevent apps idle power collapse */
 	android_dev->curr_pm_qos_state = NO_USB_VOTE;
 	if (pdata && pdata->pm_qos_latency[0]) {
@@ -4675,9 +4489,6 @@ static int android_remove(struct platform_device *pdev)
 	struct android_dev *dev = NULL;
 	struct android_usb_platform_data *pdata = pdev->dev.platform_data;
 	int usb_core_id = 0;
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	pantech_android_cleanup();
-#endif
 
 	if (pdata)
 		usb_core_id = pdata->usb_core_id;
@@ -4743,9 +4554,6 @@ static int __init init(void)
 	INIT_LIST_HEAD(&android_dev_list);
 	android_dev_count = 0;
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	pantech_android_init();
-#endif
 	ret = platform_driver_register(&android_platform_driver);
 	if (ret) {
 		pr_err("%s(): Failed to register android"
@@ -4767,8 +4575,5 @@ late_initcall(init);
 static void __exit cleanup(void)
 {
 	platform_driver_unregister(&android_platform_driver);
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	pantech_android_cleanup();
-#endif
 }
 module_exit(cleanup);

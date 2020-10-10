@@ -1,6 +1,6 @@
 /* Qualcomm CE device driver.
  *
- * Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -201,7 +201,7 @@ static int qcedev_release(struct inode *inode, struct file *file)
 	handle =  file->private_data;
 	podev =  handle->cntl;
 	if (podev != NULL && podev->magic != QCEDEV_MAGIC) {
-		pr_err("%s: invalid handle %p\n",
+		pr_err("%s: invalid handle %pK\n",
 					__func__, podev);
 	}
 	kzfree(handle);
@@ -273,8 +273,6 @@ void qcedev_sha_req_cb(void *cookie, unsigned char *digest,
 	if (authdata) {
 		handle->sha_ctxt.auth_data[0] = auth32[0];
 		handle->sha_ctxt.auth_data[1] = auth32[1];
-		handle->sha_ctxt.auth_data[2] = auth32[2];
-		handle->sha_ctxt.auth_data[3] = auth32[3];
 	}
 
 	tasklet_schedule(&pdev->done_tasklet);
@@ -1382,7 +1380,7 @@ static int qcedev_check_cipher_key(struct qcedev_cipher_op_req *req,
 			/* if not using HW key make sure key
 			 * length is valid
 			 */
-			if ((req->mode == QCEDEV_AES_MODE_XTS)) {
+			if (req->mode == QCEDEV_AES_MODE_XTS) {
 				if ((req->encklen != QCEDEV_AES_KEY_128*2) &&
 				(req->encklen != QCEDEV_AES_KEY_256*2)) {
 					pr_err("%s: unsupported key size: %d\n",
@@ -1527,36 +1525,6 @@ static int qcedev_check_cipher_params(struct qcedev_cipher_op_req *req,
 			__func__, total, req->data_len);
 		goto error;
 	}
-	/* Verify Source Address's */
-	for (i = 0, total = 0; i < req->entries; i++) {
-		if (total < req->data_len) {
-			if (!access_ok(VERIFY_READ,
-				(void __user *)req->vbuf.src[i].vaddr,
-					req->vbuf.src[i].len)) {
-					pr_err("%s:SRC RD_VERIFY err %d=0x%lx\n",
-						__func__, i, (uintptr_t)
-							req->vbuf.src[i].vaddr);
-					goto error;
-			}
-			total += req->vbuf.src[i].len;
-		}
-	}
-
-	/* Verify Destination Address's */
-	for (i = 0, total = 0; i < QCEDEV_MAX_BUFFERS; i++) {
-		if ((req->vbuf.dst[i].vaddr != 0) &&
-			(total < req->data_len)) {
-			if (!access_ok(VERIFY_WRITE,
-				(void __user *)req->vbuf.dst[i].vaddr,
-					req->vbuf.dst[i].len)) {
-					pr_err("%s:DST WR_VERIFY err %d=0x%lx\n",
-						__func__, i, (uintptr_t)
-							req->vbuf.dst[i].vaddr);
-					goto error;
-			}
-			total += req->vbuf.dst[i].len;
-		}
-	}
 	return 0;
 error:
 	return -EINVAL;
@@ -1637,7 +1605,7 @@ long qcedev_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	podev =  handle->cntl;
 	qcedev_areq.handle = handle;
 	if (podev == NULL || podev->magic != QCEDEV_MAGIC) {
-		pr_err("%s: invalid handle %p\n",
+		pr_err("%s: invalid handle %pK\n",
 			__func__, podev);
 		return -ENOENT;
 	}
@@ -1771,6 +1739,12 @@ long qcedev_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			mutex_unlock(&hash_access_lock);
 			return err;
 		}
+		if (handle->sha_ctxt.diglen > QCEDEV_MAX_SHA_DIGEST) {
+			pr_err("Invalid sha_ctxt.diglen %d\n",
+					handle->sha_ctxt.diglen);
+			mutex_unlock(&hash_access_lock);
+			return -EINVAL;
+		}
 		qcedev_areq.sha_op_req.diglen = handle->sha_ctxt.diglen;
 		memcpy(&qcedev_areq.sha_op_req.digest[0],
 				&handle->sha_ctxt.digest[0],
@@ -1806,6 +1780,12 @@ long qcedev_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		if (err) {
 			mutex_unlock(&hash_access_lock);
 			return err;
+		}
+		if (handle->sha_ctxt.diglen > QCEDEV_MAX_SHA_DIGEST) {
+			pr_err("Invalid sha_ctxt.diglen %d\n",
+					handle->sha_ctxt.diglen);
+			mutex_unlock(&hash_access_lock);
+			return -EINVAL;
 		}
 		qcedev_areq.sha_op_req.diglen =	handle->sha_ctxt.diglen;
 		memcpy(&qcedev_areq.sha_op_req.digest[0],

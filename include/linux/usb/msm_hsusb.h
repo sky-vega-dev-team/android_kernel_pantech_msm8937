@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Author: Brian Swetland <swetland@google.com>
- * Copyright (c) 2009-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2018, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -28,10 +28,6 @@
 #include <linux/hrtimer.h>
 #include <linux/power_supply.h>
 #include <linux/cdev.h>
-
-#ifdef CONFIG_ANDROID_PANTECH_USB_OTG_INTENT
-#include <linux/switch.h>
-#endif
 /*
  * The following are bit fields describing the usb_request.udc_priv word.
  * These bit fields are set by function drivers that wish to queue
@@ -173,9 +169,6 @@ enum usb_chg_type {
 	USB_CDP_CHARGER,
 	USB_PROPRIETARY_CHARGER,
 	USB_FLOATED_CHARGER,
-#if defined(CONFIG_PANTECH_USB_CHARGER_WIRELESS) && defined(CONFIG_PANTECH_PMIC_CHARGER_WIRELESS)
-	PT_WIRELESS_CHARGER,
-#endif
 };
 
 /**
@@ -292,6 +285,7 @@ enum usb_id_state {
 		for improving data performance.
  * @bool enable_sdp_typec_current_limit: Indicates whether type-c current for
 		sdp charger to be limited.
+ * @usbeth_reset_gpio: Gpio used for external usb-to-eth reset.
  */
 struct msm_otg_platform_data {
 	int *phy_init_seq;
@@ -328,15 +322,14 @@ struct msm_otg_platform_data {
 	bool enable_phy_id_pullup;
 	int usb_id_gpio;
 	int hub_reset_gpio;
+	int usbeth_reset_gpio;
 	int switch_sel_gpio;
 	bool phy_dvdd_always_on;
 	bool emulation;
 	bool enable_streaming;
 	bool enable_axi_prefetch;
 	bool enable_sdp_typec_current_limit;
-#ifdef CONFIG_PANTECH_USB_OTG_EN_CONTROL
-	int otg_en_gpio;
-#endif
+	bool vbus_low_as_hostmode;
 };
 
 /* phy related flags */
@@ -346,6 +339,10 @@ struct msm_otg_platform_data {
 #define PHY_CHARGER_CONNECTED		BIT(3)
 #define PHY_VBUS_VALID_OVERRIDE		BIT(4)
 #define DEVICE_IN_SS_MODE		BIT(5)
+#define PHY_LANE_A			BIT(6)
+#define PHY_LANE_B			BIT(7)
+#define PHY_HSFS_MODE			BIT(8)
+#define PHY_LS_MODE			BIT(9)
 
 #define USB_NUM_BUS_CLOCKS      3
 
@@ -526,6 +523,7 @@ struct msm_otg {
 #define PHY_REGULATORS_LPM	BIT(4)
 	int reset_counter;
 	struct power_supply usb_psy;
+	enum power_supply_type usb_supply_type;
 	unsigned int online;
 	unsigned int host_mode;
 	unsigned int voltage_max;
@@ -557,13 +555,6 @@ struct msm_otg {
 
 	char (buf[DEBUG_MAX_MSG])[DEBUG_MSG_LEN];   /* buffer */
 	unsigned int vbus_state;
-#ifdef CONFIG_ANDROID_PANTECH_USB_OTG_INTENT
-	struct switch_dev sdev_otg;
-	struct switch_dev sdev_otg_dev;
-#endif
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	struct delayed_work connect_work;
-#endif	
 	unsigned int usb_irq_count;
 	int pm_qos_latency;
 	struct pm_qos_request pm_qos_req_dma;

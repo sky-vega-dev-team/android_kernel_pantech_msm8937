@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,6 +28,7 @@ static const char *resource_name_to_str[IPA_RM_RESOURCE_MAX] = {
 	__stringify(IPA_RM_RESOURCE_WLAN_PROD),
 	__stringify(IPA_RM_RESOURCE_ODU_ADAPT_PROD),
 	__stringify(IPA_RM_RESOURCE_MHI_PROD),
+	__stringify(IPA_RM_RESOURCE_ETHERNET_PROD),
 	__stringify(IPA_RM_RESOURCE_Q6_CONS),
 	__stringify(IPA_RM_RESOURCE_USB_CONS),
 	__stringify(IPA_RM_RESOURCE_USB_DPL_CONS),
@@ -36,6 +37,7 @@ static const char *resource_name_to_str[IPA_RM_RESOURCE_MAX] = {
 	__stringify(IPA_RM_RESOURCE_APPS_CONS),
 	__stringify(IPA_RM_RESOURCE_ODU_ADAPT_CONS),
 	__stringify(IPA_RM_RESOURCE_MHI_CONS),
+	__stringify(IPA_RM_RESOURCE_ETHERNET_CONS),
 };
 
 struct ipa_rm_profile_vote_type {
@@ -153,6 +155,21 @@ int ipa_rm_delete_resource(enum ipa_rm_resource_name resource_name)
 		result = -EINVAL;
 		goto bail;
 	}
+
+	if (resource->state == IPA_RM_GRANTED) {
+		/* There might pending timer work to
+		 * release release the resource
+		 */
+		if (resource->release_work != NULL) {
+			if (flush_delayed_work(&resource->release_work->work)
+				== true) {
+				IPA_RM_DBG("Flushed the pending work\n");
+			} else {
+				IPA_RM_DBG("Work was already idle\n");
+			}
+		}
+	}
+
 	result = ipa_rm_resource_delete(resource);
 	if (result) {
 		IPA_RM_ERR("ipa_rm_resource_delete() failed\n");
@@ -267,17 +284,18 @@ static int _ipa_rm_add_dependency_sync(enum ipa_rm_resource_name resource_name,
 		time = wait_for_completion_timeout(
 				&((struct ipa_rm_resource_cons *)consumer)->
 				request_consumer_in_progress,
-				HZ);
+				HZ * 5);
 		result = 0;
 		if (!time) {
 			IPA_RM_ERR("TIMEOUT waiting for %s GRANT event.",
 					ipa_rm_resource_str(depends_on_name));
 			result = -ETIME;
-		}
-		IPA_RM_DBG("%s waited for %s GRANT %lu time.\n",
+		} else {
+			IPA_RM_DBG("%s waited for %s GRANT %lu time.\n",
 				ipa_rm_resource_str(resource_name),
 				ipa_rm_resource_str(depends_on_name),
 				time);
+		}
 	}
 	IPA_RM_DBG("EXIT with %d\n", result);
 
@@ -461,6 +479,8 @@ void delayed_release_work_func(struct work_struct *work)
 bail:
 	spin_unlock_irqrestore(&ipa_rm_ctx->ipa_rm_lock, flags);
 	kfree(rwork);
+	if (resource)
+		resource->release_work = NULL;
 
 }
 
@@ -475,7 +495,6 @@ int ipa_rm_request_resource_with_timer(enum ipa_rm_resource_name resource_name)
 {
 	unsigned long flags;
 	struct ipa_rm_resource *resource;
-	struct ipa_rm_delayed_release_work_type *release_work;
 	int result;
 
 	if (!IPA_RM_RESORCE_IS_CONS(resource_name)) {
@@ -499,16 +518,18 @@ int ipa_rm_request_resource_with_timer(enum ipa_rm_resource_name resource_name)
 		goto bail;
 	}
 
-	release_work = kzalloc(sizeof(*release_work), GFP_ATOMIC);
-	if (!release_work) {
+	resource->release_work =
+		kzalloc(sizeof(*resource->release_work), GFP_ATOMIC);
+	if (!resource->release_work) {
 		result = -ENOMEM;
 		goto bail;
 	}
-	release_work->resource_name = resource->name;
-	release_work->needed_bw = 0;
-	release_work->dec_usage_count = false;
-	INIT_DELAYED_WORK(&release_work->work, delayed_release_work_func);
-	schedule_delayed_work(&release_work->work,
+	resource->release_work->resource_name = resource->name;
+	resource->release_work->needed_bw = 0;
+	resource->release_work->dec_usage_count = false;
+	INIT_DELAYED_WORK(&resource->release_work->work,
+		delayed_release_work_func);
+	schedule_delayed_work(&resource->release_work->work,
 			msecs_to_jiffies(IPA_RM_RELEASE_DELAY_IN_MSEC));
 	result = 0;
 bail:
@@ -819,7 +840,8 @@ static void ipa_rm_wq_resume_handler(struct work_struct *work)
 	}
 	ipa_rm_resource_consumer_request_work(
 			(struct ipa_rm_resource_cons *)resource,
-			ipa_rm_work->prev_state, ipa_rm_work->needed_bw, true);
+			ipa_rm_work->prev_state, ipa_rm_work->needed_bw, true,
+			ipa_rm_work->inc_usage_count);
 	spin_unlock_irqrestore(&ipa_rm_ctx->ipa_rm_lock, flags);
 bail:
 	kfree(ipa_rm_work);
@@ -915,7 +937,8 @@ int ipa_rm_wq_send_suspend_cmd(enum ipa_rm_resource_name resource_name,
 
 int ipa_rm_wq_send_resume_cmd(enum ipa_rm_resource_name resource_name,
 		enum ipa_rm_resource_state prev_state,
-		u32 needed_bw)
+		u32 needed_bw,
+		bool inc_usage_count)
 {
 	int result = -ENOMEM;
 	struct ipa_rm_wq_suspend_resume_work_type *work = kzalloc(sizeof(*work),
@@ -925,6 +948,7 @@ int ipa_rm_wq_send_resume_cmd(enum ipa_rm_resource_name resource_name,
 		work->resource_name = resource_name;
 		work->prev_state = prev_state;
 		work->needed_bw = needed_bw;
+		work->inc_usage_count = inc_usage_count;
 		result = queue_work(ipa_rm_ctx->ipa_rm_wq,
 				(struct work_struct *)work);
 	} else {
