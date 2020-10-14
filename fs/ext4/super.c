@@ -43,10 +43,6 @@
 
 #include <linux/kthread.h>
 #include <linux/freezer.h>
-#ifdef CONFIG_PANTECH_FS_AUTO_REPAIR
-#include <linux/string.h>
-#include <mach/pantech_sys.h>
-#endif /* CONFIG_PANTECH_FS_AUTO_REPAIR */
 
 #include "ext4.h"
 #include "ext4_extents.h"	/* Needed for trace points definition */
@@ -57,11 +53,6 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ext4.h>
-
-#ifdef CONFIG_PANTECH_FS_AUTO_REPAIR
-char * dm_decision;
-char dm_buf[10];
-#endif
 
 static struct proc_dir_entry *ext4_proc_root;
 static struct kset *ext4_kset;
@@ -414,26 +405,6 @@ static void ext4_handle_error(struct super_block *sb)
 		 */
 		smp_wmb();
 		sb->s_flags |= MS_RDONLY;
-#ifdef CONFIG_PANTECH_FS_AUTO_REPAIR 
-		/* added for userdata partition auti repair */
-		if(strcmp(sb->s_id, dm_buf)==0)
-		{
-			ext4_msg(sb, KERN_CRIT, "EXT4-fs (device %s) ERRORS_RO : panic forced after error\n",sb->s_id);
-			pantech_sys_reset_reason_set(SYS_RESET_REASON_USERDATA_FS); 
-			panic("EXT4-fs (device %s) ERRORS_RO : panic forced after error\n",
-			sb->s_id);
-		}
-
-#ifdef CONFIG_PANTECH_DXHDCP_PROVISIONING //lsi@bs1 FEATURE_PANTECH_DXHDCP_PROVISIONING run e2fsck for secure parition (fs error)
-		else if(strcmp(sb->s_id, "mmcblk0p55") == 0)
-		{
-			pantech_sys_reset_reason_set(SYS_RESET_REASON_SECURE_FS); 
-			panic("EXT4-fs (device %s) ERRORS_RO : panic forced after error\n",
-			sb->s_id);
-
-		}
-#endif
-#endif
 	}
 	if (test_opt(sb, ERRORS_PANIC)) {
 		if (EXT4_SB(sb)->s_journal &&
@@ -629,23 +600,6 @@ void __ext4_abort(struct super_block *sb, const char *function,
 		if (EXT4_SB(sb)->s_journal)
 			jbd2_journal_abort(EXT4_SB(sb)->s_journal, -EIO);
 		save_error_info(sb, function, line);
-#ifdef CONFIG_PANTECH_FS_AUTO_REPAIR 
-		if(strcmp(sb->s_id, dm_buf)==0)
-		{
-			ext4_msg(sb, KERN_CRIT, "EXT4-fs (device %s) ERRORS_RO : panic forced after error\n",sb->s_id);
-			pantech_sys_reset_reason_set(SYS_RESET_REASON_USERDATA_FS); 
-			panic("EXT4-fs (device %s) ERRORS_RO : panic forced after error\n",
-			sb->s_id);
-		}
-#ifdef CONFIG_PANTECH_DXHDCP_PROVISIONING //lsi@bs1 FEATURE_PANTECH_DXHDCP_PROVISIONING run e2fsck for secure parition (fs error)
-		else if(strcmp(sb->s_id, "mmcblk0p55") == 0)
-		{
-			pantech_sys_reset_reason_set(SYS_RESET_REASON_SECURE_FS); 
-			panic("EXT4-fs (device %s) ERRORS_RO : panic forced after error\n",
-			sb->s_id);
-		}
-#endif
-#endif
 	}
 	if (test_opt(sb, ERRORS_PANIC)) {
 		if (EXT4_SB(sb)->s_journal &&
@@ -3897,14 +3851,6 @@ static int ext4_fill_super(struct super_block *sb, void *data, int silent)
 		ext4_msg(sb, KERN_WARNING, "bad geometry: block count %llu "
 		       "exceeds size of device (%llu blocks)",
 		       ext4_blocks_count(es), blocks_count);
-#if 0//def CONFIG_PANTECH_DXHDCP_PROVISIONING //lsi@bs1 FEATURE_PANTECH_DXHDCP_PROVISIONING run e2fsck for secure parition (fs error)
-		if(strcmp(sb->s_id, "mmcblk0p55") == 0)
-		{
-			pantech_sys_reset_reason_set(SYS_RESET_REASON_SECURE_FS); 
-			panic("EXT4-fs (device %s) ERRORS_RO : panic forced after error\n",
-			sb->s_id);
-		}
-#endif
 		goto failed_mount;
 	}
 
@@ -5651,15 +5597,6 @@ static int __init ext4_init_fs(void)
 	err = register_filesystem(&ext4_fs_type);
 	if (err)
 		goto out;
-
-#ifdef CONFIG_PANTECH_FS_AUTO_REPAIR 
-		dm_decision = strstr(boot_command_line, "console");
-		if(strncmp(dm_decision,"console=ttyHSL0",15) == 0)
-			strcpy(dm_buf,"dm-0");
-		else
-			strcpy(dm_buf,"dm-1");
-		printk("Auto repair path : %s\n",dm_buf);
-#endif
 
 	return 0;
 out:
