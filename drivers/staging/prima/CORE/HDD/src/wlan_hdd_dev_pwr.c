@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -162,6 +162,10 @@ static int wlan_suspend(hdd_context_t* pHddCtx)
        if ((vos_timer_get_system_time() - pHddCtx->last_suspend_success) >=
                                          WLAN_POWER_COLLAPSE_FAIL_THRESHOLD)
        {
+          VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+           FL("Current time: %lu Last suspend fail time: %lu continuous fail count: %d"),
+           vos_timer_get_system_time(), pHddCtx->last_suspend_success,
+           pHddCtx->continuous_suspend_fail_cnt);
           pHddCtx->last_suspend_success = 0;
           vos_fatal_event_logs_req(WLAN_LOG_TYPE_FATAL,
                       WLAN_LOG_INDICATOR_HOST_DRIVER,
@@ -449,6 +453,53 @@ int __hddDevSuspendHdlr(struct device *dev)
    return 0;
 }
 
+int __hddDevSuspendNoIrqHdlr(struct device *dev)
+{
+   int ret = 0;
+   hdd_context_t* pHddCtx = NULL;
+   pVosContextType pVosContext;
+   pVosSchedContext pSchedContext;
+
+   ENTER();
+
+   pHddCtx =  (hdd_context_t*)wcnss_wlan_get_drvdata(dev);
+
+   /* Get the HDD context */
+   ret = wlan_hdd_validate_context(pHddCtx);
+   if (0 != ret)
+   {
+       return ret;
+   }
+
+   if(pHddCtx->isWlanSuspended != TRUE)
+   {
+      VOS_TRACE(VOS_MODULE_ID_HDD,VOS_TRACE_LEVEL_FATAL,
+                "%s: WLAN is not in suspended state",__func__);
+      return -EPERM;
+   }
+   pVosContext = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+   if(pVosContext == NULL)
+   {
+      VOS_TRACE(VOS_MODULE_ID_HDD,VOS_TRACE_LEVEL_FATAL,
+                "%s: Failed vos_get_global_context",__func__);
+      return -EPERM;
+   }
+
+   pSchedContext = &pVosContext->vosSched;
+
+   if (test_bit(RX_POST_EVENT, &pSchedContext->rxEventFlag))
+   {
+      VOS_TRACE(VOS_MODULE_ID_HDD,VOS_TRACE_LEVEL_INFO,
+                "%s: WLAN suspend is not honored",__func__);
+      return -EPERM;
+   }
+
+   VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
+             "%s: Suspend No IRQ done successfully",__func__);
+   EXIT();
+   return 0;
+}
+
 int hddDevSuspendHdlr(struct device *dev)
 {
     int ret;
@@ -459,6 +510,19 @@ int hddDevSuspendHdlr(struct device *dev)
     return ret;
 }
 
+int hddDevSuspendNoIrqHdlr(struct device *dev)
+{
+    int ret;
+    vos_ssr_protect(__func__);
+    ret = __hddDevSuspendNoIrqHdlr(dev);
+    vos_ssr_unprotect(__func__);
+    return ret;
+}
+
+int hddDevResumeNoIrqHdlr(struct device *dev)
+{
+   return 0;
+}
 /*----------------------------------------------------------------------------
 
    @brief Function to resume the wlan driver.
@@ -516,6 +580,8 @@ int hddDevResumeHdlr(struct device *dev)
 static const struct dev_pm_ops pm_ops = {
    .suspend = hddDevSuspendHdlr,
    .resume = hddDevResumeHdlr,
+   .suspend_noirq = hddDevSuspendNoIrqHdlr,
+   .resume_noirq = hddDevResumeNoIrqHdlr
 };
 
 /*----------------------------------------------------------------------------
@@ -584,7 +650,7 @@ void hddDevTmTxBlockTimeoutHandler(void *usrData)
    if ((NULL == staAdapater) || (WLAN_HDD_ADAPTER_MAGIC != staAdapater->magic))
    {
       VOS_TRACE(VOS_MODULE_ID_HDD,VOS_TRACE_LEVEL_ERROR,
-                FL("invalid Adapter %p"), staAdapater);
+                FL("invalid Adapter %pK"), staAdapater);
       VOS_ASSERT(0);
       return;
    }

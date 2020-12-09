@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -54,7 +54,7 @@
 #include "limSendSmeRspMessages.h"
 #include "limIbssPeerMgmt.h"
 #include "limSessionUtils.h"
-
+#include "lim_mbb.h"
 
 /**
  * limSendSmeRsp()
@@ -160,6 +160,29 @@ limSendSmeRsp(tpAniSirGlobal pMac, tANI_U16 msgType,
     limSysProcessMmhMsgApi(pMac, &mmhMsg,  ePROT);
 } /*** end limSendSmeRsp() ***/
 
+/**
+ * lim_add_bss_info() - copy data from session entry to join rsp
+ * @session_entry: PE Session Info
+ * @sme_join_rsp: Join response buffer to be filled up
+ *
+ * Return: None
+ */
+void lim_add_bss_info(tpDphHashNode sta_ds,
+                      tpSirSmeJoinRsp sme_join_rsp)
+{
+    struct parsed_ies *parsed_ies = &sta_ds->parsed_ies;
+
+    if (parsed_ies->hs20vendor_ie.present)
+        sme_join_rsp->hs20vendor_ie = parsed_ies->hs20vendor_ie;
+    if (parsed_ies->vht_caps.present)
+        sme_join_rsp->vht_caps = parsed_ies->vht_caps;
+    if (parsed_ies->ht_caps.present)
+        sme_join_rsp->ht_caps = parsed_ies->ht_caps;
+    if (parsed_ies->ht_operation.present)
+        sme_join_rsp->ht_operation = parsed_ies->ht_operation;
+    if (parsed_ies->vht_operation.present)
+        sme_join_rsp->vht_operation = parsed_ies->vht_operation;
+}
 
 /**
  * limSendSmeJoinReassocRspAfterResume()
@@ -382,6 +405,7 @@ limSendSmeJoinReassocRsp(tpAniSirGlobal pMac, tANI_U16 msgType,
                 pSirSmeJoinRsp->bcastSig   = pStaDs->ucBcastSig;
                 pSirSmeJoinRsp->maxRateFlags =
                                 limGetMaxRateFlags(pStaDs, psessionEntry);
+                lim_add_bss_info(pStaDs, pSirSmeJoinRsp);
                 PELOGE(limLog(pMac, LOG1, FL("maxRateFlags: %x"),
                                               pSirSmeJoinRsp->maxRateFlags);)
             }
@@ -1231,21 +1255,6 @@ limSendSmeAuthRsp(tpAniSirGlobal pMac,
 #endif
 } /*** end limSendSmeAuthRsp() ***/
 
-
-void limSendSmeDisassocDeauthNtf( tpAniSirGlobal pMac,
-                                eHalStatus status, tANI_U32 *pCtx )
-{
-    tSirMsgQ                mmhMsg;
-    tSirMsgQ                *pMsg = (tSirMsgQ*) pCtx;
-
-    mmhMsg.type = pMsg->type;
-    mmhMsg.bodyptr = pMsg;
-    mmhMsg.bodyval = 0;
-
-    MTRACE(macTrace(pMac, TRACE_CODE_TX_SME_MSG, NO_SESSION, mmhMsg.type));
-
-    limSysProcessMmhMsgApi(pMac, &mmhMsg, ePROT);
-}
 /**
  * limSendSmeDisassocNtf()
  *
@@ -1289,14 +1298,13 @@ limSendSmeDisassocNtf(tpAniSirGlobal pMac,
     tSirSmeDisassocRsp      *pSirSmeDisassocRsp;
     tSirSmeDisassocInd      *pSirSmeDisassocInd;
     tSirSmeDisConDoneInd    *pSirSmeDisConDoneInd;
-    tANI_U32 *pMsg;
     bool failure = FALSE;
+    vos_msg_t               msg = {0};
 
     limLog(pMac, LOG1, FL("Disassoc Ntf with trigger : %d"
             "reasonCode: %d"),
             disassocTrigger,
             reasonCode);
-    
     switch (disassocTrigger)
     {
         case eLIM_HOST_DISASSOC:
@@ -1346,7 +1354,8 @@ limSendSmeDisassocNtf(tpAniSirGlobal pMac,
             limDiagEventReport(pMac, WLAN_PE_DIAG_DISASSOC_RSP_EVENT,
                                       psessionEntry, (tANI_U16)reasonCode, 0);
 #endif
-            pMsg = (tANI_U32*) pSirSmeDisassocRsp;
+            msg.type = eWNI_SME_DISASSOC_RSP;
+            msg.bodyptr = pSirSmeDisassocRsp;
             break;
 
         case eLIM_PEER_ENTITY_DISASSOC:
@@ -1375,7 +1384,8 @@ limSendSmeDisassocNtf(tpAniSirGlobal pMac,
             else
                 pSirSmeDisConDoneInd->reasonCode = reasonCode;
 
-            pMsg = (tANI_U32 *)pSirSmeDisConDoneInd;
+            msg.type = eWNI_SME_DISCONNECT_DONE_IND;
+            msg.bodyptr = pSirSmeDisConDoneInd;
             break;
 
         default:
@@ -1420,7 +1430,8 @@ limSendSmeDisassocNtf(tpAniSirGlobal pMac,
             limDiagEventReport(pMac, WLAN_PE_DIAG_DISASSOC_IND_EVENT,
                                               psessionEntry, (tANI_U16)reasonCode, 0);
 #endif
-            pMsg = (tANI_U32*) pSirSmeDisassocInd;
+            msg.type = eWNI_SME_DISASSOC_IND;
+            msg.bodyptr = pSirSmeDisassocInd;
 
             break;
     }
@@ -1432,9 +1443,10 @@ error:
     {
         peDeleteSession(pMac,psessionEntry);
     }
-    if (failure == FALSE)
-        limSendSmeDisassocDeauthNtf( pMac, eHAL_STATUS_SUCCESS,
-                                             (tANI_U32*) pMsg );
+    if (failure == FALSE && pMac->lim.sme_msg_callback)
+        pMac->lim.sme_msg_callback(pMac, &msg);
+    else if (failure == FALSE)
+        limLog(pMac, LOGE, FL("Sme msg callback is NULL"));
 } /*** end limSendSmeDisassocNtf() ***/
 
 
@@ -1753,7 +1765,7 @@ limSendSmeDeauthNtf(tpAniSirGlobal pMac, tSirMacAddr peerMacAddr, tSirResultCode
     tSirSmeDisConDoneInd *pSirSmeDisConDoneInd;
     tpPESession         psessionEntry;
     tANI_U8             sessionId;
-    tANI_U32            *pMsg;
+    vos_msg_t           msg = {0};
 
     psessionEntry = peFindSessionByBssid(pMac,peerMacAddr,&sessionId);  
     switch (deauthTrigger)
@@ -1788,7 +1800,8 @@ limSendSmeDeauthNtf(tpAniSirGlobal pMac, tSirMacAddr peerMacAddr, tSirResultCode
             limDiagEventReport(pMac, WLAN_PE_DIAG_DEAUTH_RSP_EVENT,
                                       psessionEntry, 0, (tANI_U16)reasonCode);
 #endif
-            pMsg = (tANI_U32*)pSirSmeDeauthRsp;
+            msg.type = eWNI_SME_DEAUTH_RSP;
+            msg.bodyptr = pSirSmeDeauthRsp;
 
             break;
 
@@ -1819,7 +1832,8 @@ limSendSmeDeauthNtf(tpAniSirGlobal pMac, tSirMacAddr peerMacAddr, tSirResultCode
             else
                 pSirSmeDisConDoneInd->reasonCode = reasonCode;
 
-            pMsg = (tANI_U32 *)pSirSmeDisConDoneInd;
+            msg.type = eWNI_SME_DISCONNECT_DONE_IND;
+            msg.bodyptr = pSirSmeDisConDoneInd;
             break;
 
         default:
@@ -1868,7 +1882,8 @@ limSendSmeDeauthNtf(tpAniSirGlobal pMac, tSirMacAddr peerMacAddr, tSirResultCode
             limDiagEventReport(pMac, WLAN_PE_DIAG_DEAUTH_IND_EVENT,
                                         psessionEntry, 0, (tANI_U16)reasonCode);
 #endif //FEATURE_WLAN_DIAG_SUPPORT
-            pMsg = (tANI_U32*)pSirSmeDeauthInd;
+            msg.type = eWNI_SME_DEAUTH_IND;
+            msg.bodyptr = pSirSmeDeauthInd;
 
             break;
     }
@@ -1879,9 +1894,10 @@ limSendSmeDeauthNtf(tpAniSirGlobal pMac, tSirMacAddr peerMacAddr, tSirResultCode
         peDeleteSession(pMac,psessionEntry);
     }   
 
-    limSendSmeDisassocDeauthNtf( pMac, eHAL_STATUS_SUCCESS,
-                                              (tANI_U32*) pMsg );
-
+    if (pMac->lim.sme_msg_callback)
+        pMac->lim.sme_msg_callback(pMac, &msg);
+    else
+        limLog(pMac, LOGE, FL("Sme msg callback is NULL"));
 } /*** end limSendSmeDeauthNtf() ***/
 
 
@@ -2815,10 +2831,8 @@ void limHandleDeleteBssRsp(tpAniSirGlobal pMac,tpSirMsgQ MsgQ)
     {
          limProcessSmeDelBssRsp(pMac, MsgQ->bodyval,psessionEntry);
     }
-           
     else
          limProcessMlmDelBssRsp(pMac,MsgQ,psessionEntry);
-    
 }
 
 #ifdef WLAN_FEATURE_VOWIFI_11R
