@@ -79,15 +79,8 @@
 	pinctrl-0 = <&uart_console_active>;
 };
 
-&pmi_haptic{ 
-/*	status = "ok";  (테스트.) */
-	qcom,wave-play-rate-us = <4165>;
-	qcom,actuator-type = "lra";
-	qcom,lra-auto-res-mode="qwd";
-	qcom,lra-high-z="opt1";
-	qcom,lra-res-cal-period = <4>;
-	qcom,correct-lra-drive-freq;
-	qcom,misc-trim-error-rc19p2-clk-reg-present;
+&pmi_haptic{
+	status = "ok";
 };
 
 &spi_3 { /* BLSP1 QUP3 */
