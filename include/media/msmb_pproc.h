@@ -1,3 +1,6 @@
+#ifdef CONFIG_PANTECH_CAMERA
+#include "msmb_pproc-ef71.h"
+#else
 #ifndef __MSMB_PPROC_H
 #define __MSMB_PPROC_H
 
@@ -152,4 +155,4 @@ struct msm_camera_v4l2_ioctl32_t {
 #endif
 
 #endif
-
+#endif /* PANTECH_CAMERA */

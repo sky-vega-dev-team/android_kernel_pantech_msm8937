@@ -1,3 +1,6 @@
+#ifdef CONFIG_MACH_MSM8937_EF71S
+#include "msm_camera-ef71.h"
+#else
 /* Copyright (c) 2009-2012, 2014-2016 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -2222,3 +2225,4 @@ struct msm_ver_num_info {
 #define SET_VIDEO_INST_IDX(handle, data)	\
 	(handle |= (0x1 << 7) | (data & 0x7F))
 #endif
+#endif /* MSMB_CAMERA_EF71 */

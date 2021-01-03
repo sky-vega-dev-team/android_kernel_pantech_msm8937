@@ -20,3 +20,7 @@ header-y += msmb_ispif.h
 header-y += msmb_pproc.h
 header-y += radio-iris.h
 header-y += radio-iris-commands.h
+header-y += msm_cam_sensor-ef71.h
+header-y += msmb_isp-ef71.h
+header-y += msmb_pproc-ef71.h
+header-y += msmb_camera-ef71.h

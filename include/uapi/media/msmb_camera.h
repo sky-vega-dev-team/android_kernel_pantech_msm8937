@@ -1,3 +1,6 @@
+#ifdef CONFIG_MACH_MSM8937_EF71S
+#include "msmb_camera-ef71.h"
+#else
 #ifndef __UAPI_LINUX_MSMB_CAMERA_H
 #define __UAPI_LINUX_MSMB_CAMERA_H
 
@@ -224,4 +227,4 @@ struct msm_camera_private_ioctl_arg {
 	_IOWR('V', BASE_VIDIOC_PRIVATE, struct msm_camera_private_ioctl_arg)
 
 #endif
-
+#endif /* MSMB_CAMERA_EF71 */

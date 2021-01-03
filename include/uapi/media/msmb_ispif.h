@@ -1,3 +1,6 @@
+#ifdef CONFIG_MACH_MSM8937_EF71S
+#include "msmb_ispif-ef71.h"
+#else
 #ifndef UAPI_MSMB_ISPIF_H
 #define UAPI_MSMB_ISPIF_H
 
@@ -176,4 +179,4 @@ struct ispif_cfg_data_ext {
 	_IOWR('V', BASE_VIDIOC_PRIVATE+1, struct ispif_cfg_data_ext)
 
 #endif
-
+#endif /* MSMB_CAMERA_EF71 */

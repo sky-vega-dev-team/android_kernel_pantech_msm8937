@@ -1,0 +1,12 @@
+--- drivers/media/platform/msm/Makefile
++++ drivers/media/platform/msm/Makefile
+@@ -5,5 +5,9 @@
+ obj-$(CONFIG_MSM_VIDC_V4L2) += vidc/
+ obj-y += broadcast/
+ obj-$(CONFIG_DVB_MPQ) += dvb/
++ifeq ($(CONFIG_PANTECH_CAMERA),y)
++obj-$(CONFIG_MSMB_CAMERA) += camera_v2-ef71/
++else
+ obj-$(CONFIG_MSMB_CAMERA) += camera_v2/
+-obj-y += sde/+endif
++obj-y += sde/

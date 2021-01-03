@@ -1,3 +1,6 @@
+#ifdef CONFIG_PANTECH_CAMERA
+#include "msmb_camera-ef71.h"
+#else
 #ifndef __LINUX_MSMB_CAMERA_H
 #define __LINUX_MSMB_CAMERA_H
 
@@ -22,4 +25,4 @@
 #endif
 
 #endif
-
+#endif /* PANTECH_CAMERA */

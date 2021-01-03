@@ -1,3 +1,6 @@
+#ifdef CONFIG_MACH_MSM8937_EF71S
+#include "msm_camsensor_sdk-ef71.h"
+#else
 #ifndef __UAPI_LINUX_MSM_CAMSENSOR_SDK_H
 #define __UAPI_LINUX_MSM_CAMSENSOR_SDK_H
 
@@ -424,3 +427,4 @@ struct msm_camera_i2c_reg_setting_array {
 };
 
 #endif
+#endif /* MSMB_CAMERA_EF71 */
