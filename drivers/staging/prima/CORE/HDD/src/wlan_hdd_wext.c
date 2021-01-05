@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -7004,6 +7004,7 @@ static int __iw_get_char_setnone(struct net_device *dev,
    *And currently it only checks P2P_CLIENT adapter.
    *P2P_DEVICE and P2P_GO have not been added as of now.
 */
+#ifdef TRACE_RECORD
         case WE_GET_STATES:
         {
             int buf = 0, len = 0;
@@ -7140,6 +7141,7 @@ static int __iw_get_char_setnone(struct net_device *dev,
             wrqu->data.length = strlen(extra)+1;
             break;
         }
+#endif
 
         case WE_GET_CFG:
         {
@@ -10369,7 +10371,7 @@ int hdd_setBand(struct net_device *dev, u8 ui_band)
              if(curr_country[0] == '0' && curr_country[1] == '0')
                      regulatory_hint_user("IN", NL80211_USER_REG_HINT_USER);
              else
-                     regulatory_hint_user("OO", NL80211_USER_REG_HINT_USER);
+                     regulatory_hint_user("00", NL80211_USER_REG_HINT_USER);
 #else
              if(curr_country[0] == '0' && curr_country[1] == '0')
                      regulatory_hint_user("IN");
