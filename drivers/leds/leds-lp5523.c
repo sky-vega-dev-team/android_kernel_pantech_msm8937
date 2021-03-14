@@ -1024,7 +1024,9 @@ static int lp5523_configure(struct i2c_client *client)
 
 	/* Let the programs run for couple of ms and check the engine status */
 	usleep_range(3000, 6000);
-	lp5523_read(client, LP5523_REG_STATUS, &status);
+	ret = lp5523_read(client, LP5523_REG_STATUS, &status);
+	if (ret)
+		return ret;
 	status &= LP5523_ENG_STATUS_MASK;
 
 	if (status == LP5523_ENG_STATUS_MASK) {
