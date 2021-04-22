@@ -76,7 +76,7 @@ static u64 zswap_duplicate_entry;
 * tunables
 **********************************/
 /* Enable/disable zswap (disabled by default, fixed at boot for now) */
-static bool zswap_enabled __read_mostly;
+static bool zswap_enabled = 1;
 module_param_named(enabled, zswap_enabled, bool, 0444);
 
 /* Compressor to be used by zswap (fixed at boot for now) */
