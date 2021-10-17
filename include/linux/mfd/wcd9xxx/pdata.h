@@ -192,6 +192,7 @@ struct wcd9xxx_pdata {
 	u32 mic_unmute_delay;
 	enum codec_variant cdc_variant;
 	u16 use_pinctrl;
+	bool wcd9xxx_mic_tristate;
 };
 
 #endif
