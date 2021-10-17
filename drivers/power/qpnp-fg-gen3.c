@@ -21,6 +21,7 @@
 #include <linux/of_batterydata.h>
 #include <linux/iio/consumer.h>
 #include <linux/qpnp/qpnp-revid.h>
+#include <linux/qpnp-misc.h>
 #include "fg-core.h"
 #include "fg-reg.h"
 
@@ -1502,9 +1503,6 @@ static void fg_cap_learning_update(struct fg_chip *chip)
 		goto out;
 	}
 
-	if (chip->charge_status == chip->prev_charge_status)
-		goto out;
-
 	rc = fg_get_sram_prop(chip, FG_SRAM_BATT_SOC, &batt_soc);
 	if (rc < 0) {
 		pr_err("Error in getting ACT_BATT_CAP, rc=%d\n", rc);
@@ -1649,6 +1647,8 @@ static int fg_adjust_ki_coeff_full_soc(struct fg_chip *chip, int batt_temp)
 
 	if (batt_temp < 0)
 		ki_coeff_full_soc = 0;
+	else if (chip->charge_status == POWER_SUPPLY_STATUS_DISCHARGING)
+		ki_coeff_full_soc = chip->dt.ki_coeff_full_soc_dischg;
 	else
 		ki_coeff_full_soc = KI_COEFF_FULL_SOC_DEFAULT;
 
@@ -2226,9 +2226,6 @@ static int fg_esr_timer_config(struct fg_chip *chip, bool sleep)
 
 static void fg_batt_avg_update(struct fg_chip *chip)
 {
-	if (chip->charge_status == chip->prev_charge_status)
-		return;
-
 	cancel_delayed_work_sync(&chip->batt_avg_work);
 	fg_circ_buf_clr(&chip->ibatt_circ_buf);
 	fg_circ_buf_clr(&chip->vbatt_circ_buf);
@@ -2459,7 +2456,6 @@ static void status_change_work(struct work_struct *work)
 	}
 
 	fg_batt_avg_update(chip);
-	chip->prev_charge_status = chip->charge_status;
 out:
 	fg_dbg(chip, FG_STATUS, "charge_status:%d charge_type:%d charge_done:%d\n",
 		chip->charge_status, chip->charge_type, chip->charge_done);
@@ -3436,6 +3432,22 @@ static int fg_notifier_cb(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static int twm_notifier_cb(struct notifier_block *nb,
+				unsigned long action, void *data)
+{
+	struct fg_chip *chip = container_of(nb, struct fg_chip, twm_nb);
+
+	if (action != PMIC_TWM_CLEAR &&
+			action != PMIC_TWM_ENABLE) {
+		pr_debug("Unsupported option %lu\n", action);
+		return NOTIFY_OK;
+	}
+
+	chip->twm_state = (u8)action;
+
+	return NOTIFY_OK;
+}
+
 static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TEMP,
@@ -4230,7 +4242,11 @@ static int fg_parse_slope_limit_coefficients(struct fg_chip *chip)
 static int fg_parse_ki_coefficients(struct fg_chip *chip)
 {
 	struct device_node *node = chip->dev->of_node;
-	int rc, i;
+	int rc, i, temp;
+
+	rc = of_property_read_u32(node, "qcom,ki-coeff-full-dischg", &temp);
+	if (!rc)
+		chip->dt.ki_coeff_full_soc_dischg = temp;
 
 	rc = fg_parse_dt_property_u32_array(node, "qcom,ki-coeff-soc-dischg",
 		chip->dt.ki_coeff_soc, KI_COEFF_SOC_LEVELS);
@@ -4671,6 +4687,9 @@ static int fg_parse_dt(struct fg_chip *chip)
 	chip->dt.disable_esr_pull_dn = of_property_read_bool(node,
 					"qcom,fg-disable-esr-pull-dn");
 
+	chip->dt.disable_fg_twm = of_property_read_bool(node,
+					"qcom,fg-disable-in-twm");
+
 	return 0;
 }
 
@@ -4711,7 +4730,6 @@ static int fg_gen3_probe(struct spmi_device *spmi)
 	chip->debug_mask = &fg_gen3_debug_mask;
 	chip->irqs = fg_irqs;
 	chip->charge_status = -EINVAL;
-	chip->prev_charge_status = -EINVAL;
 	chip->ki_coeff_full_soc = -EINVAL;
 	chip->spmi = spmi;
 
@@ -4848,6 +4866,11 @@ static int fg_gen3_probe(struct spmi_device *spmi)
 		goto exit;
 	}
 
+	chip->twm_nb.notifier_call = twm_notifier_cb;
+	rc = qpnp_misc_twm_notifier_register(&chip->twm_nb);
+	if (rc < 0)
+		pr_err("Failed to register twm_notifier_cb rc=%d\n", rc);
+
 	rc = fg_register_interrupts(chip);
 	if (rc < 0) {
 		dev_err(chip->dev, "Error in registering interrupts, rc:%d\n",
@@ -4948,12 +4971,26 @@ static void fg_gen3_shutdown(struct spmi_device *spmi)
 {
 	struct fg_chip *chip = dev_get_drvdata(&spmi->dev);
 	int rc;
+	u8 mask;
 
 	rc = fg_set_esr_timer(chip, chip->dt.esr_timer_shutdown[TIMER_RETRY],
 				chip->dt.esr_timer_shutdown[TIMER_MAX], false,
 				FG_IMA_NO_WLOCK);
 	if (rc < 0)
 		pr_err("Error in setting ESR timer at shutdown, rc=%d\n", rc);
+
+	if (chip->twm_state == PMIC_TWM_ENABLE && chip->dt.disable_fg_twm) {
+		rc = fg_masked_write(chip, BATT_SOC_EN_CTL(chip),
+					FG_ALGORITHM_EN_BIT, 0);
+		if (rc < 0)
+			pr_err("Error in disabling FG rc=%d\n", rc);
+
+		mask = BCL_RST_BIT | MEM_RST_BIT | ALG_RST_BIT;
+		rc = fg_masked_write(chip, BATT_SOC_RST_CTRL0(chip),
+					mask, mask);
+		if (rc < 0)
+			pr_err("Error in disabling FG resets rc=%d\n", rc);
+	}
 
 	fg_cleanup(chip);
 }
