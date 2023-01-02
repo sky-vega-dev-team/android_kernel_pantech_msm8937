@@ -829,3 +829,6 @@ enum dpm_order {
 };
 
 #endif /* _LINUX_PM_H */
+
+#define DEFINE_SIMPLE_DEV_PM_OPS(name, suspend_fn, resume_fn) const struct dev_pm_ops name = { 	SET_SYSTEM_SLEEP_PM_OPS(suspend_fn, resume_fn) }
+#define pm_sleep_ptr(_ptr) (_ptr)
