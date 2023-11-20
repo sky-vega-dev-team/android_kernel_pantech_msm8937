@@ -2846,13 +2846,13 @@ static ssize_t mxt_show_instance(char *buf, int count,
 	int i;
 
 	if (mxt_obj_instances(object) > 1)
-		count += scnprintf(buf + count, PAGE_SIZE - count,
+		count += sysfs_emit_at(buf, count,
 				   "Instance %u\n", instance);
 
 	for (i = 0; i < mxt_obj_size(object); i++)
-		count += scnprintf(buf + count, PAGE_SIZE - count,
+		count += sysfs_emit_at(buf, count,
 				"\t[%2u]: %02x (%d)\n", i, val[i], val[i]);
-	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
+	count += sysfs_emit_at(buf, count, "\n");
 
 	return count;
 }
@@ -2879,7 +2879,7 @@ static ssize_t mxt_object_show(struct device *dev,
 		if (!mxt_object_readable(object->type))
 			continue;
 
-		count += scnprintf(buf + count, PAGE_SIZE - count,
+		count += sysfs_emit_at(buf, count,
 				"T%u:\n", object->type);
 
 		for (j = 0; j < mxt_obj_instances(object); j++) {
