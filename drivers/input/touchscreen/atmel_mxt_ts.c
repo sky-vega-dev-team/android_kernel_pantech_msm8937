@@ -25,6 +25,7 @@
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
+#include <linux/input/touchscreen.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/of.h>
@@ -362,6 +363,8 @@ struct mxt_data {
 	enum mxt_suspend_mode suspend_mode;
 
 	u32 wakeup_method;
+
+	struct touchscreen_properties prop;
 };
 
 struct mxt_vb2_buffer {
@@ -895,8 +898,7 @@ static void mxt_proc_t9_message(struct mxt_data *data, u8 *message)
 
 		/* Touch active */
 		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, 1);
-		input_report_abs(input_dev, ABS_MT_POSITION_X, x);
-		input_report_abs(input_dev, ABS_MT_POSITION_Y, y);
+		touchscreen_report_pos(input_dev, &data->prop, x, y, true);
 		input_report_abs(input_dev, ABS_MT_PRESSURE, amplitude);
 		input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR, area);
 	} else {
@@ -1017,8 +1019,7 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 			id, type, x, y, major, pressure, orientation);
 
 		input_mt_report_slot_state(input_dev, tool, 1);
-		input_report_abs(input_dev, ABS_MT_POSITION_X, x);
-		input_report_abs(input_dev, ABS_MT_POSITION_Y, y);
+		touchscreen_report_pos(input_dev, &data->prop, x, y, true);
 		input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR, major);
 		input_report_abs(input_dev, ABS_MT_PRESSURE, pressure);
 		input_report_abs(input_dev, ABS_MT_DISTANCE, distance);
@@ -2218,6 +2219,8 @@ static int mxt_initialize_input_device(struct mxt_data *data)
 		input_set_abs_params(input_dev, ABS_MT_ORIENTATION,
 				     0, 255, 0, 0);
 	}
+
+	touchscreen_parse_properties(input_dev, true, &data->prop);
 
 	/* For T15 and T97 Key Array */
 	if (data->T15_reportid_min || data->T97_reportid_min) {
