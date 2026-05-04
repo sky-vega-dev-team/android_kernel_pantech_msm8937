@@ -282,8 +282,8 @@ struct mxt_cfg {
 	off_t raw_pos;
 
 	u8 *mem;
-	size_t mem_size;
-	int start_ofs;
+	u16 mem_size;
+	u16 start_ofs;
 
 	struct mxt_info info;
 };
@@ -1649,6 +1649,14 @@ static int mxt_update_cfg(struct mxt_data *data, const struct firmware *fw)
 	cfg.start_ofs = MXT_OBJECT_START +
 			data->info->object_num * sizeof(struct mxt_object) +
 			MXT_INFO_CHECKSUM_SIZE;
+
+	if (data->mem_size <= cfg.start_ofs) {
+		dev_err(dev, "Memory size too small: %u < %u\n",
+			data->mem_size, cfg.start_ofs);
+		ret = -EINVAL;
+		goto release_raw;
+	}
+
 	cfg.mem_size = data->mem_size - cfg.start_ofs;
 	cfg.mem = kzalloc(cfg.mem_size, GFP_KERNEL);
 	if (!cfg.mem) {
