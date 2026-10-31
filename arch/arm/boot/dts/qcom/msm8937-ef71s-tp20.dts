@@ -20,9 +20,6 @@
 #include "msm8937-gpio-keys-ef71-ws20.dtsi"
 #include "msm8937-led-lp5523-ef71-ws20.dtsi"
 #include "msm8937-camera-sensor-ef71ie_tp20.dtsi" //CONFIG_PANTECH_CAMERA
-#include "msm8937-camera-sensor-ef71ie_tp10.dtsi" //CONFIG_PANTECH_CAMERA
-#include "msm8937-camera-sensor-ef71ie_ws10.dtsi" //CONFIG_PANTECH_CAMERA
-#include "msm8937-camera-sensor-ef71ie.dtsi" //CONFIG_PANTECH_CAMERA
 #include "msm8937-gpio-pmic-ef71-tp10.dtsi"
 / {
 //	model = "Qualcomm Technologies, Inc. MSM8937-PMI8950 MTP";
