@@ -385,4 +385,28 @@ struct msm_camera_i2c_reg_setting_array {
 	enum msm_camera_i2c_data_type data_type;
 	unsigned short delay;
 };
+/* Used by msm_cam_sensor.h for the IR LED and IR cut modules */
+enum msm_ir_led_cfg_type_t {
+	CFG_IR_LED_INIT = 0,
+	CFG_IR_LED_RELEASE,
+	CFG_IR_LED_OFF,
+	CFG_IR_LED_ON,
+};
+#define CFG_IR_LED_INIT CFG_IR_LED_INIT
+#define CFG_IR_LED_RELEASE CFG_IR_LED_RELEASE
+#define CFG_IR_LED_OFF CFG_IR_LED_OFF
+#define CFG_IR_LED_ON CFG_IR_LED_ON
+
+enum msm_ir_cut_cfg_type_t {
+	CFG_IR_CUT_INIT = 0,
+	CFG_IR_CUT_RELEASE,
+	CFG_IR_CUT_OFF,
+	CFG_IR_CUT_ON,
+};
+#define CFG_IR_CUT_INIT CFG_IR_CUT_INIT
+#define CFG_IR_CUT_RELEASE CFG_IR_CUT_RELEASE
+#define CFG_IR_CUT_OFF CFG_IR_CUT_OFF
+#define CFG_IR_CUT_ON CFG_IR_CUT_ON
+
+
 #endif /* __LINUX_MSM_CAM_SENSOR_H */
