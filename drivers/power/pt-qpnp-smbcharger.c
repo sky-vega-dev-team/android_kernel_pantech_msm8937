@@ -272,6 +272,9 @@ struct smbchg_chip {
 	int				previous_soc;
 	int				usb_online;
 	bool				dc_present;
+#ifdef CONFIG_PANTECH_PMIC_CHARGER_WIRELESS
+	bool				wlc_type_reported;
+#endif
 	bool				usb_present;
 	bool				batt_present;
 	int				otg_retries;
@@ -4985,8 +4988,27 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 	}
 #endif
 
-	if (!chip->skip_usb_notification)
+	if (!chip->skip_usb_notification) {
 		power_supply_set_supply_type(chip->usb_psy, type);
+#ifdef CONFIG_PANTECH_PMIC_CHARGER_WIRELESS
+		/*
+		 * The USB supply only takes a new type through REAL_TYPE, so
+		 * report the pad there for userspace to see a wireless
+		 * charger, and drop it again when the pad goes away.
+		 */
+		if (type == POWER_SUPPLY_TYPE_WIRELESS ||
+				(type == POWER_SUPPLY_TYPE_UNKNOWN &&
+				 chip->wlc_type_reported)) {
+			const union power_supply_propval val = {type,};
+
+			if (chip->usb_psy->set_property &&
+					!chip->usb_psy->set_property(chip->usb_psy,
+					POWER_SUPPLY_PROP_REAL_TYPE, &val))
+				chip->wlc_type_reported =
+					(type == POWER_SUPPLY_TYPE_WIRELESS);
+		}
+#endif
+	}
 
 	/* otherwise if it is unknown, set type after the vote */
 	if (type == POWER_SUPPLY_TYPE_UNKNOWN)
@@ -7242,6 +7264,12 @@ static irqreturn_t dcin_uv_handler(int irq, void *_chip)
 		smbchg_change_usb_supply_type(chip, POWER_SUPPLY_TYPE_UNKNOWN);
 		//power_supply_set_present(chip->usb_psy, chip->dc_present);
 		power_supply_set_health_state(chip->usb_psy,POWER_SUPPLY_HEALTH_UNKNOWN);
+		/*
+		 * The pad was reported by setting the USB supply online, so
+		 * take it offline again or userspace keeps showing a charger.
+		 */
+		if (!is_usb_present(chip))
+			power_supply_set_online(chip->usb_psy, 0);
 		vote(chip->dc_icl_votable, SW_WIRELESS_ICL_VOTER, false, 0);
 #ifdef CONFIG_PANTECH_PMIC_NONSTANDARD_CHARGER
 		chip->nc_charger_status = NONSTANDARD_READY;
