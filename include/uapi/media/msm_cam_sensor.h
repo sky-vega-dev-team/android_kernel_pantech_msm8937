@@ -1,3 +1,6 @@
+#ifdef CONFIG_MACH_MSM8937_EF71S
+#include "msm_cam_sensor-ef71.h"
+#else
 #ifndef __UAPI_LINUX_MSM_CAM_SENSOR_H
 #define __UAPI_LINUX_MSM_CAM_SENSOR_H
 
@@ -605,4 +608,4 @@ struct sensor_init_cfg_data {
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 15, struct msm_ir_cut_cfg_data_t)
 
 #endif
-
+#endif
