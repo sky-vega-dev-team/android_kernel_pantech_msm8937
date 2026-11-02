@@ -127,13 +127,7 @@
 #define IPA_IOCTL_FNR_COUNTER_ALLOC             74
 #define IPA_IOCTL_FNR_COUNTER_DEALLOC           75
 #define IPA_IOCTL_FNR_COUNTER_QUERY             76
-#ifdef __KERNEL__
-/*
- * Not exported: IPA v2 on the EF71 has no FnR counters, and the EF71
- * IPACM only builds its counter path for IPA v3.
- */
 #define IPA_IOCTL_SET_FNR_COUNTER_INFO          77
-#endif
 #define IPA_IOCTL_GET_NAT_IN_SRAM_INFO          78
 #define IPA_IOCTL_APP_CLOCK_VOTE                79
 

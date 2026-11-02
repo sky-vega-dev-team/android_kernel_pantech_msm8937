@@ -2041,15 +2041,6 @@ struct v4l2_encoder_cmd {
 #define V4L2_QCOM_CMD_FLUSH_OUTPUT	V4L2_CMD_FLUSH_OUTPUT
 #define V4L2_QCOM_CMD_FLUSH_CAPTURE	V4L2_CMD_FLUSH_CAPTURE
 
-#ifndef __KERNEL__
-/* msm-3.18 names the EF71 OMX components still use, on the msm-4.19 values */
-#define V4L2_DEC_QCOM_CMD_FLUSH		V4L2_CMD_FLUSH
-#define V4L2_DEC_QCOM_CMD_FLUSH_OUTPUT	V4L2_CMD_FLUSH_OUTPUT
-#define V4L2_DEC_QCOM_CMD_FLUSH_CAPTURE	V4L2_CMD_FLUSH_CAPTURE
-#define V4L2_ENC_QCOM_CMD_FLUSH		V4L2_CMD_FLUSH
-#define V4L2_QCOM_BUF_DATA_CORRUPT	V4L2_BUF_FLAG_DATA_CORRUPT
-#endif
-
 /* Play format requirements (returned by the driver): */
 
 /* The decoder has no special format requirements */
