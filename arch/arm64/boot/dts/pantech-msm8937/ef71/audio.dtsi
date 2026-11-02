@@ -5,6 +5,14 @@
  * the PM8937 analog codec. Values from the msm-3.18 EF71 device tree.
  */
 
+/*
+ * The EF71 ADSP (ADSP.8953.2.8.1-00023) predates the AVCS version query and
+ * the V4/V5 PCM media formats: ASM_STREAM_CMD_OPEN_WRITE_V3 fails with them.
+ */
+/ {
+	qcom,enable-legacy-adsp-hacks;
+};
+
 &int_codec {
 	status = "disabled";
 };
