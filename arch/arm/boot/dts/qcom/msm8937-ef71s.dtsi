@@ -156,6 +156,8 @@ i2c@78b6000{/* BLSP2 QUP2 */
 		atmel,irq-gpio = <&tlmm 65 0x2008>;
 		atmel,iovdd-gpio = <&tlmm 39 0x00>;
 
+		/* EF71S only (NT35695 panel) */
+		pantech,panel = "nt35695";
 	};
 };
 &usb_otg { /* BS2 USB part */

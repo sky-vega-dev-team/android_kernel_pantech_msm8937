@@ -1,0 +1,70 @@
+/*
+ * EF71AS (IM-100S with the larger FT8716 in-cell panel).
+ *
+ * Included on top of msm8937-ef71s.dtsi, so one DTB serves both the EF71S
+ * and the EF71AS. Both bootloaders report the same board ids; the panel
+ * name the bootloader passes in mdss_mdp.panel tells them apart:
+ *  - display: the bootloader picks the FT8716 panel node below
+ *  - touch:   the FocalTech FT8716 driver only probes with "ft8716",
+ *             the Atmel one (msm8937-ef71s.dtsi) only with "nt35695"
+ *  - haptics: the LRA settings are only used with "ft8716"
+ *
+ * Values from the stock EF71AS device tree.
+ */
+
+#include "dsi-panel-ft8716-1080p-video-ef71.dtsi"
+
+&dsi_ft8716_1080p_video_ef71 {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_labibb>;
+	qcom,cont-splash-enabled;
+};
+
+&i2c_3 { /* BLSP1 QUP3 */
+	/*
+	 * Touch of the FT8716, on the same GPIOs as the EF71S Atmel. Driver:
+	 * drivers/input/touchscreen/ft8716 (FocalTech Qualcomm_Ver 1.3.1).
+	 */
+	focaltech@38 {
+		compatible = "focaltech,fts";
+		reg = <0x38>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <65 0x2008>;
+		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		focaltech,name = "fts";
+		focaltech,family-id = <0x87>;
+		focaltech,reset-gpio = <&tlmm 64 0x00>;
+		focaltech,irq-gpio = <&tlmm 65 0x2008>;
+		focaltech,display-coords = <0 0 1080 1920>;
+		focaltech,panel-coords = <0 0 1080 1920>;
+		focaltech,no-force-update;
+		focaltech,i2c-pull-up;
+		focaltech,group-id = <1>;
+		focaltech,hard-reset-delay-ms = <20>;
+		focaltech,soft-reset-delay-ms = <300>;
+		focaltech,num-max-touches = <10>;
+		focaltech,fw-name = "FT_Upgrade_App.i";
+		focaltech,fw-delay-aa-ms = <50>;
+		focaltech,fw-delay-55-ms = <30>;
+		focaltech,fw-upgrade-id1 = <0x87>;
+		focaltech,fw-upgrade-id2 = <0xa6>;
+		focaltech,fw-delay-readid-ms = <10>;
+		focaltech,fw-delay-era-flsh-ms = <2000>;
+		/* The FT8716 reports both axes mirrored */
+		pantech,x-flip;
+		pantech,y-flip;
+		pantech,panel = "ft8716";
+	};
+};
+
+/* ERM on the EF71S, LRA on the EF71AS */
+&pmi_haptic {
+	pantech,lra-panel = "ft8716";
+	pantech,lra-wave-play-rate-us = <4165>;
+	qcom,lra-auto-res-mode = "qwd";
+	qcom,lra-high-z = "opt1";
+	qcom,lra-res-cal-period = <0>;
+	qcom,correct-lra-drive-freq;
+	qcom,misc-trim-error-rc19p2-clk-reg-present;
+};
