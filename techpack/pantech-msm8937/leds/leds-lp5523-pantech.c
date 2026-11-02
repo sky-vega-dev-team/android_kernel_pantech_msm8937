@@ -40,7 +40,7 @@
 #include <linux/of_gpio.h>
 //-- p11309
 #ifdef OFFLINE_CHARGER_LED_CONTROL
-#include <soc/qcom/smem.h>
+#include <pantech/smem.h>
 #include <linux/timer.h>
 #include <linux/time.h>
 #endif
@@ -72,7 +72,7 @@ struct lp5523_chip *pan_led;
 
 #ifdef OFFLINE_CHARGER_LED_CONTROL
 static struct timer_list offline_led_check_timer;
-static void offline_led_check_timer_func(unsigned long data);
+static void offline_led_check_timer_func(struct timer_list *t);
 //extern int get_batt_status(void);
 #define POWER_SUPPLY_STATUS_CHARGING       1
 #define POWER_SUPPLY_STATUS_DISCHARGING    2
@@ -175,7 +175,7 @@ struct work_struct  boot_led_work;
 static struct timer_list boot_led_check_timer;
 #define BOOTING_RAINBOW_LED_CHECK_INTERVAL 240
 static void ef71_boot_led_work(struct work_struct *work);
-static void boot_rainbow_led_timer_func(unsigned long data);
+static void boot_rainbow_led_timer_func(struct timer_list *t);
 #endif
 
 #ifdef LED_DIMMING_IN_CHARGING
@@ -704,7 +704,7 @@ int check_dimming_channel(void){
 
 #ifdef LED_OFF_CHECK_TIMER_USAGE
 // Callback function of led off timer.
-static void led_off_check_timer_func(unsigned long data)
+static void led_off_check_timer_func(struct timer_list *t)
 {
 	pan_dbg("led_off_check_timer_func\n");
 	if(led_off_check){	  
@@ -717,7 +717,7 @@ static void led_off_check_timer_func(unsigned long data)
 
 
 #ifdef OFFLINE_CHARGER_LED_CONTROL
-static void offline_led_check_timer_func(unsigned long data)
+static void offline_led_check_timer_func(struct timer_list *t)
 {
 	pan_err("offline_led_check_timer_func\n");
 	control_led->brightness = EF59_LED_OFFLINE_LED_CHECK;
@@ -725,7 +725,7 @@ static void offline_led_check_timer_func(unsigned long data)
 	return;
 }
 
-static void booting_led_check_timer_func(unsigned long data)
+static void booting_led_check_timer_func(struct timer_list *t)
 {
 	pan_err("booting_led_check_timer_func boot_led_off -> %d\n",boot_led_off);
 	if(boot_led_off){
@@ -738,7 +738,7 @@ static void booting_led_check_timer_func(unsigned long data)
 #endif
 
 #ifdef EF60_BOOT_RAINBOW_LED 
-static void boot_rainbow_led_timer_func(unsigned long data)
+static void boot_rainbow_led_timer_func(struct timer_list *t)
 {
 	pan_dbg("boot_rainbow_led_timer_func boot_led_off -> %d\n",boot_led_off);
 	if(boot_led_off){
@@ -2523,8 +2523,8 @@ static int lp5523_probe(struct i2c_client *client,
 	printk("+-----------------------------------------+\n");
 
 #if defined (OFFLINE_CHARGER_LED_CONTROL)
-	smem_id_vendor1_ptr =  (oem_pm_smem_vendor1_data_type*)smem_alloc(SMEM_ID_VENDOR1,sizeof(oem_pm_smem_vendor1_data_type),0,SMEM_ANY_HOST_FLAG);
-	if(smem_id_vendor1_ptr->power_on_mode == 0){
+	smem_id_vendor1_ptr = pantech_smem_vendor1();
+	if (smem_id_vendor1_ptr && smem_id_vendor1_ptr->power_on_mode == 0) {
 		pan_err(" OFFLINE_CHARGER is enabled. LED DIMMING ON\n");
 		offline_charger=1;
 	}
@@ -2671,9 +2671,7 @@ static int lp5523_probe(struct i2c_client *client,
 #endif
 #ifdef LED_OFF_CHECK_TIMER_USAGE
     INIT_WORK(&led_off_check_work,lp5523_led_off_check_work);
-    init_timer(&led_off_check_timer);
-		led_off_check_timer.function = led_off_check_timer_func;
-		led_off_check_timer.data = 0;
+    timer_setup(&led_off_check_timer, led_off_check_timer_func, 0);
 #endif
 
 #if defined(CONFIG_MACH_MSM8937_EF71IE) || defined(CONFIG_MACH_MSM8937_EF71S) || defined(CONFIG_MACH_MSM8937_EF71K)
@@ -2683,9 +2681,7 @@ static int lp5523_probe(struct i2c_client *client,
 
 #ifdef OFFLINE_CHARGER_LED_CONTROL
 	if(offline_charger){
-		init_timer(&offline_led_check_timer);
-		offline_led_check_timer.function = offline_led_check_timer_func;
-		offline_led_check_timer.data = 0;
+		timer_setup(&offline_led_check_timer, offline_led_check_timer_func, 0);
 		mod_timer(&offline_led_check_timer, jiffies + msecs_to_jiffies(OFFLINE_LEC_CHECK_INTERVAL));
 		
 #ifdef LED_DIMMING_IN_CHARGING    
@@ -2736,15 +2732,11 @@ static int lp5523_probe(struct i2c_client *client,
     pan_err("Booting Rainbow Led start.\n");
 
     // Rainbow LED OFF Event timer is initialized for sys vob. sys vob don't receive led off event from framework layer.
-    init_timer(&offline_led_check_timer);
-		offline_led_check_timer.function = booting_led_check_timer_func;
-		offline_led_check_timer.data = 0;
+    timer_setup(&offline_led_check_timer, booting_led_check_timer_func, 0);
 		mod_timer(&offline_led_check_timer, jiffies + msecs_to_jiffies(BOOTING_LEC_CHECK_INTERVAL));
 
     // Rainbow LED Pattern change timer. Interval time is defined BOOTING_RAINBOW_LED_CHECK_INTERVAL.
-		init_timer(&boot_led_check_timer);
-		boot_led_check_timer.function = boot_rainbow_led_timer_func;
-		boot_led_check_timer.data = 0;
+		timer_setup(&boot_led_check_timer, boot_rainbow_led_timer_func, 0);
 
 		//Init Rainbow led work structure.
     INIT_WORK(&boot_led_work,ef71_boot_led_work);
@@ -2758,9 +2750,7 @@ static int lp5523_probe(struct i2c_client *client,
     
 #else
 		pan_err("Booting Led start.\n");
-		init_timer(&offline_led_check_timer);
-		offline_led_check_timer.function = booting_led_check_timer_func;
-		offline_led_check_timer.data = 0;
+		timer_setup(&offline_led_check_timer, booting_led_check_timer_func, 0);
 		mod_timer(&offline_led_check_timer, jiffies + msecs_to_jiffies(BOOTING_LEC_CHECK_INTERVAL));
 		boot_led_off = 1;
 		ret = lp5523_write(pan_led->client, LP5523_REG_OP_MODE, LP5523_CMD_DISABLED);

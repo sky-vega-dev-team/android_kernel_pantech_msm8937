@@ -10,6 +10,7 @@ if MACH_PANTECH_MSM8937
 
 source "techpack/pantech-msm8937/mach/Kconfig"
 source "techpack/pantech-msm8937/input/Kconfig"
+source "techpack/pantech-msm8937/leds/Kconfig"
 source "techpack/pantech-msm8937/touchscreen/Kconfig"
 
 endif # MACH_PANTECH_MSM8937

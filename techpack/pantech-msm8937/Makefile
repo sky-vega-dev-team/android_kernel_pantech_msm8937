@@ -4,4 +4,5 @@
 subdir-ccflags-y += -I$(srctree)/techpack/pantech-msm8937/include
 
 obj-$(CONFIG_INPUT) += input/
+obj-$(CONFIG_NEW_LEDS) += leds/
 obj-$(CONFIG_INPUT_TOUCHSCREEN) += touchscreen/

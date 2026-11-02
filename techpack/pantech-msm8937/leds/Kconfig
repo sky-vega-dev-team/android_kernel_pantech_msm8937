@@ -1,0 +1,6 @@
+config LEDS_LP5523_PANTECH
+	bool "Pantech LP5523 LED driver"
+	depends on I2C && LEDS_CLASS
+	help
+	  Pantech's own driver for the LP5523 notification LEDs of the EF71,
+	  with the rainbow while booting. Not the upstream LEDS_LP5523.
