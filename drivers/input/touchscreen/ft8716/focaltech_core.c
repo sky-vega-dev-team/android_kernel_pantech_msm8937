@@ -793,9 +793,10 @@ static int fts_power_on(struct fts_ts_data *data, bool on)
 		return rc;
 	}
 */
-       
-			rc = gpio_direction_output(data->pdata->power_gpio, 1);
-       
+
+	/* ef71: the in-cell FT8716 has no power GPIO of its own */
+	if (gpio_is_valid(data->pdata->power_gpio))
+		gpio_direction_output(data->pdata->power_gpio, 1);
 
 
 	rc = regulator_enable(data->vcc_i2c);
@@ -807,17 +808,20 @@ static int fts_power_on(struct fts_ts_data *data, bool on)
 
 
 power_off:
-				rc = gpio_direction_output(data->pdata->power_gpio, 0);
-	if (rc) {
-		dev_err(&data->client->dev, " vdd disable failed rc=%d\n", rc);
-		return rc;
+	if (gpio_is_valid(data->pdata->power_gpio)) {
+		rc = gpio_direction_output(data->pdata->power_gpio, 0);
+		if (rc) {
+			dev_err(&data->client->dev, " vdd disable failed rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	rc = regulator_disable(data->vcc_i2c);
 	if (rc) {
 		dev_err(&data->client->dev, "Regulator vcc_i2c disable failed rc=%d\n", rc);
 		//rc = regulator_enable(data->vdd);
-		 gpio_direction_output(data->pdata->power_gpio, 1);
+		if (gpio_is_valid(data->pdata->power_gpio))
+			gpio_direction_output(data->pdata->power_gpio, 1);
 		if (rc) {
 			dev_err(&data->client->dev,
 				"Regulator vdd enable failed rc=%d\n", rc);

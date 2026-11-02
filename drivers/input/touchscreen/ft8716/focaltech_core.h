@@ -258,7 +258,11 @@ struct fts_psensor_platform_data {
 #define FTS_APK_DEBUG
 #define FTS_SYSFS_DEBUG
 #define FTS_CTL_IIC
-#define FTS_AUTO_UPGRADE
+/*
+ * ef71: no auto upgrade. The bundled app image is for another panel
+ * (L8150/FT3327); flashing it would break the EF71AS touch.
+ */
+/* #define FTS_AUTO_UPGRADE */
 extern struct fts_Upgrade_Info fts_updateinfo_curr;
 extern struct i2c_client *fts_i2c_client;
 extern struct fts_ts_data *fts_wq_data;
