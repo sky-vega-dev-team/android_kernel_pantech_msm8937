@@ -1,0 +1,6 @@
+config INPUT_GPIO_WHEEL_ALPS_EC05E
+	bool "Pantech ALPS EC05E GPIO wheel"
+	depends on GPIOLIB && INPUT
+	help
+	  The rotary wheel of the EF71 (volume keys by default), read from
+	  its two encoder terminals on GPIOs.
