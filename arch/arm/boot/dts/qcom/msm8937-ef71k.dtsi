@@ -260,3 +260,12 @@ i2c@78b6000{/* BLSP2 QUP2 */
 	};
 };
 /* GPIO INIT (BS1)*/
+
+/*
+ * The Pantech bootloader draws its splash at 0x8dd00000 (stock EF71S and
+ * EF71AS device trees). With the generic 0x90000000 the kernel took over a
+ * blank buffer, which a video mode panel (FT8716) shows as white.
+ */
+&cont_splash_mem {
+	reg = <0x0 0x8dd00000 0x0 0x1400000>;
+};
