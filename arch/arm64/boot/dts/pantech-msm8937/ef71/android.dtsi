@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+/*
+ * The EF71 has no vendor partition and no AVB: first stage init mounts
+ * system from here and the vendor tree lives in /system/vendor.
+ */
+&firmware {
+	android {
+		/delete-node/ vbmeta;
+
+		fstab {
+			/delete-node/ vendor;
+
+			system {
+				compatible = "android,system";
+				dev = "/dev/block/platform/soc/7824900.sdhci/by-name/system";
+				type = "ext4";
+				mnt_flags = "ro,barrier=1,discard";
+				fsmgr_flags = "wait,verify";
+				status = "ok";
+			};
+		};
+	};
+};
+
+/ {
+	reserved-memory {
+		ramoops: ramoops {
+			compatible = "ramoops";
+			reg = <0 0xb0000000 0 0x800000>;
+			record-size = <0x200000>;
+			console-size = <0x200000>;
+			pmsg-size = <0x200000>;
+		};
+	};
+};

@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+&vendor {
+	mtp_batterydata: qcom,battery-data {
+		/delete-node/ qcom,itech-3000mah;
+		/delete-node/ qcom,ascent-3450mah;
+
+		#include "batterydata/batterydata-ef71-2950mah.dtsi"
+	};
+};
+
+/* 4.4 V cell: float at 4.42 V and terminate at 200 mA, as on the stock kernel */
+&qpnp_smbcharger {
+	qcom,float-voltage-mv = <4420>;
+	qcom,iterm-ma = <200>;
+	/delete-property/ qcom,autoadjust-vfloat;
+	/delete-property/ qcom,force-aicl-rerun;
+	/delete-property/ qcom,chg-led-support;
+	/delete-property/ qcom,chg-led-sw-controls;
+	/delete-property/ qcom,parallel-usb-min-current-ma;
+	/delete-property/ qcom,parallel-usb-9v-min-current-ma;
+	/delete-property/ qcom,parallel-allowed-lowering-ma;
+};

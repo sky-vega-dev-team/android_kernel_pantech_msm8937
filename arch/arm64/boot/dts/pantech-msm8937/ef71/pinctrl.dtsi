@@ -1,0 +1,181 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+&tlmm {
+	/* Board defaults the bootloader does not set (BS1 GPIO init) */
+	pinctrl-names = "default";
+	pinctrl-0 = <&gpio_pull_down_default &gpio_pull_up_default>;
+
+	gpio_pull_down_default: gpio_pull_down_default {
+		mux {
+			pins = "gpio45";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio45";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+	};
+
+	gpio_pull_up_default: gpio_pull_up_default {
+		mux {
+			pins = "gpio1";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio1";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+
+	/* GPIO 98/99 are BLSP2 QUP4 (i2c_8) here: only drive the panel reset */
+	pmx_mdss {
+		mdss_dsi_active {
+			mux {
+				pins = "gpio60";
+			};
+
+			config {
+				pins = "gpio60";
+			};
+		};
+
+		mdss_dsi_suspend {
+			mux {
+				pins = "gpio60";
+			};
+
+			config {
+				pins = "gpio60";
+			};
+		};
+	};
+
+	i2c_8 {
+		i2c_8_active: i2c_8_active {
+			mux {
+				pins = "gpio98", "gpio99";
+				function = "blsp_i2c8";
+			};
+
+			config {
+				pins = "gpio98", "gpio99";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		i2c_8_sleep: i2c_8_sleep {
+			mux {
+				pins = "gpio98", "gpio99";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio98", "gpio99";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+
+	i2c_2 {
+		i2c_2_sleep {
+			config {
+				/delete-property/ bias-disable;
+				bias-pull-up;
+			};
+		};
+	};
+
+	i2c_5 {
+		i2c_5_sleep {
+			config {
+				/delete-property/ bias-disable;
+				bias-pull-up;
+			};
+		};
+	};
+
+	tlmm_gpio_key {
+		gpio_key_wheel_active: gpio_key_wheel_active {
+			mux {
+				pins = "gpio126";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio126";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		gpio_key_wheel_suspend: gpio_key_wheel_suspend {
+			mux {
+				pins = "gpio126";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio126";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+
+	tlmm_gpio_wheel_alps_ec05e {
+		gpio_wheel_alps_ec05e_active: gpio_wheel_alps_ec05e_active {
+			mux {
+				pins = "gpio127", "gpio128";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio127", "gpio128";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		gpio_wheel_alps_ec05e_suspend: gpio_wheel_alps_ec05e_suspend {
+			mux {
+				pins = "gpio127", "gpio128";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio127", "gpio128";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+
+	/* Front flash LED enable moved from GPIO 50 to GPIO 34 */
+	tlmm_pmi_flash_led {
+		front_flash_led_enable {
+			mux {
+				pins = "gpio34";
+			};
+
+			config {
+				pins = "gpio34";
+			};
+		};
+
+		front_flash_led_disable {
+			mux {
+				pins = "gpio34";
+			};
+
+			config {
+				pins = "gpio34";
+			};
+		};
+	};
+};

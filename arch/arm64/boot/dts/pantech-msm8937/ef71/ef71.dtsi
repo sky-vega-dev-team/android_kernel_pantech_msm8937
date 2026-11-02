@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Pantech EF71 common board description, on top of the MSM8937-PMI8950 MTP.
+ * Ported from the EF71 msm-3.18 device trees.
+ */
+
+#include "pinctrl.dtsi"
+
+#include "android.dtsi"
+#include "battery.dtsi"
+#include "camera.dtsi"
+#include "display.dtsi"
+#include "input.dtsi"
+#include "pmic.dtsi"
+#include "soc.dtsi"

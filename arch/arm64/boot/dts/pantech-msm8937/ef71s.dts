@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Pantech VEGA IRON 2 (EF71S / IM-100S, EF71AS)
+ *
+ * One image serves the EF71S (NT35695 panel, Atmel touch, ERM) and the
+ * EF71AS (FT8716 panel and touch, LRA): both bootloaders report the same
+ * board ids and tell the panels apart through mdss_mdp.panel.
+ */
+
+/dts-v1/;
+
+#include "qcom/msm8937.dtsi"
+#include "qcom/msm8937-pmi8950-mtp.dtsi"
+
+#include "ef71/ef71.dtsi"
+
+/ {
+	model = "Pantech, Inc. EF71S from MSM8937-PMI8950 MTP";
+	compatible = "qcom,msm8937-mtp", "qcom,msm8937", "qcom,mtp",
+		     "pantech,ef71s";
+	/* Every EF71S/EF71AS board revision (pt10..tp20) */
+	qcom,board-id = <206 0>, <205 0>, <204 0>, <203 0>, <202 0>, <201 0>;
+	qcom,pmic-id = <0x10019 0x010011 0x0 0x0>;
+};

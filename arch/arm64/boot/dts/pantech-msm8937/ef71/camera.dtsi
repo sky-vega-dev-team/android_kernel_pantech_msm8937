@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+/*
+ * The MTP camera modules are not fitted. The EF71 sensors need the
+ * Pantech camera_v2 fork and come with it.
+ */
+&cci {
+	/delete-node/ qcom,actuator@0;
+	/delete-node/ qcom,actuator@1;
+	/delete-node/ qcom,eeprom@0;
+	/delete-node/ qcom,eeprom@1;
+	/delete-node/ qcom,camera@0;
+	/delete-node/ qcom,camera@1;
+	/delete-node/ qcom,camera@2;
+};
+
+/* Only flash_0 and torch_0 are wired */
+&led_flash0 {
+	qcom,flash-source = <&pmi8950_flash0>;
+	qcom,torch-source = <&pmi8950_torch0>;
+};

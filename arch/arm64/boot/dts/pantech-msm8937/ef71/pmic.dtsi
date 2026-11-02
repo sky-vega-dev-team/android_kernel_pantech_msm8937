@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+/*
+ * ERM on the EF71S. The EF71AS LRA settings are picked from the panel by
+ * the Pantech haptics changes, which come with the driver.
+ */
+&pmi_haptic {
+	status = "ok";
+	qcom,actuator-type = <1>;	/* ERM */
+	qcom,vmax-mv = <3596>;
+	qcom,wave-play-rate-us = <0>;	/* clamped to the minimum */
+	/delete-property/ qcom,en-brake;
+};
