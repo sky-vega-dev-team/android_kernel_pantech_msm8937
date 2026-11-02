@@ -447,10 +447,16 @@ enum v4l2_mpeg_video_h264_level {
 	V4L2_MPEG_VIDEO_H264_LEVEL_5_0	= 14,
 	V4L2_MPEG_VIDEO_H264_LEVEL_5_1	= 15,
 	V4L2_MPEG_VIDEO_H264_LEVEL_5_2	= 16,
+#ifdef __KERNEL__
+	/*
+	 * Not exported: the EF71 OMX components switch over this enum as
+	 * msm-3.18 had it, without a default. The values stay as they are.
+	 */
 	V4L2_MPEG_VIDEO_H264_LEVEL_6_0	= 17,
 	V4L2_MPEG_VIDEO_H264_LEVEL_6_1	= 18,
 	V4L2_MPEG_VIDEO_H264_LEVEL_6_2	= 19,
 	V4L2_MPEG_VIDEO_H264_LEVEL_UNKNOWN = 20,
+#endif
 };
 #define V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_ALPHA	(V4L2_CID_MPEG_BASE+360)
 #define V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_BETA	(V4L2_CID_MPEG_BASE+361)
