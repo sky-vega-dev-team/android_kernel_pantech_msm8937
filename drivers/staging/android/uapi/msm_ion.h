@@ -5,6 +5,11 @@
 #ifndef _UAPI_LINUX_MSM_ION_H
 #define _UAPI_LINUX_MSM_ION_H
 
+#ifndef __KERNEL__
+/* Userspace of the EF71 still speaks the legacy ION ABI */
+#include <linux/msm_ion_legacy_uapi.h>
+#else /* __KERNEL__ */
+
 #include <linux/types.h>
 
 #define ION_BIT(nr) (1U << (nr))
@@ -118,5 +123,7 @@ struct ion_prefetch_data {
 
 #define ION_IOC_DRAIN			_IOWR(ION_IOC_MSM_MAGIC, 4, \
 						struct ion_prefetch_data)
+
+#endif /* __KERNEL__ */
 
 #endif /* _UAPI_LINUX_MSM_ION_H */
