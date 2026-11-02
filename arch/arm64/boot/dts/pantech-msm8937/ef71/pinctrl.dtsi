@@ -178,4 +178,60 @@
 			};
 		};
 	};
+
+	/*
+	 * PN548 pins as Pantech set them up. GPIO 93 is the LP5523
+	 * interrupt here, not an eSE enable: keep it out of the NFC states.
+	 */
+	nfc {
+		nfc_int_active {
+			config {
+				drive-strength = <6>;
+				/delete-property/ bias-pull-up;
+				bias-pull-down;
+			};
+		};
+
+		nfc_int_suspend {
+			config {
+				drive-strength = <6>;
+				/delete-property/ bias-pull-up;
+				bias-pull-down;
+			};
+		};
+
+		nfc_disable_active {
+			mux {
+				pins = "gpio16", "gpio130";
+			};
+
+			config {
+				pins = "gpio16", "gpio130";
+				drive-strength = <6>;
+				/delete-property/ bias-pull-up;
+				bias-pull-down;
+			};
+		};
+
+		nfc_disable_suspend {
+			mux {
+				pins = "gpio16", "gpio130";
+			};
+
+			config {
+				pins = "gpio16", "gpio130";
+				drive-strength = <6>;
+			};
+		};
+	};
+};
+
+/* NFC clock request, VIN2 as on msm-3.18 */
+&pm8937_gpios {
+	nfc_clk {
+		nfc_clk_default {
+			power-source = <2>;
+			bias-disable;
+		};
+	};
 };

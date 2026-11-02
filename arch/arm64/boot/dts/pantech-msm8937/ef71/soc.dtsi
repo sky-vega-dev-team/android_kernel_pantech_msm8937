@@ -50,7 +50,8 @@
 	};
 };
 
-/* The NFC controller is a PN548 on the Pantech pins, it comes with its driver */
-&i2c_5 {
-	/delete-node/ nq@28;
-};
+/*
+ * The PN548 sits where the MTP has its NQ controller, on the same pins
+ * and clock: the qcom,nq-nci node and driver serve it, and give the
+ * /dev/nq-nci the NFC HAL opens.
+ */
