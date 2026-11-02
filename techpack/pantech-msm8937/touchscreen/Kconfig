@@ -1,0 +1,6 @@
+config TOUCHSCREEN_ATMEL_MXT641T_PANTECH
+	bool "Pantech Atmel mXT641T touchscreen"
+	depends on I2C && INPUT_TOUCHSCREEN
+	help
+	  Pantech's Atmel mXT641T driver, used with the NT35695 panel of
+	  the EF71S.

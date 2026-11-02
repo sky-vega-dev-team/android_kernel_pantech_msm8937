@@ -8,3 +8,35 @@ config MACH_MSM8937_EF71S
 	  also supports the EF71AS (FT8716 panel).
 
 endmenu
+
+# Board revisions, as the Pantech sources compare them
+config PT10
+	int
+	default 10
+
+config PT20
+	int
+	default 12
+
+config WS10
+	int
+	default 20
+
+config WS20
+	int
+	default 22
+
+config TP10
+	int
+	default 30
+
+config TP20
+	int
+	default 32
+
+config BOARD_VER
+	int "Pantech board revision the drivers are built for"
+	default 32
+	help
+	  The board revision some Pantech drivers pick their tables from.
+	  32 (TP20) is the final hardware.

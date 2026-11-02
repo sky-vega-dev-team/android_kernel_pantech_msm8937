@@ -16,6 +16,7 @@
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
+#include <pantech/input.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -83,7 +84,7 @@
 #endif
 
 #ifdef OFFLINE_CHARGER_TOUCH_DISABLE
-#include <soc/qcom/smsm.h>
+#include <pantech/smem.h>
 #endif
 
 /*function proto types*/
@@ -2610,10 +2611,10 @@ static int mxt_probe(struct i2c_client *client,
 	int error;
 
 #if defined (OFFLINE_CHARGER_TOUCH_DISABLE)   
-	oem_pm_smem_vendor1_data_type *smem_id_vendor1_ptr;  
-	smem_id_vendor1_ptr =  (oem_pm_smem_vendor1_data_type*)smem_alloc(SMEM_ID_VENDOR1,sizeof(oem_pm_smem_vendor1_data_type),0,SMEM_ANY_HOST_FLAG);
-	 
-	if(smem_id_vendor1_ptr->power_on_mode == 0)
+	oem_pm_smem_vendor1_data_type *smem_id_vendor1_ptr;
+
+	smem_id_vendor1_ptr = pantech_smem_vendor1();
+	if (smem_id_vendor1_ptr && smem_id_vendor1_ptr->power_on_mode == 0)
 	{    
 			dbg_cr(" OFFLINE_CHARGER is enabled. And Touch Driver IRQ is disabled\n");   
 			TSP_PowerOff();    
