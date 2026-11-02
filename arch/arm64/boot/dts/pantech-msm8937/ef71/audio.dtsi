@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+/*
+ * WCD9335 (Tasha) on SLIMbus with a single WSA8810 speaker, instead of
+ * the PM8937 analog codec. Values from the msm-3.18 EF71 device tree.
+ */
+
+&int_codec {
+	status = "disabled";
+};
+
+&pmic_analog_codec {
+	status = "disabled";
+};
+
+/*
+ * The PDM lines of the analog codec include GPIO 73, which is the WCD9335
+ * interrupt here: claimed first, it kept wcd9xxx-irq from probing.
+ * msm-3.18 emptied those pin lists for the same reason.
+ */
+&cdc_pri_mi2s_gpios {
+	status = "disabled";
+};
+
+&wsa881x_i2c_f {
+	status = "disabled";
+};
+
+&wsa881x_i2c_45 {
+	status = "disabled";
+};
+
+/* MCLK: DIV_CLK2 out of PM8937 GPIO 1, not the SoC GPIO 66 */
+&pm8937_gpios {
+	tasha_mclk {
+		tasha_mclk_default: tasha_mclk_default {
+			pins = "gpio1";
+			function = "func1";
+			qcom,drive-strength = <2>;
+			power-source = <0>;
+			bias-disable;
+			output-low;
+		};
+	};
+};
+
+&clock_audio {
+	status = "okay";
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&tasha_mclk_default>;
+	pinctrl-1 = <&tasha_mclk_default>;
+};
+
+&slim_msm {
+	status = "okay";
+};
+
+&dai_slim {
+	status = "okay";
+};
+
+&wcd9xxx_intc {
+	status = "okay";
+};
+
+&wcd_rst_gpio {
+	status = "okay";
+};
+
+&wcd9335 {
+	status = "okay";
+	qcom,cdc-micbias2-mv = <2500>;
+};
+
+&ext_codec {
+	status = "okay";
+
+	qcom,audio-routing =
+		"AIF4 VI", "MCLK",
+		"AIF4 VI", "MICBIAS_REGULATOR",
+		"RX_BIAS", "MCLK",
+		"AMIC3", "MIC BIAS1",
+		"MIC BIAS1", "Handset Mic",
+		"MADINPUT", "MCLK",
+		"AIF4 MAD", "MICBIAS_REGULATOR",
+		"AMIC2", "MIC BIAS2",
+		"MIC BIAS2", "Headset Mic",
+		"AMIC4", "MIC BIAS3",
+		"MIC BIAS3", "Handset Mic",
+		"AMIC6", "MIC BIAS4",
+		"MIC BIAS4", "Analog Mic6",
+		"DMIC0", "MIC BIAS1",
+		"MIC BIAS1", "Digital Mic0",
+		"DMIC1", "MIC BIAS1",
+		"MIC BIAS1", "Digital Mic1",
+		"DMIC2", "MIC BIAS3",
+		"MIC BIAS3", "Digital Mic2",
+		"DMIC3", "MIC BIAS3",
+		"MIC BIAS3", "Digital Mic3",
+		"DMIC4", "MIC BIAS4",
+		"MIC BIAS4", "Digital Mic4",
+		"DMIC5", "MIC BIAS4",
+		"MIC BIAS4", "Digital Mic5",
+		"MIC BIAS1", "MICBIAS_REGULATOR",
+		"MIC BIAS2", "MICBIAS_REGULATOR",
+		"MIC BIAS3", "MICBIAS_REGULATOR",
+		"MIC BIAS4", "MICBIAS_REGULATOR",
+		"SpkrLeft IN", "SPK1 OUT",
+		"SpkrRight IN", "SPK2 OUT";
+
+	qcom,msm-mbhc-hphl-swh = <1>;
+	qcom,msm-mbhc-gnd-swh = <1>;
+	qcom,msm-hs-micbias-type = "external";
+	qcom,cdc-micbias1-ext-cap;
+	qcom,cdc-micbias2-ext-cap;
+	qcom,cdc-micbias3-ext-cap;
+
+	/* One WSA8810, on the left channel */
+	qcom,wsa-max-devs = <1>;
+	qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrLeft",
+				  "SpkrLeft", "SpkrLeft";
+};
