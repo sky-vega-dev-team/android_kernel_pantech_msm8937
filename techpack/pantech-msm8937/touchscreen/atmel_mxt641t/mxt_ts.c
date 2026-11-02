@@ -343,9 +343,23 @@ static int __mxt_read_reg(struct i2c_client *client,
 			       u16 reg, u16 len, void *val)
 {
 	struct i2c_msg xfer[2];
-	u8 buf[2];
+	u8 *buf, *rx;
 	int ret;
 	bool retry = false;
+
+	/*
+	 * Reads longer than the QUP FIFO go through BAM DMA, which corrupts
+	 * them on msm-4.19 when they land at an unaligned spot inside a
+	 * buffer (the info block is read to buf + 7). Bounce both messages
+	 * through allocations of their own.
+	 */
+	buf = kmalloc(2, GFP_KERNEL);
+	rx = kmalloc(len, GFP_KERNEL);
+	if (!buf || !rx) {
+		kfree(buf);
+		kfree(rx);
+		return -ENOMEM;
+	}
 
 	buf[0] = reg & 0xff;
 	buf[1] = (reg >> 8) & 0xff;
@@ -360,7 +374,7 @@ static int __mxt_read_reg(struct i2c_client *client,
 	xfer[1].addr = client->addr;
 	xfer[1].flags = I2C_M_RD;
 	xfer[1].len = len;
-	xfer[1].buf = val;
+	xfer[1].buf = rx;
 
 retry_read:
 	ret = i2c_transfer(client->adapter, xfer, ARRAY_SIZE(xfer));
@@ -373,10 +387,15 @@ retry_read:
 		} else {
 			dev_err(&client->dev, "%s: i2c transfer failed (%d)\n",
 				__func__, ret);
+			kfree(buf);
+			kfree(rx);
 			return -EIO;
 		}
 	}
 
+	memcpy(val, rx, len);
+	kfree(buf);
+	kfree(rx);
 	return 0;
 }
 
@@ -1779,8 +1798,9 @@ static int mxt_read_info_block(struct mxt_data *data)
 	if (data->info_crc != calculated_crc) {
 		dev_err(&client->dev, "Info Block CRC error"
 			" calculated=0x%06X read=0x%06X\n",
-			data->info_crc, calculated_crc);
-		return -EIO;
+			calculated_crc, data->info_crc);
+		error = -EIO;
+		goto err_free_mem;
 	}
 
 	/* Save pointers in device data structure */
@@ -2314,6 +2334,18 @@ static int mxt_initialize(struct mxt_data *data)
 
 retry_probe:
 	error = mxt_read_info_block(data);
+	/*
+	 * Right after a cold power up the chip can still answer with a
+	 * garbled info block: give it time before probing the bootloader.
+	 */
+	while (error && retry_count < 5) {
+		dev_info(&client->dev, "info block read failed (%d), retry %u\n",
+			 error, retry_count + 1);
+		msleep(MXT_RESET_TIME);
+		error = mxt_read_info_block(data);
+		retry_count++;
+	}
+	retry_count = 0;
 	if (error) {
 		error = mxt_probe_bootloader(data);
 		if (error) {
