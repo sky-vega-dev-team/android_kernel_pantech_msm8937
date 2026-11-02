@@ -21,6 +21,10 @@ static int __init camera_legacy_m_init(void)
 		camera_legacy_m_enable = true;
 #endif
 
+	/* The EF71 mm-camera blobs date from the same camera_v2 */
+	if (IS_ENABLED(CONFIG_PANTECH_CAMERA))
+		camera_legacy_m_enable = true;
+
 	if (camera_legacy_m_enable)
 		pr_info("Enable Legacy (Marshmallow) Camera Stack.\n");
 

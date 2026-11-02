@@ -111,6 +111,11 @@ enum msm_sensor_power_seq_gpio_t {
 	SENSOR_GPIO_FL_RESET,
 	SENSOR_GPIO_CUSTOM1,
 	SENSOR_GPIO_CUSTOM2,
+	/* Pantech EF71 power enables, appended as the EF71 blobs expect */
+	SENSOR_GPIO_DVDD_EN,
+	SENSOR_GPIO_IOVDD_EN,
+	SENSOR_GPIO_AVDD_EN,
+	SENSOR_GPIO_VDDIO_EN,
 	SENSOR_GPIO_MAX,
 };
 

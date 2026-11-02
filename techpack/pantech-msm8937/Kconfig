@@ -13,6 +13,14 @@ source "techpack/pantech-msm8937/input/Kconfig"
 source "techpack/pantech-msm8937/leds/Kconfig"
 source "techpack/pantech-msm8937/touchscreen/Kconfig"
 
+config PANTECH_CAMERA
+	bool "Pantech changes to the legacy (Marshmallow) camera driver"
+	depends on MSMB_CAMERA_LEGACY_M
+	help
+	  Carry the Pantech camera_v2 changes the EF71 camera blobs rely on
+	  in techpack/camera-legacy-m: the DVDD/IOVDD/AVDD/VDDIO enable
+	  GPIOs of the sensor power sequences and the VCM park steps.
+
 endif # MACH_PANTECH_MSM8937
 
 endmenu

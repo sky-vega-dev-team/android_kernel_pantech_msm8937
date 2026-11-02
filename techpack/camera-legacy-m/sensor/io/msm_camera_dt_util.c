@@ -555,6 +555,16 @@ int legacy_m_msm_camera_get_dt_power_setting_data(struct device_node *of_node,
 				ps[i].seq_val = SENSOR_GPIO_CUSTOM1;
 			else if (!strcmp(seq_name, "sensor_gpio_custom2"))
 				ps[i].seq_val = SENSOR_GPIO_CUSTOM2;
+#ifdef CONFIG_PANTECH_CAMERA
+			else if (!strcmp(seq_name, "sensor_gpio_dvdd_en"))
+				ps[i].seq_val = SENSOR_GPIO_DVDD_EN;
+			else if (!strcmp(seq_name, "sensor_gpio_iovdd_en"))
+				ps[i].seq_val = SENSOR_GPIO_IOVDD_EN;
+			else if (!strcmp(seq_name, "sensor_gpio_avdd_en"))
+				ps[i].seq_val = SENSOR_GPIO_AVDD_EN;
+			else if (!strcmp(seq_name, "sensor_gpio_vddio_en"))
+				ps[i].seq_val = SENSOR_GPIO_VDDIO_EN;
+#endif
 			else
 				rc = -EILSEQ;
 			break;
@@ -1010,6 +1020,44 @@ int legacy_m_msm_camera_init_gpio_pin_tbl(struct device_node *of_node,
 		rc = 0;
 	}
 
+#ifdef CONFIG_PANTECH_CAMERA
+	{
+		static const struct {
+			const char *prop;
+			enum msm_sensor_power_seq_gpio_t idx;
+		} pantech_gpios[] = {
+			{ "qcom,gpio-dvdd-en", SENSOR_GPIO_DVDD_EN },
+			{ "qcom,gpio-iovdd-en", SENSOR_GPIO_IOVDD_EN },
+			{ "qcom,gpio-avdd-en", SENSOR_GPIO_AVDD_EN },
+			{ "qcom,gpio-vddio-en", SENSOR_GPIO_VDDIO_EN },
+		};
+		int j;
+
+		for (j = 0; j < ARRAY_SIZE(pantech_gpios); j++) {
+			rc = of_property_read_u32(of_node,
+				pantech_gpios[j].prop, &val);
+			if (rc == -EINVAL) {
+				rc = 0;
+				continue;
+			}
+			if (rc < 0) {
+				pr_err("%s:%d read %s failed rc %d\n", __func__,
+					__LINE__, pantech_gpios[j].prop, rc);
+				goto ERROR;
+			}
+			if (val >= gpio_array_size) {
+				pr_err("%s:%d %s invalid %d\n", __func__,
+					__LINE__, pantech_gpios[j].prop, val);
+				rc = -EINVAL;
+				goto ERROR;
+			}
+			gconf->gpio_num_info->gpio_num[pantech_gpios[j].idx] =
+				gpio_array[val];
+			gconf->gpio_num_info->valid[pantech_gpios[j].idx] = 1;
+		}
+	}
+#endif
+
 	return rc;
 
 ERROR:
@@ -1369,7 +1417,6 @@ int legacy_m_msm_camera_power_up(struct msm_camera_power_ctrl_t *ctrl,
 	for (index = 0; index < ctrl->power_setting_size; index++) {
 		CDBG("%s index %d\n", __func__, index);
 		power_setting = &ctrl->power_setting[index];
-		CDBG("%s type %d\n", __func__, power_setting->seq_type);
 		switch (power_setting->seq_type) {
 		case SENSOR_CLK:
 			if (power_setting->seq_val >= ctrl->clk_info_size) {
