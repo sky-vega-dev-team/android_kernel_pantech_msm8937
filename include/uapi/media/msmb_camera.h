@@ -115,11 +115,6 @@
 /* data.status - success */
 #define MSM_CAMERA_CMD_SUCCESS      0x00000001
 #define MSM_CAMERA_BUF_MAP_SUCCESS  0x00000002
-#ifndef __KERNEL__
-/* msm-3.18 spelling, still used by the EF71 camera stack */
-#define MSM_CAMERA_CMD_SUCESS      MSM_CAMERA_CMD_SUCCESS
-#define MSM_CAMERA_BUF_MAP_SUCESS  MSM_CAMERA_BUF_MAP_SUCCESS
-#endif
 
 /* data.status - error */
 #define MSM_CAMERA_ERR_EVT_BASE 0x00010000
