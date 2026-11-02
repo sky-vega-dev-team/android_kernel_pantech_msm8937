@@ -1141,6 +1141,7 @@ config TOUCHSCREEN_MAXIM_STI
 
 source "drivers/input/touchscreen/gt9xx/Kconfig"
 source "drivers/input/touchscreen/focaltech_touch/Kconfig"
+source "drivers/input/touchscreen/ft8716/Kconfig"
 
 config TOUCHSCREEN_HIMAX_CHIPSET
 	bool "Himax touchpanel CHIPSET"
