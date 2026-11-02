@@ -28,6 +28,11 @@
 	};
 };
 
+/* i2c-msm-v2 takes the bus number from the alias */
+&{/aliases} {
+	i2c8 = &i2c_8;
+};
+
 &i2c_8 {
 	status = "ok";
 
