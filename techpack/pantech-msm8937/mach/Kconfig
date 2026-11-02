@@ -1,0 +1,10 @@
+menu "Machine selection"
+
+# The msm-3.18 Pantech sources test these names, keep them.
+config MACH_MSM8937_EF71S
+	bool "Pantech VEGA IRON 2 (EF71S / IM-100S, EF71AS)"
+	help
+	  Support for Pantech VEGA IRON 2 (EF71S / IM-100S). The same image
+	  also supports the EF71AS (FT8716 panel).
+
+endmenu
