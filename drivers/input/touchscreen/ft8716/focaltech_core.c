@@ -590,6 +590,14 @@ static void fts_report_value(struct fts_ts_data *data)
 		event->au16_y[i] =
 		    (s16) (buf[FTS_TOUCH_Y_H_POS + FTS_ONE_TCH_LEN * i] & 0x0F) <<
 		    8 | (s16) buf[FTS_TOUCH_Y_L_POS + FTS_ONE_TCH_LEN * i];
+		if (data->pdata->x_flip &&
+		    event->au16_x[i] <= data->pdata->panel_maxx)
+			event->au16_x[i] = data->pdata->panel_maxx -
+					   event->au16_x[i];
+		if (data->pdata->y_flip &&
+		    event->au16_y[i] <= data->pdata->panel_maxy)
+			event->au16_y[i] = data->pdata->panel_maxy -
+					   event->au16_y[i];
 		event->au8_touch_event[i] =
 		    buf[FTS_TOUCH_EVENT_POS + FTS_ONE_TCH_LEN * i] >> 6;
 		event->au8_finger_id[i] =
@@ -1542,6 +1550,8 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
 	pdata->fw_vkey_support = of_property_read_bool(np, "focaltech,fw-vkey-support");
 
 	pdata->ignore_id_check = of_property_read_bool(np, "focaltech,ignore-id-check");
+	pdata->x_flip = of_property_read_bool(np, "pantech,x-flip");
+	pdata->y_flip = of_property_read_bool(np, "pantech,y-flip");
 
 	pdata->psensor_support = of_property_read_bool(np,
 						"focaltech,psensor-support");

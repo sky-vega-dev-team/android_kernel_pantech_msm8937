@@ -169,6 +169,9 @@ struct fts_ts_platform_data {
 	u32 panel_miny;
 	u32 panel_maxx;
 	u32 panel_maxy;
+	/* ef71: the EF71AS panel reports both axes mirrored */
+	bool x_flip;
+	bool y_flip;
 	u32 group_id;
 	u32 hard_rst_dly;
 	u32 soft_rst_dly;
