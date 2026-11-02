@@ -208,7 +208,8 @@ static inline bool fts_psensor_support_enabled(void)
 *******************************************************************************/
 int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *readbuf, int readlen)
 {
-	int ret;
+	int ret = 0;
+	char *tx = NULL, *rx = NULL;
 	#if GTP_ESD_PROTECT
 	int i;
 
@@ -230,6 +231,25 @@ int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *
 	}*/
 	#endif
 
+	/*
+	 * Callers pass buffers on the (vmapped) stack, and transfers longer
+	 * than the QUP FIFO go through BAM DMA, which cannot reach them on
+	 * msm-4.19: the touch reports came back corrupted. Bounce both
+	 * directions through allocations of their own.
+	 */
+	if (readlen <= 0)
+		return 0;
+	if (writelen > 0) {
+		tx = kmemdup(writebuf, writelen, GFP_KERNEL);
+		if (!tx)
+			return -ENOMEM;
+	}
+	rx = kmalloc(readlen, GFP_KERNEL);
+	if (!rx) {
+		kfree(tx);
+		return -ENOMEM;
+	}
+
 	mutex_lock(&i2c_rw_access);
 
 	if(readlen > 0)
@@ -240,13 +260,13 @@ int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *
 					 .addr = client->addr,
 					 .flags = 0,
 					 .len = writelen,
-					 .buf = writebuf,
+					 .buf = tx,
 				 },
 				{
 					 .addr = client->addr,
 					 .flags = I2C_M_RD,
 					 .len = readlen,
-					 .buf = readbuf,
+					 .buf = rx,
 				 },
 			};
 			ret = i2c_transfer(client->adapter, msgs, 2);
@@ -258,7 +278,7 @@ int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *
 					 .addr = client->addr,
 					 .flags = I2C_M_RD,
 					 .len = readlen,
-					 .buf = readbuf,
+					 .buf = rx,
 				 },
 			};
 			ret = i2c_transfer(client->adapter, msgs, 1);
@@ -268,6 +288,11 @@ int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *
 	}
 
 	mutex_unlock(&i2c_rw_access);
+
+	if (ret >= 0)
+		memcpy(readbuf, rx, readlen);
+	kfree(tx);
+	kfree(rx);
 
 	return ret;
 }
@@ -281,16 +306,22 @@ int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *
 *******************************************************************************/
 int fts_i2c_write(struct i2c_client *client, char *writebuf, int writelen)
 {
-	int ret;
+	int ret = 0;
+	char *tx;
+	struct i2c_msg msgs[1];
 
-	struct i2c_msg msgs[] = {
-		{
-			 .addr = client->addr,
-			 .flags = 0,
-			 .len = writelen,
-			 .buf = writebuf,
-		 },
-	};
+	if (writelen <= 0)
+		return 0;
+
+	/* Same as fts_i2c_read(): keep DMA away from the caller's stack */
+	tx = kmemdup(writebuf, writelen, GFP_KERNEL);
+	if (!tx)
+		return -ENOMEM;
+
+	msgs[0].addr = client->addr;
+	msgs[0].flags = 0;
+	msgs[0].len = writelen;
+	msgs[0].buf = tx;
 
 #if GTP_ESD_PROTECT
 	fts_esd_protection_notice();
@@ -307,6 +338,7 @@ int fts_i2c_write(struct i2c_client *client, char *writebuf, int writelen)
 
 	mutex_unlock(&i2c_rw_access);
 
+	kfree(tx);
 	return ret;
 }
 
@@ -1862,7 +1894,7 @@ static ssize_t fts_ts_firmware_update_store(struct kobject *kobj, struct kobj_at
 static struct kobj_attribute fts_ts_firmware_update_attr = {
          .attr = {
                   .name = "firmware_update",
-                  .mode = S_IWUGO,
+                  .mode = S_IWUSR | S_IWGRP,
          },
 
          .store  = &fts_ts_firmware_update_store,
