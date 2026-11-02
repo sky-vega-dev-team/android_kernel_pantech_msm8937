@@ -52,7 +52,7 @@
 #define FTS_SUSPEND_LEVEL 1
 #endif
 #ifdef GESTURE_CONTROL
-#include "../../../base/base.h"
+#include "../../../../drivers/base/base.h"
 #endif
 //#include "../lct_tp_fm_info.h"
 //#include "../lct_ctp_upgrade.h"
