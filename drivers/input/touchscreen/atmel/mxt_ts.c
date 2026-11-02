@@ -77,6 +77,7 @@
 #endif
 
 #ifdef TOUCH_DEV_TREE_SUPPORT
+#include <linux/init.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
 #endif
@@ -2587,6 +2588,20 @@ err_free_mem:
 	return error;
 }
 
+/*
+ * ef71: the EF71S (NT35695 panel, Atmel touch) and the EF71AS (FT8716 panel
+ * with FocalTech touch) share one device tree. Only probe the controller
+ * whose "pantech,panel" is in the panel name the bootloader passed.
+ */
+static bool ef71_panel_matches(struct device_node *np)
+{
+	const char *panel;
+
+	if (!np || of_property_read_string(np, "pantech,panel", &panel))
+		return true;
+	return strstr(saved_command_line, panel) != NULL;
+}
+
 static int mxt_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
@@ -2605,6 +2620,11 @@ static int mxt_probe(struct i2c_client *client,
 			return -1;  
 	}
 #endif
+
+	if (!ef71_panel_matches(client->dev.of_node)) {
+		dbg_cr("Not this device's touch controller, skip\n");
+		return -ENODEV;
+	}
 
 #ifdef TOUCH_DEV_TREE_SUPPORT
 	if(mxt_parse_dt(client) != 1){

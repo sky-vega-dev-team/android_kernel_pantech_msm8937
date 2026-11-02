@@ -1929,7 +1929,20 @@ static int fts_ts_create_ctp_node(void)
 *  Output:
 *  Return:
 *******************************************************************************/
- unsigned int lcm_id = 1;
+/*
+ * ef71: the EF71S (NT35695 panel, Atmel touch) and the EF71AS (FT8716 panel
+ * with this touch) share one device tree. Only probe the controller whose
+ * "pantech,panel" is in the panel name the bootloader passed.
+ */
+static bool ef71_panel_matches(struct device_node *np)
+{
+	const char *panel;
+
+	if (!np || of_property_read_string(np, "pantech,panel", &panel))
+		return true;
+	return strstr(saved_command_line, panel) != NULL;
+}
+
 static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	
@@ -1949,8 +1962,8 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	int err, len;
 	char fw_version[64];
 
-	if(lcm_id != 1)
-		return -1;
+	if (!ef71_panel_matches(client->dev.of_node))
+		return -ENODEV;
       
 	if (client->dev.of_node) {
 		pdata = devm_kzalloc(&client->dev,

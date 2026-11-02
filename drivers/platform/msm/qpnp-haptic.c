@@ -2370,6 +2370,15 @@ static int qpnp_hap_parse_dt(struct qpnp_hap *hap)
 		return rc;
 	}
 
+	/*
+	 * ef71: the EF71S has an ERM, the EF71AS (FT8716 panel) an LRA. They
+	 * share one device tree, so use the panel the bootloader found.
+	 */
+	rc = of_property_read_string(spmi->dev.of_node,
+			"pantech,lra-panel", &temp_str);
+	if (!rc && strstr(saved_command_line, temp_str))
+		hap->act_type = QPNP_HAP_LRA;
+
 	if (hap->act_type == QPNP_HAP_LRA) {
 		rc = of_property_read_string(spmi->dev.of_node,
 				"qcom,lra-auto-res-mode", &temp_str);
@@ -2604,6 +2613,12 @@ static int qpnp_hap_parse_dt(struct qpnp_hap *hap)
 		dev_err(&spmi->dev, "Unable to read play rate\n");
 		return rc;
 	}
+
+	/* ef71: the LRA of the EF71AS has its own play rate */
+	if (hap->act_type == QPNP_HAP_LRA &&
+	    !of_property_read_u32(spmi->dev.of_node,
+			"pantech,lra-wave-play-rate-us", &temp))
+		hap->wave_play_rate_us = temp;
 
 	if (hap->play_mode == QPNP_HAP_BUFFER)
 		rc = qpnp_hap_parse_buffer_dt(hap);
