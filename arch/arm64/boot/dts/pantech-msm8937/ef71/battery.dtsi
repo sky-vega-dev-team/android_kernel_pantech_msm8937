@@ -13,6 +13,14 @@
 &qpnp_smbcharger {
 	qcom,float-voltage-mv = <4420>;
 	qcom,iterm-ma = <200>;
+	/*
+	 * Charge faster than the stock 1800 mA (0.75C of the 2950 mAh cell),
+	 * and take the BQ51221 wireless receiver on DCIN up to its 5 W
+	 * (stock 700 mA)
+	 */
+	qcom,fastchg-current-ma = <2200>;
+	qcom,dc-psy-type = "Wireless";
+	qcom,dc-psy-ma = <1000>;
 	/delete-property/ qcom,autoadjust-vfloat;
 	/delete-property/ qcom,force-aicl-rerun;
 	/delete-property/ qcom,chg-led-support;
