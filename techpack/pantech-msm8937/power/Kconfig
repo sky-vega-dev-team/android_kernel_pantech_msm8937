@@ -1,0 +1,8 @@
+config EF71_WIRELESS
+	bool "EF71 wireless charging input"
+	depends on POWER_SUPPLY && GPIOLIB && QPNP_SMBCHARGER
+	help
+	  Hold the MAX14731 input switch of the EF71 in its stock state and
+	  suspend the PMI8950 DCIN, where the BQ51221 wireless receiver
+	  feeds in, while USB is plugged in as well. qpnp-smbcharger does
+	  the charging.

@@ -55,3 +55,23 @@
  * and clock: the qcom,nq-nci node and driver serve it, and give the
  * /dev/nq-nci the NFC HAL opens.
  */
+
+/*
+ * Wireless charging: the BQ51221 receiver feeds the PMI8950 DCIN, behind
+ * the MAX14731 input switch. qpnp-smbcharger charges from it as its "dc"
+ * supply.
+ */
+&soc {
+	ef71_wireless {
+		compatible = "pantech,ef71-wireless";
+		usb-det-gpios = <&tlmm 63 0>;
+		wlc-det-gpios = <&tlmm 61 0>;
+		wlc-pg-gpios = <&tlmm 12 0>;
+		ovp-en-n-gpios = <&tlmm 125 0>;
+		p-connect-gpios = <&tlmm 59 0>;
+		otg-en-gpios = <&tlmm 8 0>;
+		vbus-otg-supply = <&smbcharger_charger_otg>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ef71_wlc_det_default &ef71_wlc_ctrl_default>;
+	};
+};

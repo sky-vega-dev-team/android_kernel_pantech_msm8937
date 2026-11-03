@@ -235,3 +235,34 @@
 		};
 	};
 };
+
+/* Wireless charging: MAX14731 and BQ51221 lines, as on msm-3.18 */
+&tlmm {
+	ef71_wlc_det_default: ef71_wlc_det_default {
+		/* WL_PG, WLC_DET_N, WL_PAD_DET, USB_VBUS_DET_N */
+		mux {
+			pins = "gpio12", "gpio61", "gpio62", "gpio63";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio12", "gpio61", "gpio62", "gpio63";
+			drive-strength = <6>;
+			bias-pull-up;
+		};
+	};
+
+	ef71_wlc_ctrl_default: ef71_wlc_ctrl_default {
+		/* MAX14731 OTG_EN, P-CONNECT, OVP_EN_N */
+		mux {
+			pins = "gpio8", "gpio59", "gpio125";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio8", "gpio59", "gpio125";
+			drive-strength = <6>;
+			bias-pull-down;
+		};
+	};
+};
