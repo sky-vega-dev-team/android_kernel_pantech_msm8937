@@ -298,8 +298,8 @@ EXPORT_SYMBOL_GPL(clk_pll_configure_sr_hpm_lp);
 static int clk_pll_sr2_enable(struct clk_hw *hw)
 {
 	struct clk_pll *pll = to_clk_pll(hw);
-	int ret;
-	u32 mode;
+	int ret, count;
+	u32 mode, val;
 
 	ret = regmap_read(pll->clkr.regmap, pll->mode_reg, &mode);
 	if (ret)
@@ -323,9 +323,23 @@ static int clk_pll_sr2_enable(struct clk_hw *hw)
 	if (ret)
 		return ret;
 
-	ret = wait_for_pll(pll);
-	if (ret)
-		return ret;
+	/*
+	 * The lock detect can take longer than wait_for_pll() allows at the
+	 * top APSS frequencies. Wait up to 1 ms, and as the msm-3.18 SR2 PLL
+	 * driver did, only complain and enable the output if it still has
+	 * not shown up: failing here leaves the CPU on the safe source.
+	 */
+	for (count = 1000; count > 0; count--) {
+		ret = regmap_read(pll->clkr.regmap, pll->status_reg, &val);
+		if (ret)
+			return ret;
+		if (val & BIT(pll->status_bit))
+			break;
+		udelay(1);
+	}
+	if (!count)
+		pr_err("%s didn't lock after enabling it!\n",
+		       clk_hw_get_name(hw));
 
 	/* Enable PLL output. */
 	return regmap_update_bits(pll->clkr.regmap, pll->mode_reg, PLL_OUTCTRL,
