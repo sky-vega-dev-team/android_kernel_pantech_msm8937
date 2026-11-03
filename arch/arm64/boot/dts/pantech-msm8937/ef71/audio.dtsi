@@ -83,6 +83,10 @@
 &ext_codec {
 	status = "okay";
 
+	/* No US/EURO headset switch: GPIO 63 is the USB VBUS detect */
+	/delete-property/ qcom,cdc-us-euro-gpios;
+	/delete-property/ qcom,cdc-us-eu-gpios;
+
 	qcom,audio-routing =
 		"AIF4 VI", "MCLK",
 		"AIF4 VI", "MICBIAS_REGULATOR",
@@ -127,4 +131,8 @@
 	qcom,wsa-max-devs = <1>;
 	qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrLeft",
 				  "SpkrLeft", "SpkrLeft";
+};
+
+&cdc_us_euro_sw {
+	status = "disabled";
 };
