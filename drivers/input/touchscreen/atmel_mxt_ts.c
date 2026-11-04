@@ -31,6 +31,12 @@
 #include <linux/of.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#ifdef CONFIG_FB
+#include <linux/notifier.h>
+#include <linux/fb.h>
+#endif
 #include <linux/regulator/consumer.h>
 #include <linux/gpio/consumer.h>
 #include <linux/property.h>
@@ -323,6 +329,12 @@ struct mxt_data {
 	struct mxt_dbg dbg;
 	struct regulator_bulk_data regulators[2];
 	struct gpio_desc *reset_gpio;
+	int iovdd_gpio;
+	int rst_gpio;
+	bool suspended;
+#ifdef CONFIG_FB
+	struct notifier_block fb_notif;
+#endif
 	struct gpio_desc *wake_gpio;
 	bool use_retrigen_workaround;
 
@@ -3265,10 +3277,36 @@ static const struct dmi_system_id chromebook_T9_suspend_dmi[] = {
 	{ }
 };
 
+static int mxt_suspend(struct device *dev);
+static int mxt_resume(struct device *dev);
+#ifdef CONFIG_FB
+static int mxt_fb_notifier_callback(struct notifier_block *self,
+				     unsigned long event, void *data);
+#endif
+
 static int mxt_probe(struct i2c_client *client)
 {
 	struct mxt_data *data;
 	int error;
+
+	/*
+	 * ef71: the EF71S (NT35695 panel, Atmel touch) and the EF71AS (FT8716 panel
+	 * with FocalTech touch) share one device tree. Only probe the controller
+	 * whose "pantech,panel" is in the panel name the bootloader passed.
+	 */
+	if (client->dev.of_node) {
+		const char *panel;
+
+		if (!of_property_read_string(client->dev.of_node,
+					     "pantech,panel", &panel)) {
+			if (!strstr(saved_command_line, panel)) {
+				dev_info(&client->dev,
+					 "Panel mismatch (%s), skipping Atmel touch\n",
+					 panel);
+				return -ENODEV;
+			}
+		}
+	}
 
 	/*
 	 * Ignore devices that do not have device properties attached to
@@ -3332,13 +3370,51 @@ static int mxt_probe(struct i2c_client *client)
 		return error;
 	}
 
-	/* Request the RESET line as asserted so we go into reset */
-	data->reset_gpio = devm_gpiod_get_optional(&client->dev,
-						   "reset", GPIOD_OUT_HIGH);
-	if (IS_ERR(data->reset_gpio)) {
-		error = PTR_ERR(data->reset_gpio);
-		dev_err(&client->dev, "Failed to get reset gpio: %d\n", error);
-		return error;
+	if (client->dev.of_node) {
+		data->iovdd_gpio = of_get_named_gpio(client->dev.of_node,
+						     "atmel,iovdd-gpio", 0);
+		if (!gpio_is_valid(data->iovdd_gpio))
+			data->iovdd_gpio = of_get_named_gpio(client->dev.of_node,
+							     "iovdd-gpios", 0);
+
+		data->rst_gpio = of_get_named_gpio(client->dev.of_node,
+						   "atmel,reset-gpio", 0);
+		if (!gpio_is_valid(data->rst_gpio))
+			data->rst_gpio = of_get_named_gpio(client->dev.of_node,
+							   "reset-gpios", 0);
+	} else {
+		data->iovdd_gpio = -1;
+		data->rst_gpio = -1;
+	}
+
+	if (gpio_is_valid(data->iovdd_gpio)) {
+		error = devm_gpio_request_one(&client->dev, data->iovdd_gpio,
+					      GPIOF_OUT_INIT_HIGH, "mxt_iovdd");
+		if (error) {
+			dev_err(&client->dev, "Failed to get iovdd gpio: %d\n", error);
+			return error;
+		}
+		msleep(10);
+	}
+
+	if (gpio_is_valid(data->rst_gpio)) {
+		error = devm_gpio_request_one(&client->dev, data->rst_gpio,
+					      GPIOF_OUT_INIT_LOW, "mxt_reset");
+		if (error) {
+			dev_err(&client->dev, "Failed to get reset gpio: %d\n", error);
+			return error;
+		}
+		msleep(5);
+		gpio_set_value(data->rst_gpio, 1);
+		msleep(100);
+	} else {
+		data->reset_gpio = devm_gpiod_get_optional(&client->dev,
+							   "reset", GPIOD_OUT_HIGH);
+		if (IS_ERR(data->reset_gpio)) {
+			error = PTR_ERR(data->reset_gpio);
+			dev_err(&client->dev, "Failed to get reset gpio: %d\n", error);
+			return error;
+		}
 	}
 
 	/* Request the WAKE line as asserted so we go out of sleep */
@@ -3402,6 +3478,13 @@ static int mxt_probe(struct i2c_client *client)
 	if (error)
 		goto err_disable_regulators;
 
+#ifdef CONFIG_FB
+	data->fb_notif.notifier_call = mxt_fb_notifier_callback;
+	error = fb_register_client(&data->fb_notif);
+	if (error)
+		dev_err(&client->dev, "Failed to register fb notifier: %d\n", error);
+#endif
+
 	error = sysfs_create_group(&client->dev.kobj, &mxt_attr_group);
 	if (error) {
 		dev_err(&client->dev, "Failure %d creating sysfs group\n",
@@ -3412,6 +3495,9 @@ static int mxt_probe(struct i2c_client *client)
 	return 0;
 
 err_free_object:
+#ifdef CONFIG_FB
+	fb_unregister_client(&data->fb_notif);
+#endif
 	mxt_free_input_device(data);
 	mxt_free_object_table(data);
 err_disable_regulators:
@@ -3425,11 +3511,19 @@ static int mxt_remove(struct i2c_client *client)
 	struct mxt_data *data = i2c_get_clientdata(client);
 
 	disable_irq(data->irq);
+#ifdef CONFIG_FB
+	fb_unregister_client(&data->fb_notif);
+#endif
 	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
 	mxt_free_input_device(data);
 	mxt_free_object_table(data);
 	regulator_bulk_disable(ARRAY_SIZE(data->regulators),
 			       data->regulators);
+
+	if (gpio_is_valid(data->rst_gpio))
+		gpio_set_value(data->rst_gpio, 0);
+	if (gpio_is_valid(data->iovdd_gpio))
+		gpio_set_value(data->iovdd_gpio, 0);
 
 	return 0;
 }
@@ -3440,7 +3534,7 @@ static int mxt_suspend(struct device *dev)
 	struct mxt_data *data = i2c_get_clientdata(client);
 	struct input_dev *input_dev = data->input_dev;
 
-	if (!input_dev)
+	if (!input_dev || data->suspended)
 		return 0;
 
 	mutex_lock(&input_dev->mutex);
@@ -3451,6 +3545,7 @@ static int mxt_suspend(struct device *dev)
 	mutex_unlock(&input_dev->mutex);
 
 	disable_irq(data->irq);
+	data->suspended = true;
 
 	return 0;
 }
@@ -3461,9 +3556,10 @@ static int mxt_resume(struct device *dev)
 	struct mxt_data *data = i2c_get_clientdata(client);
 	struct input_dev *input_dev = data->input_dev;
 
-	if (!input_dev)
+	if (!input_dev || !data->suspended)
 		return 0;
 
+	data->suspended = false;
 	enable_irq(data->irq);
 
 	mutex_lock(&input_dev->mutex);
@@ -3476,10 +3572,30 @@ static int mxt_resume(struct device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_FB
+static int mxt_fb_notifier_callback(struct notifier_block *self,
+				     unsigned long event, void *data)
+{
+	struct fb_event *evdata = data;
+	struct mxt_data *mxt = container_of(self, struct mxt_data, fb_notif);
+	int *blank;
+
+	if (evdata && evdata->data && event == FB_EVENT_BLANK) {
+		blank = evdata->data;
+		if (*blank == FB_BLANK_UNBLANK)
+			mxt_resume(&mxt->client->dev);
+		else if (*blank == FB_BLANK_POWERDOWN)
+			mxt_suspend(&mxt->client->dev);
+	}
+	return 0;
+}
+#endif
+
 static DEFINE_SIMPLE_DEV_PM_OPS(mxt_pm_ops, mxt_suspend, mxt_resume);
 
 static const struct of_device_id mxt_of_match[] = {
 	{ .compatible = "atmel,maxtouch", },
+	{ .compatible = "atmel,atmel_mxt_641t", },
 	/* Compatibles listed below are deprecated */
 	{ .compatible = "atmel,qt602240_ts", },
 	{ .compatible = "atmel,atmel_mxt_ts", },
