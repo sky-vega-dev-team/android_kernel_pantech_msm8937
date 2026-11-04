@@ -1,0 +1,126 @@
+/*
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2016-2017, PANTECH Co., Ltd.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ */
+
+/ {
+	model = "Qualcomm Technologies, Inc. MSM8937-PMI8950 MTP";
+	compatible = "qcom,msm8937-mtp", "qcom,msm8937", "qcom,mtp";
+	qcom,msm-id = <294 0>;
+	qcom,board-id = <8 0>;
+	pantech,board-id = <18>; /* TP20 = 18 (0x12) */
+	qcom,pmic-id = <0x10019 0x010011 0x0 0x0>;
+};
+
+/*
+ * In Android 7.1 eng firmware, continuous splash framebuffer is at 0x90000000
+ * (stock EF71 7.1 bootloader layout).
+ */
+&cont_splash_mem {
+	reg = <0x0 0x90000000 0x0 0x1400000>;
+};
+
+/*
+ * 7.1 bootloader passes:
+ * mdss_mdp.panel=1:dsi:0:qcom,mdss_dsi_nt35695_1080p_cmd:1:none:cfg:single_dsi
+ * The panel node name looked up by mdss_dsi driver is qcom,mdss_dsi_nt35695_1080p_cmd.
+ */
+&mdss_mdp {
+	dsi_nt35695_1080p_cmd: qcom,mdss_dsi_nt35695_1080p_cmd {
+		qcom,mdss-dsi-panel-name = "nt35695 1080p command mode dsi panel";
+		qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-panel-destination = "display_1";
+		qcom,mdss-dsi-panel-framerate = <60>;
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-panel-width = <1080>;
+		qcom,mdss-dsi-panel-height = <1920>;
+		qcom,mdss-dsi-h-front-porch = <180>;
+		qcom,mdss-dsi-h-back-porch = <142>;
+		qcom,mdss-dsi-h-pulse-width = <10>;
+		qcom,mdss-dsi-h-sync-skew = <0>;
+		qcom,mdss-dsi-v-back-porch = <4>;
+		qcom,mdss-dsi-v-front-porch = <10>;
+		qcom,mdss-dsi-v-pulse-width = <2>;
+		qcom,mdss-dsi-h-left-border = <0>;
+		qcom,mdss-dsi-h-right-border = <0>;
+		qcom,mdss-dsi-v-top-border = <0>;
+		qcom,mdss-dsi-v-bottom-border = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+
+		/* 60hz refresh rate */
+		qcom,mdss-dsi-on-command = [15 01 00 00 00 00 02 FF 10
+			15 01 00 00 00 00 02 FB 01
+			15 01 00 00 00 00 02 BA 03
+			15 01 00 00 00 00 02 35 00
+			15 01 00 00 00 00 02 44 03
+			15 01 00 00 00 00 02 BB 10
+			15 01 00 00 00 00 02 B0 03
+			15 01 00 00 00 00 02 FF 10
+			15 01 00 00 00 00 02 55 01
+			15 01 00 00 00 00 02 FF 23
+			15 01 00 00 00 00 02 01 84
+			15 01 00 00 00 00 02 FB 01
+			15 01 00 00 00 00 02 08 02
+			15 01 00 00 00 00 02 46 45
+			15 01 00 00 00 00 02 FF 10
+			05 01 00 00 6e 00 02 11 00
+			15 01 00 00 00 00 02 53 24
+			15 01 00 00 00 00 02 FF 10
+			05 01 00 00 30 00 01 29];
+
+		qcom,mdss-dsi-off-command = [05 01 00 00 96 00 02 28 00
+					05 01 00 00 96 00 02 10 00];
+		qcom,mdss-dsi-cabc-command = [15 01 00 00 00 00 02 FF 10
+					15 01 00 00 00 00 02 55 01];
+		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-cabc-command-state = "dsi_hs_mode";
+
+		qcom,mdss-dsi-h-sync-pulse = <1>;
+		qcom,mdss-dsi-traffic-mode = "burst_mode";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-wr-mem-start = <0x2c>;
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+
+		qcom,mdss-dsi-panel-timings = [FB 3E 2A 00 70 74 2E 42 33 04 05 00];
+		qcom,mdss-dsi-t-clk-post = <0x21>;
+		qcom,mdss-dsi-t-clk-pre = <0x2E>;
+
+		qcom,mdss-dsi-bl-min-level = <1>;
+		qcom,mdss-dsi-bl-max-level = <216>;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+		qcom,mdss-dsi-reset-sequence = <1 20>, <0 1>, <1 20>;
+		qcom,mdss-pan-physical-width-dimension = <59>;
+		qcom,mdss-pan-physical-height-dimension = <104>;
+
+		qcom,panel-supply-entries = <&dsi_panel_pwr_supply_labibb>;
+		qcom,cont-splash-enabled;
+	};
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_nt35695_1080p_cmd>;
+};
+
+&labibb {
+	status = "ok";
+	qpnp,qpnp-labibb-mode = "lcd";
+};

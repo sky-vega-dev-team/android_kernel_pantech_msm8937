@@ -105,6 +105,10 @@ struct pantech_panic_info {
  ** extern function declare
  **-------------------------------------------------------------------------------------------------*/
 extern pantech_log_header *get_pantech_klog_dump_address(void);
+pantech_log_header * __attribute__((weak)) get_pantech_klog_dump_address(void)
+{
+	return NULL;
+}
 //extern pantech_log_header *get_pantech_logcat_dump_address(void);
 
 /*---------------------------------------------------------------------------------------------------
@@ -326,8 +330,10 @@ int __init pantech_apanic_init(void)
 
 	crash_buf_header->magic=0;
 	crash_buf_header->version=0;
-	crash_buf_header->klog_buf_address = klog_header->klog_buf_address;
-	crash_buf_header->klog_size = klog_header->klog_size;
+	if (klog_header) {
+		crash_buf_header->klog_buf_address = klog_header->klog_buf_address;
+		crash_buf_header->klog_size = klog_header->klog_size;
+	}
 /*
 	crash_buf_header->mlogcat_buf_address = logcat_log_header->mlogcat_buf_address;
 	crash_buf_header->mlogcat_w_off = logcat_log_header->mlogcat_w_off;

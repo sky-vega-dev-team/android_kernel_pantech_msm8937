@@ -102,4 +102,6 @@ obj-y				+= psci.o psci-call.o
 obj-$(CONFIG_SMP)		+= psci_smp.o
 endif
 
+obj-$(CONFIG_PANTECH_ERR_CRASH_LOGGING) += pantech_sys.o pantech_restart.o pantech_apanic.o
+
 extra-y := $(head-y) vmlinux.lds
