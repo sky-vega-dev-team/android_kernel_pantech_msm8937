@@ -888,21 +888,27 @@ static void mxt_proc_t9_message(struct mxt_data *data, u8 *message)
 		 * have happened.
 		 */
 		if (status & MXT_T9_RELEASE) {
+			touchscreen_report_pos(input_dev, &data->prop, x, y, true);
 			input_mt_report_slot_inactive(input_dev);
 			mxt_input_sync(data);
-		}
-
-		/* if active, pressure must be non-zero */
-		if (!amplitude)
+		} else {
+			/* if active, pressure must be non-zero */
+			if (!amplitude)
 			amplitude = MXT_PRESSURE_DEFAULT;
 
-		/* Touch active */
-		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, 1);
-		touchscreen_report_pos(input_dev, &data->prop, x, y, true);
-		input_report_abs(input_dev, ABS_MT_PRESSURE, amplitude);
-		input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR, area);
+			/* Touch active */
+			input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, 1);
+			touchscreen_report_pos(input_dev, &data->prop, x, y, true);
+			input_report_abs(input_dev, ABS_MT_PRESSURE, amplitude);
+			input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR, area);
+		}
 	} else {
-		/* Touch no longer active, close out slot */
+		/*
+		 * Microchip v4.2 release coordinate fix:
+		 * Report last position before closing out slot to prevent
+		 * dropped fast edge-swipes (Android back gesture).
+		 */
+		touchscreen_report_pos(input_dev, &data->prop, x, y, true);
 		input_mt_report_slot_inactive(input_dev);
 	}
 
@@ -1027,7 +1033,12 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 	} else {
 		dev_dbg(dev, "[%u] release\n", id);
 
-		/* close out slot */
+		/*
+		 * Microchip v4.2 release coordinate fix:
+		 * Report last position before closing out slot to prevent
+		 * dropped fast edge-swipes (Android back gesture).
+		 */
+		touchscreen_report_pos(input_dev, &data->prop, x, y, true);
 		input_mt_report_slot_inactive(input_dev);
 	}
 
