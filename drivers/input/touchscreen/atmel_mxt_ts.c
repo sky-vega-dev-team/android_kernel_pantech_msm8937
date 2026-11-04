@@ -681,27 +681,40 @@ static int __mxt_read_reg(struct i2c_client *client,
 {
 	struct i2c_msg xfer[2];
 	bool retried = false;
-	u8 buf[2];
+	u8 *buf, *rx;
 	int ret;
+
+	/*
+	 * Reads longer than the QUP FIFO go through BAM DMA, which corrupts
+	 * them on msm-4.19 when they land at an unaligned spot inside a
+	 * buffer (the info block is read to buf + 7). Bounce both messages
+	 * through allocations of their own.
+	 */
+	buf = kmalloc(2, GFP_KERNEL);
+	rx = kmalloc(len, GFP_KERNEL);
+	if (!buf || !rx) {
+		kfree(buf);
+		kfree(rx);
+		return -ENOMEM;
+	}
 
 	buf[0] = reg & 0xff;
 	buf[1] = (reg >> 8) & 0xff;
 
-	/* Write register */
 	xfer[0].addr = client->addr;
 	xfer[0].flags = 0;
 	xfer[0].len = 2;
 	xfer[0].buf = buf;
 
-	/* Read data */
 	xfer[1].addr = client->addr;
 	xfer[1].flags = I2C_M_RD;
 	xfer[1].len = len;
-	xfer[1].buf = val;
+	xfer[1].buf = rx;
 
 retry:
 	ret = i2c_transfer(client->adapter, xfer, 2);
 	if (ret == 2) {
+		memcpy(val, rx, len);
 		ret = 0;
 	} else if (!retried && mxt_wakeup_toggle(client, true, true)) {
 		retried = true;
@@ -713,6 +726,8 @@ retry:
 			__func__, ret);
 	}
 
+	kfree(buf);
+	kfree(rx);
 	return ret;
 }
 
@@ -2279,10 +2294,18 @@ static int mxt_initialize(struct mxt_data *data)
 {
 	struct i2c_client *client = data->client;
 	int recovery_attempts = 0;
+	int retry_count = 0;
 	int error;
 
 	while (1) {
 		error = mxt_read_info_block(data);
+		while (error && retry_count < 5) {
+			dev_info(&client->dev, "info block read failed (%d), retry %u\n",
+				 error, retry_count + 1);
+			msleep(MXT_RESET_TIME);
+			error = mxt_read_info_block(data);
+			retry_count++;
+		}
 		if (!error)
 			break;
 
