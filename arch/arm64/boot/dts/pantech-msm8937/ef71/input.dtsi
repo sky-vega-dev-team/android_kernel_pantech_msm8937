@@ -11,6 +11,9 @@
 		interrupt-parent = <&tlmm>;
 		interrupts = <65 0x2008>;
 
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+
 		atmel,reset-gpio = <&tlmm 64 0x00>;
 		atmel,irq-gpio = <&tlmm 65 0x2008>;
 		atmel,iovdd-gpio = <&tlmm 39 0x00>;

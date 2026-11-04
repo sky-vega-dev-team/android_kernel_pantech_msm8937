@@ -331,6 +331,7 @@ struct mxt_data {
 	struct gpio_desc *reset_gpio;
 	int iovdd_gpio;
 	int rst_gpio;
+	int irq_gpio;
 	bool suspended;
 #ifdef CONFIG_FB
 	struct notifier_block fb_notif;
@@ -3382,9 +3383,25 @@ static int mxt_probe(struct i2c_client *client)
 		if (!gpio_is_valid(data->rst_gpio))
 			data->rst_gpio = of_get_named_gpio(client->dev.of_node,
 							   "reset-gpios", 0);
+
+		data->irq_gpio = of_get_named_gpio(client->dev.of_node,
+						   "atmel,irq-gpio", 0);
+		if (!gpio_is_valid(data->irq_gpio))
+			data->irq_gpio = of_get_named_gpio(client->dev.of_node,
+							   "irq-gpios", 0);
 	} else {
 		data->iovdd_gpio = -1;
 		data->rst_gpio = -1;
+		data->irq_gpio = -1;
+	}
+
+	if (gpio_is_valid(data->irq_gpio)) {
+		error = devm_gpio_request_one(&client->dev, data->irq_gpio,
+					      GPIOF_IN, "mxt_irq");
+		if (error) {
+			dev_err(&client->dev, "Failed to get irq gpio: %d\n", error);
+			return error;
+		}
 	}
 
 	if (gpio_is_valid(data->iovdd_gpio)) {
