@@ -2,10 +2,11 @@
 
 &i2c_3 { /* BLSP1 QUP3 */
 	status = "ok";
+	clock-frequency = <400000>;
 
 	/* EF71S (NT35695 panel): Atmel mXT641T */
 	atmel@4a {
-		compatible = "atmel,atmel_mxt_641t";
+		compatible = "atmel,maxtouch", "atmel,atmel_mxt_641t";
 		reg = <0x4a>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <65 0x2008>;
