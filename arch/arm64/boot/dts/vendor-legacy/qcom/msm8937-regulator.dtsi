@@ -351,7 +351,7 @@
 		interrupts = <0 15 IRQ_TYPE_LEVEL_HIGH>;
 		regulator-name = "apc_corner";
 		regulator-min-microvolt = <1>;
-		regulator-max-microvolt = <7>;
+		regulator-max-microvolt = <9>;
 
 		qcom,cpr-fuse-corners = <3>;
 		qcom,cpr-voltage-ceiling = <1155000 1225000 1350000>;
@@ -388,7 +388,7 @@
 					<70 54 7 0>;
 		qcom,cpr-fuse-quot-offset-scale = <5 5 5>;
 		qcom,cpr-init-voltage-step = <10000>;
-		qcom,cpr-corner-map = <1 2 3 3 3 3 3>;
+		qcom,cpr-corner-map = <1 2 3 3 3 3 3 3 3>;
 		qcom,cpr-corner-frequency-map =
 				<1 960000000>,
 				<2 1094400000>,
@@ -396,7 +396,15 @@
 				<4 1248000000>,
 				<5 1344000000>,
 				<6 1401000000>,
-				<7 1497600000>;
+				/*
+				 * Corners 7 - 9 serve only the power cluster
+				 * (1209.6 / 1305.6 / 1401.6 MHz), which needs
+				 * about what the perf cluster would at 1.24x
+				 * its clock, so they carry those frequencies.
+				 */
+				<7 1497600000>,
+				<8 1612800000>,
+				<9 1747200000>;
 		qcom,speed-bin-fuse-sel = <37 34 3 0>;
 		qcom,cpr-speed-bin-max-corners =
 					<0 0 1 2 6>,
@@ -406,6 +414,12 @@
 		qcom,cpr-quot-adjust-scaling-factor-max = <0 1400 1400>;
 		qcom,cpr-voltage-scaling-factor-max = <0 2000 2000>;
 		qcom,cpr-scaled-init-voltage-as-ceiling;
+		/*
+		 * Corners above the fused Fmax of the speed bin get their
+		 * target quotient and open-loop voltage extrapolated from the
+		 * top two fuse corners, still capped at the TURBO ceiling.
+		 */
+		qcom,cpr-extrapolate-above-fmax;
 		qcom,cpr-fuse-version-map =
 			<0	(-1)	1	(-1)	(-1)	(-1)>,
 			<(-1)	(-1)	2	(-1)	(-1)	(-1)>,
