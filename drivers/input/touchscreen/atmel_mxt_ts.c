@@ -122,11 +122,11 @@ struct t7_config {
 
 /*
  * Acquisition intervals (ms) used while the screen is off and the
- * controller only has to recognise a double tap. On the EF71S mXT641T,
- * 120 ms idle still catches every double tap; from 150 ms on some are
- * missed entirely.
+ * controller only has to recognise a double tap. With the T93 tap area
+ * covering the whole screen, the EF71S mXT641T still catches double taps
+ * at 200 ms idle.
  */
-static unsigned int dt2w_idle_ms = 120;
+static unsigned int dt2w_idle_ms = 200;
 module_param(dt2w_idle_ms, uint, 0644);
 MODULE_PARM_DESC(dt2w_idle_ms, "Idle acquisition interval (ms) in gesture mode");
 
