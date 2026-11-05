@@ -149,8 +149,11 @@ static unsigned int buf_count_neg=0;
 #if FTS_GESTRUE_EN
 struct kobject *touchscreen_dev_kobj=NULL;
 #endif
-/* Double tap to wake, on by default */
-unsigned int gesture_switch = 1;
+/*
+ * Double tap to wake, off by default: it keeps the panel supplies on while
+ * the screen is off. Turn it on with gesture_ctrl.
+ */
+unsigned int gesture_switch;
 /* fts_wq_data is set early in probe and left dangling if probe fails */
 static bool fts_probe_done;
 static u8 fts_fw_version;
