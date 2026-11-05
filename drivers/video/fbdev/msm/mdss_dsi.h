@@ -4,6 +4,10 @@
 #ifndef MDSS_DSI_H
 #define MDSS_DSI_H
 
+#if IS_BUILTIN(CONFIG_TOUCHSCREEN_FT8716_PANTECH)
+#define MDSS_DSI_PANTECH_DT2W
+#endif
+
 #include <linux/list.h>
 #include <linux/mdss_io_util.h>
 #include <linux/irqreturn.h>
@@ -621,6 +625,10 @@ struct mdss_dsi_ctrl_pdata {
 	int xiaomi_ulysse_ID0_status_gpio; // 59
 	int xiaomi_ulysse_ID1_status_gpio; // 66
 #endif
+#ifdef MDSS_DSI_PANTECH_DT2W
+	/* panel supplies left on for double tap to wake */
+	bool pantech_dt2w_vreg_kept;
+#endif
 #if IS_ENABLED(CONFIG_MACH_FAMILY_XIAOMI_WINGTECH)
 	bool wingtech_is_Lcm_Present;
 #endif
@@ -1006,5 +1014,23 @@ static inline enum dsi_physical_lane_id mdss_dsi_logical_to_physical_lane(
 
 	return i;
 }
+
+/*
+ * Pantech EF71 double tap to wake: what the panel has to keep while its
+ * touch controller watches for a double tap with the screen off.
+ */
+enum mdss_dsi_pantech_dt2w {
+	PANTECH_DT2W_OFF,	/* power the panel down as usual */
+	PANTECH_DT2W_SLEEP,	/* panel asleep, reset and supplies kept */
+};
+
+#ifdef MDSS_DSI_PANTECH_DT2W
+int mdss_dsi_pantech_dt2w(struct mdss_panel_data *pdata);
+#else
+static inline int mdss_dsi_pantech_dt2w(struct mdss_panel_data *pdata)
+{
+	return PANTECH_DT2W_OFF;
+}
+#endif
 
 #endif /* MDSS_DSI_H */

@@ -31,6 +31,43 @@
 #include "mdss_dsi_phy.h"
 #include "mdss_dba_utils.h"
 
+#ifdef MDSS_DSI_PANTECH_DT2W
+#if IS_BUILTIN(CONFIG_TOUCHSCREEN_FT8716_PANTECH)
+extern bool fts_ts_dt2w_keep_power(void);
+#endif
+
+/*
+ * EF71AS: the FT8716 is in-cell, its touch controller stops scanning once
+ * the panel reset or LAB/IBB go down. LAB/IBB touch-to-wake mode does not
+ * keep it running either, so leave them up. The panel itself may sleep.
+ */
+int mdss_dsi_pantech_dt2w(struct mdss_panel_data *pdata)
+{
+	const char *name = pdata->panel_info.panel_name;
+
+#if IS_BUILTIN(CONFIG_TOUCHSCREEN_FT8716_PANTECH)
+	if (!strcmp(name, "ft8716 1080p video mode dsi panel") &&
+	    fts_ts_dt2w_keep_power())
+		return PANTECH_DT2W_SLEEP;
+#endif
+
+	return PANTECH_DT2W_OFF;
+}
+
+static void mdss_dsi_pantech_free_gpios(struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	/* Release the lines for the next power on, keeping their levels */
+	if (gpio_is_valid(ctrl->avdd_en_gpio))
+		gpio_free(ctrl->avdd_en_gpio);
+	if (gpio_is_valid(ctrl->disp_en_gpio))
+		gpio_free(ctrl->disp_en_gpio);
+	if (gpio_is_valid(ctrl->rst_gpio))
+		gpio_free(ctrl->rst_gpio);
+	if (gpio_is_valid(ctrl->lcd_mode_sel_gpio))
+		gpio_free(ctrl->lcd_mode_sel_gpio);
+}
+#endif
+
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
 
 /* Master structure to hold all the information about the DSI/panel */
@@ -371,6 +408,17 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+#ifdef MDSS_DSI_PANTECH_DT2W
+	if (mdss_dsi_pantech_dt2w(pdata) != PANTECH_DT2W_OFF) {
+		pr_debug("%s: keeping panel reset and supplies for double tap to wake\n",
+			 __func__);
+		/* pinctrl suspend would pull the reset line down too */
+		mdss_dsi_pantech_free_gpios(ctrl_pdata);
+		ctrl_pdata->pantech_dt2w_vreg_kept = true;
+		goto end;
+	}
+#endif
+
 	ret = mdss_dsi_panel_reset(pdata, 0);
 	if (ret) {
 		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
@@ -413,6 +461,12 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+#ifdef MDSS_DSI_PANTECH_DT2W
+	/* Supplies are still on, only the reset sequence has to run again */
+	if (ctrl_pdata->pantech_dt2w_vreg_kept)
+		ctrl_pdata->pantech_dt2w_vreg_kept = false;
+	else
+#endif
 	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
 		ctrl_pdata->panel_power_data.num_vreg, 1);
