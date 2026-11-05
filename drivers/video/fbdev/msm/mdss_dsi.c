@@ -54,6 +54,56 @@ int mdss_dsi_pantech_dt2w(struct mdss_panel_data *pdata)
 	return PANTECH_DT2W_OFF;
 }
 
+/*
+ * LAB/IBB voltages (uV) while waiting for a double tap. The panel runs at
+ * 5.7V, the touch controller keeps sensing with less.
+ */
+static const struct {
+	int lab_uv;
+	int ibb_uv;
+} mdss_dsi_pantech_dt2w_uv[] = {
+	/* FT8716: still scans at the 4.6V LAB/IBB floor */
+	[PANTECH_DT2W_SLEEP] = { 4600000, 4600000 },
+};
+
+/* Lower LAB/IBB for @mode, or restore them with PANTECH_DT2W_OFF */
+static void mdss_dsi_pantech_dt2w_supply(struct mdss_dsi_ctrl_pdata *ctrl,
+					 int mode)
+{
+	struct dss_module_power *mp = &ctrl->panel_power_data;
+	int i, rc, uv;
+
+	for (i = 0; i < mp->num_vreg &&
+		    i < ARRAY_SIZE(ctrl->pantech_dt2w_saved_uv); i++) {
+		struct dss_vreg *v = &mp->vreg_config[i];
+
+		if (IS_ERR_OR_NULL(v->vreg))
+			continue;
+
+		if (mode != PANTECH_DT2W_OFF) {
+			if (!strcmp(v->vreg_name, "lab"))
+				uv = mdss_dsi_pantech_dt2w_uv[mode].lab_uv;
+			else if (!strcmp(v->vreg_name, "ibb"))
+				uv = mdss_dsi_pantech_dt2w_uv[mode].ibb_uv;
+			else
+				continue;
+			uv = clamp(uv, v->min_voltage, v->max_voltage);
+			ctrl->pantech_dt2w_saved_uv[i] =
+				regulator_get_voltage(v->vreg);
+		} else {
+			uv = ctrl->pantech_dt2w_saved_uv[i];
+			ctrl->pantech_dt2w_saved_uv[i] = 0;
+			if (uv <= 0)
+				continue;
+		}
+
+		rc = regulator_set_voltage(v->vreg, uv, v->max_voltage);
+		if (rc)
+			pr_warn("%s: %s to %duV failed rc=%d\n", __func__,
+				v->vreg_name, uv, rc);
+	}
+}
+
 static void mdss_dsi_pantech_free_gpios(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	/* Release the lines for the next power on, keeping their levels */
@@ -397,6 +447,9 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev,
 static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
+#ifdef MDSS_DSI_PANTECH_DT2W
+	int dt2w;
+#endif
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
 	if (pdata == NULL) {
@@ -409,11 +462,13 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 				panel_data);
 
 #ifdef MDSS_DSI_PANTECH_DT2W
-	if (mdss_dsi_pantech_dt2w(pdata) != PANTECH_DT2W_OFF) {
+	dt2w = mdss_dsi_pantech_dt2w(pdata);
+	if (dt2w != PANTECH_DT2W_OFF) {
 		pr_debug("%s: keeping panel reset and supplies for double tap to wake\n",
 			 __func__);
 		/* pinctrl suspend would pull the reset line down too */
 		mdss_dsi_pantech_free_gpios(ctrl_pdata);
+		mdss_dsi_pantech_dt2w_supply(ctrl_pdata, dt2w);
 		ctrl_pdata->pantech_dt2w_vreg_kept = true;
 		goto end;
 	}
@@ -463,9 +518,10 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 
 #ifdef MDSS_DSI_PANTECH_DT2W
 	/* Supplies are still on, only the reset sequence has to run again */
-	if (ctrl_pdata->pantech_dt2w_vreg_kept)
+	if (ctrl_pdata->pantech_dt2w_vreg_kept) {
 		ctrl_pdata->pantech_dt2w_vreg_kept = false;
-	else
+		mdss_dsi_pantech_dt2w_supply(ctrl_pdata, PANTECH_DT2W_OFF);
+	} else
 #endif
 	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,

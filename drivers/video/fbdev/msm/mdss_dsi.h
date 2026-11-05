@@ -628,6 +628,7 @@ struct mdss_dsi_ctrl_pdata {
 #ifdef MDSS_DSI_PANTECH_DT2W
 	/* panel supplies left on for double tap to wake */
 	bool pantech_dt2w_vreg_kept;
+	int pantech_dt2w_saved_uv[4];
 #endif
 #if IS_ENABLED(CONFIG_MACH_FAMILY_XIAOMI_WINGTECH)
 	bool wingtech_is_Lcm_Present;
