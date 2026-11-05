@@ -33,6 +33,18 @@ struct pll_freq_tbl {
 };
 
 /**
+ * struct clk_pll_spm_ctrl - L2 SPM event that holds a CPU PLL off
+ * @offset: L2_SPM_FORCE_EVENT_EN offset; L2_SPM_FORCE_EVENT follows at +0x4
+ * @event_bit: event bit in both registers
+ * @spm_base: mapped L2 SPM registers, NULL when the PLL has no such event
+ */
+struct clk_pll_spm_ctrl {
+	u32 offset;
+	u32 event_bit;
+	void __iomem *spm_base;
+};
+
+/**
  * struct clk_pll - phase locked loop (PLL)
  * @l_reg: L register
  * @m_reg: M register
@@ -43,6 +55,7 @@ struct pll_freq_tbl {
  * @status_bit: ANDed with @status_reg to determine if PLL is enabled
  * @freq_tbl: PLL frequency table
  * @hw: handle between common and hardware-specific interfaces
+ * @spm_ctrl: L2 SPM event raised while the PLL is off (SR2/HF PLLs)
  */
 struct clk_pll {
 	u32	l_reg;
@@ -58,6 +71,7 @@ struct clk_pll {
 	const struct pll_freq_tbl *freq_tbl;
 
 	struct clk_regmap clkr;
+	struct clk_pll_spm_ctrl spm_ctrl;
 };
 
 extern const struct clk_ops clk_pll_ops;

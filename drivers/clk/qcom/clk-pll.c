@@ -17,6 +17,7 @@
 #include <linux/bug.h>
 #include <linux/delay.h>
 #include <linux/export.h>
+#include <linux/io.h>
 #include <linux/clk-provider.h>
 #include <linux/regmap.h>
 
@@ -28,6 +29,43 @@
 #define PLL_OUTCTRL		BIT(0)
 #define PLL_BYPASSNL		BIT(1)
 #define PLL_RESET_N		BIT(2)
+
+#define L2_SPM_FORCE_EVENT	0x4
+
+/*
+ * The APSS PLLs have an L2 SPM event that keeps them off. Raise it while
+ * the PLL is disabled and drop it before the PLL comes out of reset, as the
+ * msm-3.18 SR2 PLL driver did: a PLL relocked with the event still raised
+ * never gives the CPU mux a clock to switch to.
+ */
+static void clk_pll_spm_event(struct clk_pll *pll, bool enable)
+{
+	void __iomem *base = pll->spm_ctrl.spm_base;
+	u32 bit = BIT(pll->spm_ctrl.event_bit);
+	u32 en_reg = pll->spm_ctrl.offset;
+	u32 ev_reg = en_reg + L2_SPM_FORCE_EVENT;
+
+	if (!base)
+		return;
+
+	if (enable) {
+		writel_relaxed(readl_relaxed(base + en_reg) | bit,
+			       base + en_reg);
+		/* Ensure the event is enabled before it is forced */
+		mb();
+		writel_relaxed(readl_relaxed(base + ev_reg) | bit,
+			       base + ev_reg);
+		mb();
+	} else {
+		writel_relaxed(readl_relaxed(base + ev_reg) & ~bit,
+			       base + ev_reg);
+		/* Ensure the event is released before it is disabled */
+		mb();
+		writel_relaxed(readl_relaxed(base + en_reg) & ~bit,
+			       base + en_reg);
+		mb();
+	}
+}
 
 static int clk_pll_enable(struct clk_hw *hw)
 {
@@ -80,6 +118,9 @@ static void clk_pll_disable(struct clk_hw *hw)
 	/* Skip if in FSM mode */
 	if (val & PLL_VOTE_FSM_ENA)
 		return;
+
+	clk_pll_spm_event(pll, true);
+
 	mask = PLL_OUTCTRL | PLL_RESET_N | PLL_BYPASSNL;
 	regmap_update_bits(pll->clkr.regmap, pll->mode_reg, mask, 0);
 }
@@ -301,6 +342,8 @@ static int clk_pll_sr2_enable(struct clk_hw *hw)
 	int ret, count;
 	u32 mode, val;
 
+	clk_pll_spm_event(pll, false);
+
 	ret = regmap_read(pll->clkr.regmap, pll->mode_reg, &mode);
 	if (ret)
 		return ret;
@@ -322,6 +365,10 @@ static int clk_pll_sr2_enable(struct clk_hw *hw)
 				 PLL_RESET_N);
 	if (ret)
 		return ret;
+
+	/* Make sure the reset release goes through before polling the lock */
+	mb();
+	udelay(50);
 
 	/*
 	 * The lock detect can take longer than wait_for_pll() allows at the

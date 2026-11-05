@@ -38,19 +38,6 @@ enum apcs_mux_clk_parent {
 	P_APCS_CPU_PLL,
 };
 
-struct legacy_pll_spm_ctrl {
-	u32 offset;
-	u32 force_event_offset;
-	u32 event_bit;
-	void __iomem *spm_base;
-};
-
-static struct legacy_pll_spm_ctrl apcs_pll_spm = {
-	.offset = 0x50,
-	.force_event_offset = 0x4,
-	.event_bit = 0x4,
-};
-
 static const struct parent_map apcs_mux_clk_parent_map0[] = {
 	{ P_BI_TCXO_AO, 0 },
 	{ P_GPLL0_AO_OUT_MAIN, 4 },
@@ -249,48 +236,81 @@ static u8 cpucc_clk_get_parent(struct clk_hw *hw)
 	return clk_regmap_mux_div_ops.get_parent(hw);
 }
 
-static void spm_event(struct legacy_pll_spm_ctrl *apcs_pll_spm, bool enable)
-{
-	void __iomem *base = apcs_pll_spm->spm_base;
-	u32 offset, force_event_offset, bit, val;
+/*
+ * A cluster in L2 GDHS/PC has its PLL held off by its L2 SPM. A rate change
+ * run from the other cluster then cannot move the mux off the dead PLL nor
+ * relock it, and leaves the cluster on the safe GPLL0 source for good. As
+ * msm-3.18 did, keep the cluster out of L2 low power modes and wake it for
+ * the duration of the change.
+ */
+struct cpucc_clk_lpm {
+	struct clk_regmap_mux_div *cpuclk;
+	struct cpumask cpus;
+	struct latency_level latency_lvl;
+	u32 cpu_latency_no_l2_pc_us;
+	struct pm_qos_request req;
+};
 
-	if (!apcs_pll_spm || !base)
+static struct clk_regmap_mux_div apcs_mux_c0_clk;
+static struct clk_regmap_mux_div apcs_mux_c1_clk;
+
+static struct cpucc_clk_lpm cpucc_lpm[] = {
+	{
+		/* CPU 0 - 3 */
+		.cpuclk = &apcs_mux_c1_clk,
+		.cpus = { CPU_BITS_NONE },
+		.latency_lvl = {
+			.affinity_level = LPM_AFF_LVL_L2,
+			.reset_level = LPM_RESET_LVL_GDHS,
+			.level_name = "perf",
+		},
+		.cpu_latency_no_l2_pc_us = 300,
+	},
+	{
+		/* CPU 4 - 7 */
+		.cpuclk = &apcs_mux_c0_clk,
+		.cpus = { CPU_BITS_NONE },
+		.latency_lvl = {
+			.affinity_level = LPM_AFF_LVL_L2,
+			.reset_level = LPM_RESET_LVL_GDHS,
+			.level_name = "pwr",
+		},
+		.cpu_latency_no_l2_pc_us = 300,
+	},
+};
+
+static void do_nothing(void *unused) { }
+
+static struct cpucc_clk_lpm *cpucc_get_lpm(struct clk_regmap_mux_div *cpuclk)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(cpucc_lpm); i++)
+		if (cpucc_lpm[i].cpuclk == cpuclk)
+			return &cpucc_lpm[i];
+
+	return NULL;
+}
+
+static void cpucc_lpm_hold(struct cpucc_clk_lpm *lpm)
+{
+	if (!lpm || cpumask_empty(&lpm->cpus) ||
+	    pm_qos_request_active(&lpm->req))
 		return;
 
-	offset = apcs_pll_spm->offset;
-	force_event_offset = apcs_pll_spm->force_event_offset;
-	bit = apcs_pll_spm->event_bit;
+	memset(&lpm->req, 0, sizeof(lpm->req));
+	cpumask_copy(&lpm->req.cpus_affine, &lpm->cpus);
+	lpm->req.type = PM_QOS_REQ_AFFINE_CORES;
+	pm_qos_add_request(&lpm->req, PM_QOS_CPU_DMA_LATENCY,
+			   lpm->cpu_latency_no_l2_pc_us - 1);
+	/* Bring the cluster out of its low power mode */
+	smp_call_function_any(&lpm->cpus, do_nothing, NULL, 1);
+}
 
-	if (enable) {
-		/* L2_SPM_FORCE_EVENT_EN */
-		val = readl_relaxed(base + offset);
-		val |= BIT(bit);
-		writel_relaxed(val, (base + offset));
-		/* Ensure that the write above goes through. */
-		mb();
-
-		/* L2_SPM_FORCE_EVENT */
-		val = readl_relaxed(base + offset + force_event_offset);
-		val |= BIT(bit);
-		writel_relaxed(val, (base + offset + force_event_offset));
-		/* Ensure that the write above goes through. */
-		mb();
-
-	} else {
-		/* L2_SPM_FORCE_EVENT */
-		val = readl_relaxed(base + offset + force_event_offset);
-		val &= ~BIT(bit);
-		writel_relaxed(val, (base + offset + force_event_offset));
-		/* Ensure that the write above goes through. */
-		mb();
-
-		/* L2_SPM_FORCE_EVENT_EN */
-		val = readl_relaxed(base + offset);
-		val &= ~BIT(bit);
-		writel_relaxed(val, (base + offset));
-		/* Ensure that the write above goes through. */
-		mb();
-	}
+static void cpucc_lpm_release(struct cpucc_clk_lpm *lpm)
+{
+	if (lpm && pm_qos_request_active(&lpm->req))
+		pm_qos_remove_request(&lpm->req);
 }
 
 /*
@@ -302,19 +322,23 @@ static int cpucc_notifier_cb(struct notifier_block *nb, unsigned long event,
 {
 	struct clk_regmap_mux_div *cpuclk = container_of(nb,
 					struct clk_regmap_mux_div, clk_nb);
+	struct cpucc_clk_lpm *lpm = cpucc_get_lpm(cpuclk);
 	int ret = 0, safe_src = cpuclk->safe_src;
 
 	switch (event) {
 	case PRE_RATE_CHANGE:
-		/* set the mux to safe source gpll0_ao_out & div */
+		cpucc_lpm_hold(lpm);
+		/*
+		 * Set the mux to safe source gpll0_ao_out & div. The PLL ops
+		 * raise and drop its SPM event around the relock.
+		 */
 		ret = mux_div_set_src_div(cpuclk, safe_src, 1);
-		spm_event(&apcs_pll_spm, true);
 		break;
 	case POST_RATE_CHANGE:
-		if (cpuclk->src != safe_src)
-			spm_event(&apcs_pll_spm, false);
+		cpucc_lpm_release(lpm);
 		break;
 	case ABORT_RATE_CHANGE:
+		cpucc_lpm_release(lpm);
 		pr_err("Error in configuring PLL - stay at safe src only\n");
 	}
 
@@ -355,6 +379,10 @@ static struct clk_pll apcs_cpu_pll0 = {
 	.config_reg = 0x10,
 	.status_reg = 0x1c,
 	.status_bit = 16,
+	.spm_ctrl = {
+		.offset = 0x50,
+		.event_bit = 0x4,
+	},
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "apcs_cpu_pll0",
 		.parent_names = (const char *[]){ "bi_tcxo_ao" },
@@ -397,6 +425,10 @@ static struct clk_pll apcs_cpu_pll1 = {
 	.config_reg = 0x10,
 	.status_reg = 0x1c,
 	.status_bit = 16,
+	.spm_ctrl = {
+		.offset = 0x50,
+		.event_bit = 0x4,
+	},
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "apcs_cpu_pll1",
 		.parent_names = (const char *[]){ "bi_tcxo_ao" },
@@ -906,6 +938,19 @@ static int cpucc_driver_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Couldn't get regmap for apcs_cpu_pll0\n");
 			return PTR_ERR(apcs_cpu_pll0.clkr.regmap);
 		}
+
+		/*
+		 * The power cluster PLL has the same L2 SPM event as the perf
+		 * one. It has always run without it here, so carry on without
+		 * it rather than fail if it cannot be mapped.
+		 */
+		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+				"spm_c0_base");
+		if (res)
+			apcs_cpu_pll0.spm_ctrl.spm_base = devm_ioremap(dev,
+					res->start, resource_size(res));
+		if (!apcs_cpu_pll0.spm_ctrl.spm_base)
+			dev_warn(&pdev->dev, "No c0 SPM, PLL0 relocks without it\n");
 	}
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "apcs_pll1");
@@ -1006,7 +1051,7 @@ static int cpucc_driver_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Failed to ioremap c1 spm registers\n");
 			return -ENOMEM;
 		}
-		apcs_pll_spm.spm_base = base;
+		apcs_cpu_pll1.spm_ctrl.spm_base = base;
 	}
 
 	/* Get speed bin information */
@@ -1121,6 +1166,13 @@ static int cpucc_driver_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	for_each_possible_cpu(cpu) {
+		if (cpu / 4 == 0)
+			cpumask_set_cpu(cpu, &cpucc_lpm[0].cpus);
+		else if (cpu / 4 == 1 && is_sdm439)
+			cpumask_set_cpu(cpu, &cpucc_lpm[1].cpus);
+	}
+
 	/* For safe freq switching during rate change */
 	if (is_sdm439) {
 		ret = clk_notifier_register(apcs_mux_c0_clk.clkr.hw.clk,
@@ -1177,6 +1229,28 @@ static struct platform_driver cpu_clk_driver = {
 		.of_match_table = match_table,
 	},
 };
+
+static int __init cpucc_clk_lpm_get_latency(void)
+{
+	int i, rc;
+
+	for (i = 0; i < ARRAY_SIZE(cpucc_lpm); i++) {
+		if (cpumask_empty(&cpucc_lpm[i].cpus))
+			continue;
+		rc = lpm_get_latency(&cpucc_lpm[i].latency_lvl,
+				     &cpucc_lpm[i].cpu_latency_no_l2_pc_us);
+		if (rc < 0)
+			pr_err("Failed to get the L2 PC latency for %s: %d\n",
+			       cpucc_lpm[i].latency_lvl.level_name, rc);
+		else
+			pr_info("clock-cpu: %s cluster L2 low power latency %u us\n",
+				cpucc_lpm[i].latency_lvl.level_name,
+				cpucc_lpm[i].cpu_latency_no_l2_pc_us);
+	}
+
+	return 0;
+}
+late_initcall_sync(cpucc_clk_lpm_get_latency);
 
 static int __init cpu_clk_init(void)
 {
