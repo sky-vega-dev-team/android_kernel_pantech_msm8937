@@ -44,6 +44,7 @@
 #define RBCPR_GCNT_TARGET_GCNT_BITS	10
 #define RBCPR_GCNT_TARGET_GCNT_SHIFT	12
 #define RBCPR_GCNT_TARGET_GCNT_MASK	((1<<RBCPR_GCNT_TARGET_GCNT_BITS)-1)
+#define RBCPR_GCNT_TARGET_TARGET_MASK	((1<<RBCPR_GCNT_TARGET_GCNT_SHIFT)-1)
 
 /* RBCPR Sensor Mask and Bypass Registers */
 #define REG_RBCPR_SENSOR_MASK0		0x20
@@ -2427,6 +2428,45 @@ static int cpr_get_open_loop_voltage(struct cpr_regulator *cpr_vreg,
 		}
 	}
 
+	/*
+	 * Extrapolate the open-loop voltage of the virtual corners above the
+	 * highest fused one along the slope of the top two fuse corners,
+	 * limited by the same per-MHz factor. cpr_limit_open_loop_voltage()
+	 * then caps them at the ceiling voltage.
+	 */
+	j = cpr_vreg->num_fuse_corners;
+	if (of_property_read_bool(dev->of_node,
+				  "qcom,cpr-extrapolate-above-fmax")
+	    && j > CPR_FUSE_CORNER_MIN) {
+		freq_high = freq_map[corner_max[j]];
+		freq_low = freq_map[corner_max[j - 1]];
+		volt_high = cpr_vreg->pvs_corner_v[j];
+		volt_low = cpr_vreg->pvs_corner_v[j - 1];
+
+		for (i = corner_max[j] + 1;
+		     freq_high > freq_low && volt_high > volt_low
+		     && i <= cpr_vreg->num_corners; i++) {
+			freq = freq_map[i];
+			if (cpr_vreg->corner_map[i] != j || freq <= freq_high)
+				continue;
+
+			temp = (freq - freq_high) * (volt_high - volt_low);
+			do_div(temp, (u32)(freq_high - freq_low));
+
+			temp_limit = (freq - freq_high) * max_factor[j];
+			do_div(temp_limit, 1000000);
+
+			cpr_vreg->open_loop_volt[i]
+				= volt_high + min(temp, temp_limit);
+			cpr_vreg->open_loop_volt[i]
+				= DIV_ROUND_UP(cpr_vreg->open_loop_volt[i],
+						cpr_vreg->step_volt)
+					* cpr_vreg->step_volt;
+			cpr_info(cpr_vreg, "extrapolated open-loop[%d] = %d uV\n",
+				i, cpr_vreg->open_loop_volt[i]);
+		}
+	}
+
 	kfree(max_factor);
 	return 0;
 }
@@ -3082,6 +3122,36 @@ static int cpr_get_corner_quot_adjustment(struct cpr_regulator *cpr_vreg,
 				cpr_vreg->quot_adjust[i] = scaling[j] *
 				   (freq_max[j] - freq_corner) / 1000;
 			}
+		}
+	}
+
+	/*
+	 * Virtual corners above the highest one this speed bin is fused for
+	 * otherwise get its target quotient unchanged. Extrapolate them along
+	 * the same scaling instead, so that they ask for a faster ring
+	 * oscillator: a negative adjustment raises the target. The ceiling
+	 * voltage still bounds what closed-loop CPR may reach.
+	 */
+	if (of_property_read_bool(dev->of_node,
+				  "qcom,cpr-extrapolate-above-fmax")) {
+		j = highest_fuse_corner;
+		for (i = corner_max[j] + 1; i <= cpr_vreg->num_corners; i++) {
+			int quot;
+
+			freq_corner = freq_map[i] / 1000000; /* MHz */
+			if (cpr_vreg->corner_map[i] != j
+			    || freq_corner <= freq_max[j])
+				continue;
+
+			cpr_vreg->quot_adjust[i] = -(int)(scaling[j] *
+					(freq_corner - freq_max[j]) / 1000);
+
+			quot = cpr_vreg->cpr_fuse_target_quot[j]
+				- cpr_vreg->quot_adjust[i];
+			if (quot > RBCPR_GCNT_TARGET_TARGET_MASK)
+				cpr_vreg->quot_adjust[i] =
+					cpr_vreg->cpr_fuse_target_quot[j]
+					- RBCPR_GCNT_TARGET_TARGET_MASK;
 		}
 	}
 
