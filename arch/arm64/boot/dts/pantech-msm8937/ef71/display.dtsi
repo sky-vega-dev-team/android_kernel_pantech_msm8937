@@ -83,6 +83,12 @@
 
 &ibb_regulator {
 	qcom,qpnp-ibb-discharge-resistor = <64>;	/* 47 nF in LCD mode */
+	/*
+	 * Only used for the driver's wait after raising the voltage, in us
+	 * per 100 mV step. The PMI8950 default of 2000000 busy-waits for
+	 * 22 seconds on a 4.6V -> 5.7V step. Match LAB instead.
+	 */
+	qcom,qpnp-ibb-slew-rate = <5000>;
 	qcom,qpnp-ibb-init-voltage = <5700000>;
 	qcom,qpnp-ibb-init-lcd-voltage = <5700000>;
 };
