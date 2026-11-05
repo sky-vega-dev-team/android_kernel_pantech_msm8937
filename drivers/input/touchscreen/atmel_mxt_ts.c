@@ -1109,6 +1109,21 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 	data->update_input = true;
 }
 
+/* The controller doing double tap to wake, for the display driver */
+static struct mxt_data *mxt_dt2w_data;
+
+/**
+ * mxt_ts_dt2w_armed() - whether gesture mode is armed for this screen off
+ *
+ * Some panels stop the touch sensing when they enter sleep. Their display
+ * driver can check this to keep the panel in display off instead.
+ */
+bool mxt_ts_dt2w_armed(void)
+{
+	return mxt_dt2w_data && mxt_dt2w_data->dt2w_active;
+}
+EXPORT_SYMBOL(mxt_ts_dt2w_armed);
+
 static void mxt_proc_t93_message(struct mxt_data *data, u8 *message)
 {
 	struct input_dev *input_dev = data->input_dev;
@@ -3632,6 +3647,8 @@ static int mxt_probe(struct i2c_client *client)
 		goto err_disable_regulators;
 
 	device_init_wakeup(&client->dev, true);
+	if (data->T93_address)
+		mxt_dt2w_data = data;
 
 #ifdef CONFIG_FB
 	data->fb_notif.notifier_call = mxt_fb_notifier_callback;
@@ -3665,6 +3682,8 @@ static int mxt_remove(struct i2c_client *client)
 {
 	struct mxt_data *data = i2c_get_clientdata(client);
 
+	if (mxt_dt2w_data == data)
+		mxt_dt2w_data = NULL;
 	disable_irq(data->irq);
 #ifdef CONFIG_FB
 	fb_unregister_client(&data->fb_notif);
@@ -3812,13 +3831,20 @@ static int mxt_fb_notifier_callback(struct notifier_block *self,
 	struct mxt_data *mxt = container_of(self, struct mxt_data, fb_notif);
 	int *blank;
 
-	if (evdata && evdata->data && event == FB_EVENT_BLANK) {
-		blank = evdata->data;
-		if (*blank == FB_BLANK_UNBLANK)
-			mxt_resume(&mxt->client->dev);
-		else if (*blank == FB_BLANK_POWERDOWN)
-			mxt_suspend(&mxt->client->dev);
-	}
+	if (!evdata || !evdata->data)
+		return 0;
+
+	blank = evdata->data;
+
+	/*
+	 * Arm gesture mode before the panel goes down, so the display
+	 * driver already knows whether the touch has to keep sensing.
+	 */
+	if (event == FB_EARLY_EVENT_BLANK && *blank == FB_BLANK_POWERDOWN)
+		mxt_suspend(&mxt->client->dev);
+	else if (event == FB_EVENT_BLANK && *blank == FB_BLANK_UNBLANK)
+		mxt_resume(&mxt->client->dev);
+
 	return 0;
 }
 #endif
