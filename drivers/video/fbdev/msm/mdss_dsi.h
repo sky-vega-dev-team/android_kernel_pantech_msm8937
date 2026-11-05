@@ -4,7 +4,8 @@
 #ifndef MDSS_DSI_H
 #define MDSS_DSI_H
 
-#if IS_BUILTIN(CONFIG_TOUCHSCREEN_FT8716_PANTECH)
+#if IS_BUILTIN(CONFIG_TOUCHSCREEN_FT8716_PANTECH) || \
+	IS_BUILTIN(CONFIG_TOUCHSCREEN_ATMEL_MXT)
 #define MDSS_DSI_PANTECH_DT2W
 #endif
 
@@ -1023,6 +1024,7 @@ static inline enum dsi_physical_lane_id mdss_dsi_logical_to_physical_lane(
 enum mdss_dsi_pantech_dt2w {
 	PANTECH_DT2W_OFF,	/* power the panel down as usual */
 	PANTECH_DT2W_SLEEP,	/* panel asleep, reset and supplies kept */
+	PANTECH_DT2W_AWAKE,	/* panel in display off, reset and supplies kept */
 };
 
 #ifdef MDSS_DSI_PANTECH_DT2W

@@ -35,11 +35,17 @@
 #if IS_BUILTIN(CONFIG_TOUCHSCREEN_FT8716_PANTECH)
 extern bool fts_ts_dt2w_keep_power(void);
 #endif
+#if IS_BUILTIN(CONFIG_TOUCHSCREEN_ATMEL_MXT)
+extern bool mxt_ts_dt2w_armed(void);
+#endif
 
 /*
  * EF71AS: the FT8716 is in-cell, its touch controller stops scanning once
  * the panel reset or LAB/IBB go down. LAB/IBB touch-to-wake mode does not
  * keep it running either, so leave them up. The panel itself may sleep.
+ *
+ * EF71S: the Atmel mXT641T stops sensing as soon as the NT35695 enters
+ * sleep, even with its supplies kept. Leave the panel in display off.
  */
 int mdss_dsi_pantech_dt2w(struct mdss_panel_data *pdata)
 {
@@ -49,6 +55,10 @@ int mdss_dsi_pantech_dt2w(struct mdss_panel_data *pdata)
 	if (!strcmp(name, "ft8716 1080p video mode dsi panel") &&
 	    fts_ts_dt2w_keep_power())
 		return PANTECH_DT2W_SLEEP;
+#endif
+#if IS_BUILTIN(CONFIG_TOUCHSCREEN_ATMEL_MXT)
+	if (!strncmp(name, "nt35695 1080p", 13) && mxt_ts_dt2w_armed())
+		return PANTECH_DT2W_AWAKE;
 #endif
 
 	return PANTECH_DT2W_OFF;
@@ -64,6 +74,8 @@ static const struct {
 } mdss_dsi_pantech_dt2w_uv[] = {
 	/* FT8716: still scans at the 4.6V LAB/IBB floor */
 	[PANTECH_DT2W_SLEEP] = { 4600000, 4600000 },
+	/* NT35695 in display off: LAB floor, IBB tested down to 4.0V */
+	[PANTECH_DT2W_AWAKE] = { 4600000, 4000000 },
 };
 
 /* Lower LAB/IBB for @mode, or restore them with PANTECH_DT2W_OFF */

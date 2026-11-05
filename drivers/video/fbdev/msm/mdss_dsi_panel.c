@@ -1514,6 +1514,20 @@ end:
 	return 0;
 }
 
+/*
+ * Display off and idle mode, without the sleep in of the panel off
+ * commands, for panels whose touch stops sensing once the panel sleeps.
+ * Idle mode (8 colours) lowers what the awake panel draws.
+ */
+static char pantech_dt2w_display_off[] = {0x28};
+static char pantech_dt2w_idle_on[] = {0x39};
+static struct dsi_cmd_desc pantech_dt2w_off_cmds[] = {
+	{{DTYPE_DCS_WRITE, 1, 0, 0, 20, sizeof(pantech_dt2w_display_off)},
+		pantech_dt2w_display_off},
+	{{DTYPE_DCS_WRITE, 1, 0, 0, 0, sizeof(pantech_dt2w_idle_on)},
+		pantech_dt2w_idle_on},
+};
+
 static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
@@ -1537,7 +1551,15 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 			goto end;
 	}
 
-	if (ctrl->off_cmds.cmd_cnt)
+	if (mdss_dsi_pantech_dt2w(pdata) == PANTECH_DT2W_AWAKE) {
+		struct dsi_panel_cmds cmds = {
+			.cmds = pantech_dt2w_off_cmds,
+			.cmd_cnt = ARRAY_SIZE(pantech_dt2w_off_cmds),
+			.link_state = ctrl->off_cmds.link_state,
+		};
+
+		mdss_dsi_panel_cmds_send(ctrl, &cmds, CMD_REQ_COMMIT);
+	} else if (ctrl->off_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
 
 	if (ctrl->ds_registered && pinfo->is_pluggable) {
