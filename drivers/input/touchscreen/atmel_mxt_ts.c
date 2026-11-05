@@ -3508,8 +3508,11 @@ static int mxt_probe(struct i2c_client *client)
 	init_completion(&data->crc_completion);
 	init_completion(&data->pm_completion);
 
-	/* Double tap to wake is on by default where the firmware supports it */
-	data->dt2w_enabled = true;
+	/*
+	 * Double tap to wake is off by default: on the EF71S it keeps the
+	 * panel awake while the screen is off. Turn it on with dt2w_enable.
+	 */
+	data->dt2w_enabled = false;
 
 	data->suspend_mode = dmi_check_system(chromebook_T9_suspend_dmi) ?
 		MXT_SUSPEND_T9_CTRL : MXT_SUSPEND_DEEP_SLEEP;
