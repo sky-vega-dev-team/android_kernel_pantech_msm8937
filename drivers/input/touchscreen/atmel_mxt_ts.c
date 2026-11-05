@@ -3140,6 +3140,22 @@ static const struct attribute_group mxt_attr_group = {
 	.attrs = mxt_attrs,
 };
 
+static void mxt_reset_slots(struct mxt_data *data)
+{
+	struct input_dev *input_dev = data->input_dev;
+	int id;
+
+	if (!input_dev)
+		return;
+
+	for (id = 0; id < data->num_touchids; id++) {
+		input_mt_slot(input_dev, id);
+		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, false);
+	}
+
+	mxt_input_sync(data);
+}
+
 static void mxt_start(struct mxt_data *data)
 {
 	mxt_wakeup_toggle(data->client, true, false);
@@ -3157,9 +3173,6 @@ static void mxt_start(struct mxt_data *data)
 	case MXT_SUSPEND_DEEP_SLEEP:
 	default:
 		mxt_set_t7_power_cfg(data, MXT_POWER_CFG_RUN);
-
-		/* Recalibrate since chip has been in deep sleep */
-		mxt_t6_command(data, MXT_COMMAND_CALIBRATE, 1, false);
 		break;
 	}
 }
@@ -3180,6 +3193,8 @@ static void mxt_stop(struct mxt_data *data)
 	}
 
 	mxt_wakeup_toggle(data->client, false, false);
+
+	mxt_reset_slots(data);
 }
 
 static int mxt_input_open(struct input_dev *dev)
@@ -3577,15 +3592,15 @@ static int mxt_resume(struct device *dev)
 	if (!input_dev || !data->suspended)
 		return 0;
 
-	data->suspended = false;
-	enable_irq(data->irq);
-
 	mutex_lock(&input_dev->mutex);
 
 	if (input_device_enabled(input_dev))
 		mxt_start(data);
 
 	mutex_unlock(&input_dev->mutex);
+
+	data->suspended = false;
+	enable_irq(data->irq);
 
 	return 0;
 }
