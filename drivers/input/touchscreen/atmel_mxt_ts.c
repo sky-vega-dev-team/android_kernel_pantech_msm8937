@@ -138,6 +138,16 @@ MODULE_PARM_DESC(dt2w_active_ms, "Active acquisition interval (ms) in gesture mo
 #define MXT_T93_CTRL			0
 #define MXT_T93_CTRL_ENABLE		BIT(0)
 #define MXT_T93_CTRL_RPTEN		BIT(1)
+/*
+ * Bounds of the area T93 recognises taps in, two 16-bit min/max pairs.
+ * The EF71S firmware ships with 150..1769 and 150..929, which leaves out
+ * the screen edges and everything below the upper part of its 1080x1920
+ * screen.
+ */
+#define MXT_T93_AREA_MIN1		1
+#define MXT_T93_AREA_MAX1		3
+#define MXT_T93_AREA_MIN2		5
+#define MXT_T93_AREA_MAX2		7
 #define MXT_T93_DOUBLE_TAP		BIT(1)
 
 /* MXT_TOUCH_MULTITOUCHSCREEN_T100 CTRL field */
@@ -3723,6 +3733,27 @@ static int mxt_dt2w_enter(struct mxt_data *data)
 			       &data->t100_ctrl);
 	if (error)
 		return error;
+
+	/*
+	 * Open the tap area to the whole screen. Which pair is X and which
+	 * is Y is not documented, so use the larger of the two ranges for
+	 * both.
+	 */
+	if (mxt_obj_size(mxt_get_object(data, MXT_PROCI_GESTUREPROCESSOR_T93)) >
+	    MXT_T93_AREA_MAX2 + 1) {
+		u16 end = max(data->max_x, data->max_y);
+		/* little endian, starting at MXT_T93_AREA_MIN1 */
+		u8 area[8] = {
+			0, 0, end & 0xff, end >> 8,	/* MIN1, MAX1 */
+			0, 0, end & 0xff, end >> 8,	/* MIN2, MAX2 */
+		};
+
+		error = __mxt_write_reg(data->client, data->T93_address +
+					MXT_T93_AREA_MIN1, sizeof(area), area);
+		if (error)
+			dev_warn(dev, "failed to set the T93 area: %d\n",
+				 error);
+	}
 
 	/* Keep scanning slowly so the gesture processor still sees taps */
 	error = mxt_set_t7_power_cfg(data, MXT_POWER_CFG_GESTURE);
