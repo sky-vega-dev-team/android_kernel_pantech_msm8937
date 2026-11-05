@@ -106,6 +106,7 @@ extern struct fts_ts_data *fts_wq_data;
 int fts_Gesture_init(struct input_dev *input_dev)
 {
 	input_set_capability(input_dev, EV_KEY, KEY_POWER);
+	input_set_capability(input_dev, EV_KEY, KEY_WAKEUP);
 	//input_set_capability(input_dev, EV_KEY, KEY_GESTURE_U);
 	input_set_capability(input_dev, EV_KEY, KEY_GESTURE_UP); 
 	input_set_capability(input_dev, EV_KEY, KEY_GESTURE_DOWN);
@@ -180,10 +181,11 @@ static void fts_check_gesture(struct input_dev *input_dev,int gesture_id)
 	                envp[0]="GESTURE=DOWN";
 	                break;
 	        case GESTURE_DOUBLECLICK:
-	                /*input_report_key(input_dev, KEY_POWER, 1);
+	                pm_wakeup_event(&fts_wq_data->client->dev, 1000);
+	                input_report_key(input_dev, KEY_WAKEUP, 1);
 	                input_sync(input_dev);
-	                input_report_key(input_dev, KEY_POWER, 0);
-	                input_sync(input_dev);*/
+	                input_report_key(input_dev, KEY_WAKEUP, 0);
+	                input_sync(input_dev);
 	                envp[0]="GESTURE=DOUBLE_CLICK";
 	                break;
 	        case GESTURE_O:

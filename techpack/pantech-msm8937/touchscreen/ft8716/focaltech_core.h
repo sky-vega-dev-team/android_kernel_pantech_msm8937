@@ -220,6 +220,11 @@ struct fts_ts_data {
 	u8 fw_ver[3];
 	u8 fw_vendor_id;
 	int touchs;
+	/* system suspend tracking for gesture wake interrupts */
+	bool sys_suspended;
+	struct completion pm_completion;
+	/* gesture mode was armed by the last screen off */
+	bool gesture_armed;
 #if defined(CONFIG_FB)
 	struct notifier_block fb_notif;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)

@@ -149,7 +149,10 @@ static unsigned int buf_count_neg=0;
 #if FTS_GESTRUE_EN
 struct kobject *touchscreen_dev_kobj=NULL;
 #endif
-unsigned int gesture_switch;
+/* Double tap to wake, on by default */
+unsigned int gesture_switch = 1;
+/* fts_wq_data is set early in probe and left dangling if probe fails */
+static bool fts_probe_done;
 static u8 fts_fw_version;
 EXPORT_SYMBOL_GPL(gesture_switch);
 
@@ -507,6 +510,21 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 		pr_err("%s: Invalid fts_ts\n", __func__);
 		return IRQ_HANDLED;
 	}
+
+	/*
+	 * A gesture can fire the wake interrupt while the system is
+	 * suspended. Wait for the I2C bus to be resumed before reading.
+	 */
+	if (fts_ts->sys_suspended) {
+		pm_wakeup_event(&fts_ts->client->dev, 1000);
+		if (!wait_for_completion_timeout(&fts_ts->pm_completion,
+						 msecs_to_jiffies(700))) {
+			dev_warn(&fts_ts->client->dev,
+				 "timed out waiting for system resume\n");
+			return IRQ_HANDLED;
+		}
+	}
+
 	ret = fts_read_Touchdata(fts_wq_data);
 	if (ret == 0)
 		fts_report_value(fts_wq_data);
@@ -538,7 +556,7 @@ static int fts_read_Touchdata(struct fts_ts_data *data)
 
 
 	#if FTS_GESTRUE_EN
-	if(gesture_switch){
+	if (data->gesture_armed) {
 		if(data->suspended)
 		{
 			fts_read_reg(data->client, 0xd0, &state);
@@ -1191,32 +1209,56 @@ int fts_ts_suspend(struct device *dev)
 		return 0;
 	}
 
+	/*
+	 * Stop the ESD watchdog in gesture mode too: the frame counter it
+	 * watches (0x91) stalls there, and the forced reset it then does
+	 * drops the controller out of gesture mode.
+	 */
+	#if GTP_ESD_PROTECT
+	fts_esd_protection_suspend();
+	#endif
+
 	#if FTS_GESTRUE_EN
-	if(gesture_switch){
-	         fts_write_reg(fts_i2c_client, 0xd0, 0x01);
-		  if (fts_updateinfo_curr.CHIP_ID==0x54 || fts_updateinfo_curr.CHIP_ID==0x58 || fts_updateinfo_curr.CHIP_ID==0x86 || fts_updateinfo_curr.CHIP_ID==0x87)
-		  {
-		  	fts_write_reg(fts_i2c_client, 0xd1, 0xff);
+	if (gesture_switch) {
+		u8 state = 0;
+		int i;
+
+		/*
+		 * Same sequence as FocalTech's later reference driver: enable
+		 * every firmware gesture, then gesture mode, and read it back.
+		 * Fall back to a normal sleep if the controller never takes it,
+		 * the panel driver would otherwise keep the panel powered for
+		 * nothing.
+		 */
+		for (i = 0; i < 5; i++) {
+			fts_write_reg(fts_i2c_client, 0xd1, 0xff);
 			fts_write_reg(fts_i2c_client, 0xd2, 0xff);
 			fts_write_reg(fts_i2c_client, 0xd5, 0xff);
 			fts_write_reg(fts_i2c_client, 0xd6, 0xff);
 			fts_write_reg(fts_i2c_client, 0xd7, 0xff);
 			fts_write_reg(fts_i2c_client, 0xd8, 0xff);
-		  }
+			fts_write_reg(fts_i2c_client, 0xd0, 0x01);
+			usleep_range(1000, 2000);
+			if (fts_read_reg(fts_i2c_client, 0xd0, &state) >= 0 &&
+			    state == 1)
+				break;
+		}
 
-		err = enable_irq_wake(data->client->irq);
-		if (err)
-			dev_err(&data->client->dev,
-				"%s: set_irq_wake failed\n", __func__);
+		if (state == 1) {
+			err = enable_irq_wake(data->client->irq);
+			if (err)
+				dev_err(&data->client->dev,
+					"%s: set_irq_wake failed\n", __func__);
 
-		data->suspended = true;
+			data->gesture_armed = true;
+			data->suspended = true;
+			dev_dbg(dev, "gesture mode armed (try %d)\n", i + 1);
 
-	       return 0;
+			return 0;
+		}
+
+		dev_err(dev, "failed to enter gesture mode, sleeping instead\n");
 	}
-	#endif
-
-	#if GTP_ESD_PROTECT
-	fts_esd_protection_suspend();
 	#endif
 
 	#ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
@@ -1270,7 +1312,12 @@ int fts_ts_resume(struct device *dev)
 	}
 
 	#if FTS_GESTRUE_EN
-	if(gesture_switch){
+	/*
+	 * Follow what was armed at suspend, gesture_switch may have been
+	 * changed from sysfs while the screen was off.
+	 */
+	if (data->gesture_armed) {
+		data->gesture_armed = false;
 		if (gpio_is_valid(data->pdata->reset_gpio)) {
 			gpio_set_value_cansleep(data->pdata->reset_gpio, 0);
 			msleep(data->pdata->hard_rst_dly);
@@ -1286,6 +1333,9 @@ int fts_ts_resume(struct device *dev)
 				__func__);
 
 		data->suspended = false;
+	#if GTP_ESD_PROTECT
+		fts_esd_protection_resume();
+	#endif
 		return 0;
 	}
 
@@ -1316,12 +1366,51 @@ int fts_ts_resume(struct device *dev)
 	return 0;
 }
 
+#if defined(CONFIG_FB)
+/*
+ * Screen on/off is handled through the fb notifier. System suspend only has
+ * to tell the interrupt handler when the I2C bus is unusable.
+ */
+static int fts_ts_pm_suspend(struct device *dev)
+{
+	struct fts_ts_data *data = dev_get_drvdata(dev);
+
+	reinit_completion(&data->pm_completion);
+	data->sys_suspended = true;
+
+	return 0;
+}
+
+static int fts_ts_pm_resume(struct device *dev)
+{
+	struct fts_ts_data *data = dev_get_drvdata(dev);
+
+	data->sys_suspended = false;
+	complete_all(&data->pm_completion);
+
+	return 0;
+}
+#endif
+
 static const struct dev_pm_ops fts_ts_pm_ops = {
 #if (!defined(CONFIG_FB) && !defined(CONFIG_HAS_EARLYSUSPEND))
 	.suspend = fts_ts_suspend,
 	.resume = fts_ts_resume,
+#elif defined(CONFIG_FB)
+	.suspend = fts_ts_pm_suspend,
+	.resume = fts_ts_pm_resume,
 #endif
 };
+
+/*
+ * The FT8716 is an in-cell controller: gesture detection only works while
+ * the panel keeps its supplies and reset line up. Let the panel driver ask.
+ */
+bool fts_ts_dt2w_keep_power(void)
+{
+	return fts_probe_done && fts_wq_data->gesture_armed;
+}
+EXPORT_SYMBOL(fts_ts_dt2w_keep_power);
 #else
 /*******************************************************************************
 *  Name: fts_ts_suspend
@@ -1363,14 +1452,19 @@ static int fb_notifier_callback(struct notifier_block *self,
 	struct fts_ts_data *fts_data =
 		container_of(self, struct fts_ts_data, fb_notif);
 
-	if (evdata && evdata->data && event == FB_EVENT_BLANK &&
-			fts_data && fts_data->client) {
-		blank = evdata->data;
-		if (*blank == FB_BLANK_UNBLANK)
-			fts_ts_resume(&fts_data->client->dev);
-		else if (*blank == FB_BLANK_POWERDOWN)
-			fts_ts_suspend(&fts_data->client->dev);
-	}
+	if (!evdata || !evdata->data || !fts_data || !fts_data->client)
+		return 0;
+
+	blank = evdata->data;
+
+	/*
+	 * Arm gesture mode before the panel enters sleep, the controller
+	 * does not accept the gesture enable once the LCD is off.
+	 */
+	if (event == FB_EARLY_EVENT_BLANK && *blank == FB_BLANK_POWERDOWN)
+		fts_ts_suspend(&fts_data->client->dev);
+	else if (event == FB_EVENT_BLANK && *blank == FB_BLANK_UNBLANK)
+		fts_ts_resume(&fts_data->client->dev);
 
 	return 0;
 }
@@ -1846,7 +1940,8 @@ static ssize_t fts_ts_gesture_ctrl_show(struct kobject *kobj, struct kobj_attrib
 static struct kobj_attribute fts_ts_gesture_ctrl_attr = {
          .attr = {
                   .name = "gesture_ctrl",
-                  .mode = S_IRWXUGO,
+                  /* sysfs refuses 0777 and drops the attribute */
+                  .mode = 0664,
          },
 
          .store = &fts_ts_gesture_ctrl_store,
@@ -2030,6 +2125,7 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	      
 
 	fts_wq_data = data;
+	init_completion(&data->pm_completion);
 
 	if (pdata->fw_name) {
 		len = strlen(pdata->fw_name);
@@ -2362,11 +2458,18 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	register_early_suspend(&data->early_suspend);
 #endif
 
+#if FTS_GESTRUE_EN
+	/* Needed for pm_wakeup_event() on a double tap while suspended */
+	device_init_wakeup(&client->dev, true);
+#endif
+
 	enable_irq(client->irq);
 
 #if GTP_ESD_PROTECT
 	fts_esd_protection_init();
 #endif
+
+	fts_probe_done = true;
 
 	return 0;
 
