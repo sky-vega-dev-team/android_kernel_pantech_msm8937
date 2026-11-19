@@ -211,9 +211,12 @@ static unsigned long mux_div_recalc_rate(struct clk_hw *hw, unsigned long prate)
 	for (i = 0; i < num_parents; i++)
 		if (src == md->parent_map[i]) {
 			struct clk_hw *p = clk_hw_get_parent_by_index(hw, i);
-			unsigned long parent_rate = clk_hw_get_rate(p);
 
-			return mult_frac(parent_rate, 2, div + 1);
+			/* Not registered yet: the core recalculates once it is */
+			if (!p)
+				return 0;
+
+			return mult_frac(clk_hw_get_rate(p), 2, div + 1);
 		}
 
 	pr_err("%s: Can't find parent %d\n", name, src);
