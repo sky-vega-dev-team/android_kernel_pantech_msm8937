@@ -114,6 +114,21 @@ static int qcom_a53pll_probe(struct platform_device *pdev)
 	pll->status_reg = 0x1c;
 	pll->status_bit = 16;
 
+	/*
+	 * A PLL nothing has used yet comes up with its outputs gated and no
+	 * configuration: lk2nd sets them before it boots Linux, a stock aboot
+	 * booting it directly does not. Do it here, unless it is running.
+	 */
+	if (of_device_is_compatible(np, "qcom,msm8939-a53pll")) {
+		u32 mode;
+
+		regmap_read(regmap, 0x00, &mode);
+		if (!mode) {
+			regmap_write(regmap, 0x10, BIT(0) | BIT(3));
+			regmap_write(regmap, 0x14, 0x4c015765);
+		}
+	}
+
 	pll->freq_tbl = qcom_a53pll_get_freq_tbl(dev);
 	if (!pll->freq_tbl) {
 		/* Fall on a53pll_freq if no freq_tbl is found from OPP */
