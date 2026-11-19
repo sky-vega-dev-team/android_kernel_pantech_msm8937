@@ -225,7 +225,12 @@
 	status = "okay";
 };
 
+/*
+ * Remote processor images: Android links /vendor/firmware/image, under the
+ * firmware search path, to the image directory of the modem partition.
+ */
 &modem {
+	firmware-name = "image/mba.mbn", "image/modem.mdt";
 	mss-supply = <&pm8937_s1>;
 	pll-supply = <&pm8937_l7>;
 
@@ -487,6 +492,8 @@
 };
 
 &venus {
+	firmware-name = "image/venus.mdt";
+
 	status = "okay";
 };
 
@@ -495,6 +502,7 @@
 };
 
 &wcnss {
+	firmware-name = "image/wcnss.mdt";
 	vddpx-supply = <&pm8937_l5>;
 
 	status = "okay";
