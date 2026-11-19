@@ -34,6 +34,17 @@
 		mmc1 = &sdhc_2;
 	};
 
+	/* 2950 mAh 4.4 V cell; msm-3.18 floats it at 4.42 V */
+	battery: battery {
+		compatible = "simple-battery";
+
+		charge-full-design-microamp-hours = <2950000>;
+		charge-term-current-microamp = <200000>;
+		constant-charge-current-max-microamp = <1800000>;
+		voltage-min-design-microvolt = <3400000>;
+		voltage-max-design-microvolt = <4400000>;
+	};
+
 	/* aboot fails the boot when it has nowhere to put bootargs */
 	chosen {
 	};
@@ -146,6 +157,19 @@
 &mdss_dsi0_phy {
 	vddio-supply = <&pm8937_l6>;
 	qcom,dsi-phy-regulator-ldo-mode;
+
+	status = "okay";
+};
+
+&pmi8950_fg {
+	monitored-battery = <&battery>;
+	power-supplies = <&pmi8950_smbcharger>;
+
+	status = "okay";
+};
+
+&pmi8950_smbcharger {
+	monitored-battery = <&battery>;
 
 	status = "okay";
 };
