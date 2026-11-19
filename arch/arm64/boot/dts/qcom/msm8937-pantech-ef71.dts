@@ -94,6 +94,22 @@
 	};
 };
 
+/*
+ * aboot hands the clusters over on GPLL0 at 800 MHz: list it, so cpufreq
+ * does not have to move off it while the board comes up.
+ */
+&cpu_opp_table_c0 {
+	opp-800000000 {
+		opp-hz = /bits/ 64 <800000000>;
+	};
+};
+
+&cpu_opp_table_c1 {
+	opp-800000000 {
+		opp-hz = /bits/ 64 <800000000>;
+	};
+};
+
 &pm8937_spmi_regulators {
 	/* APC */
 	pm8937_s5: s5 {
