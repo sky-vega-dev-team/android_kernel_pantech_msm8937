@@ -3,8 +3,23 @@
  * Pantech VEGA IRON 2 (EF71S / IM-100S, EF71AS)
  *
  * One image serves the EF71S (NT35695 panel, Atmel touch, ERM) and the
- * EF71AS (FT8716 panel and touch, LRA): both bootloaders report the same
- * board ids and tell the panels apart through mdss_mdp.panel.
+ * EF71AS (FT8716 panel and touch, LRA): the bootloader tells the panels
+ * apart through mdss_mdp.panel.
+ *
+ * The Pantech aboot does not read the board id from SMEM: every build
+ * hardcodes the one of the revision it shipped with, and the DTB has to
+ * match it exactly. The subtype comes from SMEM (0), except on the
+ * IM-110S aboot, which reports 1 on the NT35695 panel and 0 on the FT8716.
+ *
+ *   IM-100S S0228101                     205 / 0
+ *   IM-100S S0228122, S0228134           206 / 0
+ *   IM-110S S0001301                     204 / 1 (EF71S), 0 (EF71AS)
+ *   IM-110S eng                          203 / 0
+ *   IM-100K S0850130                     216 / 0
+ *   IM-100GN (KKIR161025, KKDEF170309)   246 / 0
+ *
+ * List every revision of every EF71 variant (S 201..206, K 211..216,
+ * G 241..246), with both subtypes, so any of these bootloaders boots it.
  */
 
 /dts-v1/;
@@ -18,7 +33,13 @@
 	model = "Pantech, Inc. EF71S from MSM8937-PMI8950 MTP";
 	compatible = "qcom,msm8937-mtp", "qcom,msm8937", "qcom,mtp",
 		     "pantech,ef71s";
-	/* Every EF71S/EF71AS board revision (pt10..tp20) */
-	qcom,board-id = <206 0>, <205 0>, <204 0>, <203 0>, <202 0>, <201 0>;
+	/* pt10, pt20, ws10, ws20, tp10, tp20 */
+	qcom,board-id = /* EF71S/EF71AS */
+			<201 0>, <202 0>, <203 0>, <204 0>, <205 0>, <206 0>,
+			<201 1>, <202 1>, <203 1>, <204 1>, <205 1>, <206 1>,
+			/* EF71K */
+			<211 0>, <212 0>, <213 0>, <214 0>, <215 0>, <216 0>,
+			/* EF71G */
+			<241 0>, <242 0>, <243 0>, <244 0>, <245 0>, <246 0>;
 	qcom,pmic-id = <0x10019 0x010011 0x0 0x0>;
 };
