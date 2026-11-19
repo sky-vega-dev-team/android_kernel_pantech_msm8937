@@ -11,6 +11,7 @@
 
 #include <dt-bindings/arm/qcom,ids.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/atmel-maxtouch.h>
 #include <dt-bindings/input/linux-event-codes.h>
 
 #include "msm8937.dtsi"
@@ -75,6 +76,20 @@
 		};
 	};
 
+	/* Touch controller I/O supply, switched by GPIO 39 */
+	ts_iovdd: ts-iovdd-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "ts_iovdd";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&tlmm 39 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		startup-delay-us = <10000>;
+
+		pinctrl-0 = <&ts_iovdd_default>;
+		pinctrl-names = "default";
+	};
+
 	usb_vbus: extcon-usb-dummy {
 		compatible = "linux,extcon-usb-dummy";
 	};
@@ -118,6 +133,24 @@
 &cpu_opp_table_c1 {
 	opp-800000000 {
 		opp-hz = /bits/ 64 <800000000>;
+	};
+};
+
+&blsp1_i2c3 {
+	status = "okay";
+
+	/* EF71S: Atmel mXT641T; the EF71AS has an FT8716 on the same pins */
+	touchscreen@4a {
+		compatible = "atmel,maxtouch";
+		reg = <0x4a>;
+
+		interrupts-extended = <&tlmm 65 IRQ_TYPE_LEVEL_LOW>;
+		reset-gpios = <&tlmm 64 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&ts_iovdd>;
+		atmel,wakeup-method = <ATMEL_MXT_WAKEUP_I2C_SCL>;
+
+		pinctrl-0 = <&ts_int_rst_default>;
+		pinctrl-names = "default";
 	};
 };
 
@@ -355,6 +388,20 @@
 		pins = "gpio60";
 		function = "gpio";
 		drive-strength = <8>;
+		bias-disable;
+	};
+
+	ts_int_rst_default: ts-int-rst-default-state {
+		pins = "gpio64", "gpio65";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
+
+	ts_iovdd_default: ts-iovdd-default-state {
+		pins = "gpio39";
+		function = "gpio";
+		drive-strength = <2>;
 		bias-disable;
 	};
 
