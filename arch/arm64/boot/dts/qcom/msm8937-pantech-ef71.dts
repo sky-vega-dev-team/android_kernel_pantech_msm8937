@@ -110,6 +110,46 @@
 	};
 };
 
+&mdss {
+	status = "okay";
+};
+
+&mdss_dsi0 {
+	vdda-supply = <&pm8937_l2>;
+	vddio-supply = <&pm8937_l6>;
+
+	status = "okay";
+
+	/* EF71S; the EF71AS carries an FT8716 video mode panel instead */
+	panel@0 {
+		compatible = "pantech,ef71-nt35695";
+		reg = <0>;
+
+		reset-gpios = <&tlmm 60 GPIO_ACTIVE_LOW>;
+
+		pinctrl-0 = <&panel_default &mdp_te_default>;
+		pinctrl-names = "default";
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	data-lanes = <0 1 2 3>;
+	remote-endpoint = <&panel_in>;
+};
+
+&mdss_dsi0_phy {
+	vddio-supply = <&pm8937_l6>;
+	qcom,dsi-phy-regulator-ldo-mode;
+
+	status = "okay";
+};
+
 &pm8937_spmi_regulators {
 	/* APC */
 	pm8937_s5: s5 {
@@ -278,6 +318,20 @@
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-up;
+	};
+
+	mdp_te_default: mdp-te-default-state {
+		pins = "gpio24";
+		function = "mdp_vsync";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
+	panel_default: panel-default-state {
+		pins = "gpio60";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
 	};
 
 	sdc2_cd_default: sdc2-cd-default-state {
