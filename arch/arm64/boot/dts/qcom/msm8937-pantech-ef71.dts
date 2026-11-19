@@ -12,6 +12,8 @@
 #include <dt-bindings/arm/qcom,ids.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/atmel-maxtouch.h>
+#include <dt-bindings/input/qcom,spmi-haptics.h>
+#include <dt-bindings/leds/common.h>
 #include <dt-bindings/input/linux-event-codes.h>
 
 #include "msm8937.dtsi"
@@ -154,6 +156,18 @@
 	};
 };
 
+&bam_dmux {
+	status = "okay";
+};
+
+&bam_dmux_dma {
+	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+};
+
 &mdss {
 	status = "okay";
 };
@@ -203,6 +217,50 @@
 
 &pmi8950_smbcharger {
 	monitored-battery = <&battery>;
+
+	status = "okay";
+};
+
+&memshare {
+	status = "okay";
+};
+
+&modem {
+	mss-supply = <&pm8937_s1>;
+	pll-supply = <&pm8937_l7>;
+
+	status = "okay";
+};
+
+/* Where the msm-4.19 modem region sits, as the modem firmware expects */
+&mpss_mem {
+	reg = <0x0 0x86800000 0x0 0x5000000>;
+
+	status = "okay";
+};
+
+&pmi8950_flash {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	status = "okay";
+
+	led@0 {
+		reg = <0>;
+		function = LED_FUNCTION_FLASH;
+		color = <LED_COLOR_ID_WHITE>;
+		led-max-microamp = <200000>;
+		flash-max-microamp = <1000000>;
+		flash-max-timeout-us = <1280000>;
+	};
+};
+
+/* EF71S: ERM motor, driven at 3.596 V as msm-4.19 does */
+&pmi8950_haptics {
+	qcom,actuator-type = <HAP_TYPE_ERM>;
+	qcom,wave-shape = <HAP_WAVE_SQUARE>;
+	qcom,wave-play-rate-us = <5263>;
+	qcom,vmax-millivolt = <3596>;
 
 	status = "okay";
 };
@@ -425,6 +483,33 @@
 	vdda1p8-supply = <&pm8937_l7>;
 	vdda3p3-supply = <&pm8937_l13>;
 
+	status = "okay";
+};
+
+&venus {
+	status = "okay";
+};
+
+&venus_mem {
+	status = "okay";
+};
+
+&wcnss {
+	vddpx-supply = <&pm8937_l5>;
+
+	status = "okay";
+};
+
+/* IRIS 0x0400: WCN3660, dual band */
+&wcnss_iris {
+	compatible = "qcom,wcn3660";
+	vddxo-supply = <&pm8937_l7>;
+	vddrfa-supply = <&pm8937_l19>;
+	vddpa-supply = <&pm8937_l9>;
+	vdddig-supply = <&pm8937_l5>;
+};
+
+&wcnss_mem {
 	status = "okay";
 };
 
