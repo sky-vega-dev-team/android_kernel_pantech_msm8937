@@ -777,6 +777,15 @@ config DRM_PANEL_PANASONIC_VVX10F034N00
 	  WUXGA (1920x1200) Novatek NT1397-based DSI panel as found in some
 	  Xperia Z2 tablets
 
+config DRM_PANEL_PANTECH_EF71_NT35695
+	tristate "Pantech EF71 NT35695 command mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here to enable support for the Novatek NT35695 1080p command
+	  mode DSI panel of the Pantech VEGA IRON 2 (EF71S).
+
 config DRM_PANEL_RASPBERRYPI_TOUCHSCREEN
 	tristate "Raspberry Pi 7-inch touchscreen panel"
 	depends on DRM_MIPI_DSI
