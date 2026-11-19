@@ -9,6 +9,23 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+
+/* The glibc 2.17 sysroot the Android build uses for host tools lacks it */
+#if defined(__GLIBC__) && !__GLIBC_PREREQ(2, 27)
+#include <errno.h>
+#include <sys/syscall.h>
+static ssize_t copy_file_range(int fd_in, loff_t *off_in, int fd_out,
+			       loff_t *off_out, size_t len, unsigned int flags)
+{
+#ifdef __NR_copy_file_range
+	return syscall(__NR_copy_file_range, fd_in, off_in, fd_out, off_out,
+		       len, flags);
+#else
+	errno = ENOSYS;
+	return -1;
+#endif
+}
+#endif
 #include <fcntl.h>
 #include <errno.h>
 #include <ctype.h>

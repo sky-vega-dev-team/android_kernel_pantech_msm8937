@@ -15,6 +15,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+/* Missing from the elf.h of older C libraries */
+#ifndef R_AARCH64_PREL64
+#define R_AARCH64_PREL64	260
+#endif
+
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define HOST_ORDER ELFDATA2LSB
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
