@@ -57,6 +57,18 @@
  */
 
 /*
+ * The nq-nci driver never selects a pinctrl state, so name the active one
+ * "default" and let the driver core apply it at probe. Without it the
+ * clock request input on PM8937 GPIO 5 stays at its reset setup, BB_CLK2
+ * never follows it and the PN548 resets as soon as it turns its field on.
+ */
+&i2c_5 {
+	nq@28 {
+		pinctrl-names = "default", "sleep";
+	};
+};
+
+/*
  * Wireless charging: the BQ51221 receiver feeds the PMI8950 DCIN, behind
  * the MAX14731 input switch. qpnp-smbcharger charges from it as its "dc"
  * supply.
