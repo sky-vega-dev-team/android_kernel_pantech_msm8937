@@ -181,6 +181,9 @@ struct msm_dsi_host {
 	/* from phy DT */
 	bool cphy_mode;
 
+	/* T_CLK_POST the panel needs beyond the computed minimum, 0 if none */
+	u32 min_clk_post;
+
 	u32 dma_cmd_ctrl_restore;
 
 	bool registered;
@@ -890,7 +893,8 @@ static void dsi_ctrl_enable(struct msm_dsi_host *msm_host,
 		data |= DSI_TRIG_CTRL_BLOCK_DMA_WITHIN_FRAME;
 	dsi_write(msm_host, REG_DSI_TRIG_CTRL, data);
 
-	data = DSI_CLKOUT_TIMING_CTRL_T_CLK_POST(phy_shared_timings->clk_post) |
+	data = DSI_CLKOUT_TIMING_CTRL_T_CLK_POST(max(phy_shared_timings->clk_post,
+						     msm_host->min_clk_post)) |
 		DSI_CLKOUT_TIMING_CTRL_T_CLK_PRE(phy_shared_timings->clk_pre);
 	dsi_write(msm_host, REG_DSI_CLKOUT_TIMING_CTRL, data);
 
@@ -1938,6 +1942,14 @@ static int dsi_host_parse_dt(struct msm_dsi_host *msm_host)
 	 * the remote endpoint isn't defined. It's possible that there is
 	 * nothing connected to the dsi output.
 	 */
+	/*
+	 * Some command mode panels lose the end of each frame when the clock
+	 * lane stops right after the spec minimum: let the board keep it
+	 * running longer.
+	 */
+	of_property_read_u32(np, "qcom,dsi-min-t-clk-post",
+			     &msm_host->min_clk_post);
+
 	endpoint = of_graph_get_endpoint_by_regs(np, 1, -1);
 	if (!endpoint) {
 		DRM_DEV_DEBUG(dev, "%s: no endpoint\n", __func__);
