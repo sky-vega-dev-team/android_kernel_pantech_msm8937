@@ -70,4 +70,12 @@ source "drivers/nfc/st-nci/Kconfig"
 source "drivers/nfc/nxp-nci/Kconfig"
 source "drivers/nfc/s3fwrn5/Kconfig"
 source "drivers/nfc/st95hf/Kconfig"
+config NFC_NQ
+	tristate "QTI NCI based NFC Controller Driver for NQx"
+	depends on I2C
+	help
+	  This enables the NFC driver for NQx based devices, such as the
+	  PN548. This is the i2c connected version; the NCI protocol logic
+	  lives in userspace, which talks to it through /dev/nq-nci.
+
 endmenu
