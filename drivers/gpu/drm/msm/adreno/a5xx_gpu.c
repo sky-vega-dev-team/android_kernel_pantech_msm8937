@@ -139,33 +139,42 @@ static void a5xx_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 		return;
 	}
 
-	OUT_PKT7(ring, CP_PREEMPT_ENABLE_GLOBAL, 1);
-	OUT_RING(ring, 0x02);
-
-	/* Turn off protected mode to write to special registers */
-	OUT_PKT7(ring, CP_SET_PROTECTED_MODE, 1);
-	OUT_RING(ring, 0);
-
-	/* Set the save preemption record for the ring/command */
-	OUT_PKT4(ring, REG_A5XX_CP_CONTEXT_SWITCH_SAVE_ADDR_LO, 2);
-	OUT_RING(ring, lower_32_bits(a5xx_gpu->preempt_iova[submit->ring->id]));
-	OUT_RING(ring, upper_32_bits(a5xx_gpu->preempt_iova[submit->ring->id]));
-
-	/* Turn back on protected mode */
-	OUT_PKT7(ring, CP_SET_PROTECTED_MODE, 1);
-	OUT_RING(ring, 1);
-
 	/*
-	 * Disable local preemption by default because it requires
-	 * user-space to be aware of it and provide additional handling
-	 * to restore rendering state or do various flushes on switch.
+	 * Without WHERE_AM_I in the microcode there is a single ring and no
+	 * preemption. Keep the preemption packets out of the ring then: the
+	 * old microcode the A505 boots with does not skip the zero address
+	 * of CP_CONTEXT_SWITCH_YIELD, and every submit faults on a write to
+	 * iova 0.
 	 */
-	OUT_PKT7(ring, CP_PREEMPT_ENABLE_LOCAL, 1);
-	OUT_RING(ring, 0x0);
+	if (gpu->nr_rings > 1) {
+		OUT_PKT7(ring, CP_PREEMPT_ENABLE_GLOBAL, 1);
+		OUT_RING(ring, 0x02);
 
-	/* Allow CP_CONTEXT_SWITCH_YIELD packets in the IB2 */
-	OUT_PKT7(ring, CP_YIELD_ENABLE, 1);
-	OUT_RING(ring, 0x02);
+		/* Turn off protected mode to write to special registers */
+		OUT_PKT7(ring, CP_SET_PROTECTED_MODE, 1);
+		OUT_RING(ring, 0);
+
+		/* Set the save preemption record for the ring/command */
+		OUT_PKT4(ring, REG_A5XX_CP_CONTEXT_SWITCH_SAVE_ADDR_LO, 2);
+		OUT_RING(ring, lower_32_bits(a5xx_gpu->preempt_iova[submit->ring->id]));
+		OUT_RING(ring, upper_32_bits(a5xx_gpu->preempt_iova[submit->ring->id]));
+
+		/* Turn back on protected mode */
+		OUT_PKT7(ring, CP_SET_PROTECTED_MODE, 1);
+		OUT_RING(ring, 1);
+
+		/*
+		 * Disable local preemption by default because it requires
+		 * user-space to be aware of it and provide additional handling
+		 * to restore rendering state or do various flushes on switch.
+		 */
+		OUT_PKT7(ring, CP_PREEMPT_ENABLE_LOCAL, 1);
+		OUT_RING(ring, 0x0);
+
+		/* Allow CP_CONTEXT_SWITCH_YIELD packets in the IB2 */
+		OUT_PKT7(ring, CP_YIELD_ENABLE, 1);
+		OUT_RING(ring, 0x02);
+	}
 
 	/* Submit the commands */
 	for (i = 0; i < submit->nr_cmds; i++) {
@@ -209,8 +218,10 @@ static void a5xx_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 	OUT_RING(ring, 0);
 
 	/* Turn off IB level preemptions */
-	OUT_PKT7(ring, CP_YIELD_ENABLE, 1);
-	OUT_RING(ring, 0x01);
+	if (gpu->nr_rings > 1) {
+		OUT_PKT7(ring, CP_YIELD_ENABLE, 1);
+		OUT_RING(ring, 0x01);
+	}
 
 	/* Write the fence to the scratch register */
 	OUT_PKT4(ring, REG_A5XX_CP_SCRATCH_REG(2), 1);
@@ -228,22 +239,26 @@ static void a5xx_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 	OUT_RING(ring, upper_32_bits(rbmemptr(ring, fence)));
 	OUT_RING(ring, submit->seqno);
 
-	/* Yield the floor on command completion */
-	OUT_PKT7(ring, CP_CONTEXT_SWITCH_YIELD, 4);
-	/*
-	 * If dword[2:1] are non zero, they specify an address for the CP to
-	 * write the value of dword[3] to on preemption complete. Write 0 to
-	 * skip the write
-	 */
-	OUT_RING(ring, 0x00);
-	OUT_RING(ring, 0x00);
-	/* Data value - not used if the address above is 0 */
-	OUT_RING(ring, 0x01);
-	/* Set bit 0 to trigger an interrupt on preempt complete */
-	OUT_RING(ring, 0x01);
+	if (gpu->nr_rings > 1) {
+		/* Yield the floor on command completion */
+		OUT_PKT7(ring, CP_CONTEXT_SWITCH_YIELD, 4);
+		/*
+		 * If dword[2:1] are non zero, they specify an address for the
+		 * CP to write the value of dword[3] to on preemption complete.
+		 * Write 0 to skip the write
+		 */
+		OUT_RING(ring, 0x00);
+		OUT_RING(ring, 0x00);
+		/* Data value - not used if the address above is 0 */
+		OUT_RING(ring, 0x01);
+		/* Set bit 0 to trigger an interrupt on preempt complete */
+		OUT_RING(ring, 0x01);
 
-	/* A WHERE_AM_I packet is not needed after a YIELD */
-	a5xx_flush(gpu, ring, false);
+		/* A WHERE_AM_I packet is not needed after a YIELD */
+		a5xx_flush(gpu, ring, false);
+	} else {
+		a5xx_flush(gpu, ring, true);
+	}
 
 	/* Check to see if we need to start preemption */
 	a5xx_preempt_trigger(gpu);
