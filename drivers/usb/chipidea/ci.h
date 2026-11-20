@@ -197,6 +197,7 @@ struct hw_bank {
  * @test_mode: the selected test mode
  * @platdata: platform specific information supplied by parent device
  * @vbus_active: is VBUS active
+ * @vbus_ws: keeps the system awake while the gadget sits on VBUS
  * @ulpi: pointer to ULPI device, if any
  * @ulpi_ops: ULPI read/write ops for this device
  * @phy: pointer to PHY, if any
@@ -251,6 +252,7 @@ struct ci_hdrc {
 
 	struct ci_hdrc_platform_data	*platdata;
 	int				vbus_active;
+	struct wakeup_source		*vbus_ws;
 	struct ulpi			*ulpi;
 	struct ulpi_ops 		ulpi_ops;
 	struct phy			*phy;

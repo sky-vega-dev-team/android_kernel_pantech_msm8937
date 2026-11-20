@@ -16,6 +16,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
+#include <linux/pm_wakeup.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
@@ -1869,6 +1870,12 @@ static void ci_hdrc_gadget_connect(struct usb_gadget *_gadget, int is_active)
 	struct ci_hdrc *ci = container_of(_gadget, struct ci_hdrc, gadget);
 
 	if (is_active) {
+		/*
+		 * Stay awake while plugged in as a gadget, like the vendor USB
+		 * drivers do: suspending drops the link, and with it adb and
+		 * MTP, every time the screen goes off.
+		 */
+		__pm_stay_awake(ci->vbus_ws);
 		pm_runtime_get_sync(ci->dev);
 		hw_device_reset(ci);
 		spin_lock_irq(&ci->lock);
@@ -1891,6 +1898,7 @@ static void ci_hdrc_gadget_connect(struct usb_gadget *_gadget, int is_active)
 		_gadget_stop_activity(&ci->gadget);
 		pm_runtime_put_sync(ci->dev);
 		usb_gadget_set_state(_gadget, USB_STATE_NOTATTACHED);
+		__pm_relax(ci->vbus_ws);
 	}
 }
 
@@ -2421,6 +2429,9 @@ int ci_hdrc_gadget_init(struct ci_hdrc *ci)
 	if (!rdrv)
 		return -ENOMEM;
 
+	/* A NULL wakeup source makes the stay-awake calls no-ops */
+	ci->vbus_ws = wakeup_source_register(ci->dev, "ci_hdrc_vbus");
+
 	rdrv->start	= udc_start;
 	rdrv->stop	= udc_stop;
 #ifdef CONFIG_PM_SLEEP
@@ -2448,4 +2459,7 @@ void ci_hdrc_gadget_destroy(struct ci_hdrc *ci)
 
 	if (ci->roles[CI_ROLE_GADGET] && device_is_registered(dev))
 		udc_stop(ci);
+
+	wakeup_source_unregister(ci->vbus_ws);
+	ci->vbus_ws = NULL;
 }
