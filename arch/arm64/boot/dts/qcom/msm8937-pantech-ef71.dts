@@ -237,6 +237,19 @@
 	status = "okay";
 };
 
+/* Where the msm-4.19 ADSP region sits */
+&adsp_mem {
+	reg = <0x0 0x8b800000 0x0 0x1100000>;
+
+	status = "okay";
+};
+
+&adsp {
+	firmware-name = "image/adsp.mdt";
+
+	status = "okay";
+};
+
 &mba_mem {
 	status = "okay";
 };
