@@ -193,6 +193,14 @@ static inline void validate_fs_switch(struct fs_struct *old_fs)
 	if (old_fs != userspace_init_fs)
 		return;
 	pr_warn("VFS: Pid 1 stopped sharing filesystem state\n");
+	/*
+	 * Android init unshares its mount namespace after it has started
+	 * the property service thread, which keeps using this fs_struct.
+	 * Reverting it to nullfs leaves that thread unable to reach
+	 * /sys/fs/selinux, so keep the stale state as older kernels did.
+	 */
+	if (IS_ENABLED(CONFIG_ANDROID_BINDER_IPC))
+		return;
 	set_fs_root(userspace_init_fs, &init_fs.root);
 	set_fs_pwd(userspace_init_fs, &init_fs.root);
 }
