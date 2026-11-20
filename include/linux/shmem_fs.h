@@ -30,6 +30,8 @@
  * isn't directly visible to userspace.
  */
 #define SHMEM_F_MAPPING_FROZEN	BIT(2)
+/* ANDROID: Inode backs a shmem-backed memfd */
+#define SHMEM_F_MEMFD		BIT(31)
 
 struct shmem_inode_info {
 	spinlock_t		lock;

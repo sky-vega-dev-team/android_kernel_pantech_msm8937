@@ -88,6 +88,10 @@ static struct vfsmount *shm_mnt __ro_after_init;
 
 #include "internal.h"
 
+#ifdef CONFIG_MEMFD_ASHMEM_SHIM
+#include "../drivers/staging/android/ashmem.h"
+#endif
+
 #define VM_ACCT(size)    (PAGE_ALIGN(size) >> PAGE_SHIFT)
 
 /* Pretend that each entry is of this size in directory's i_size */
@@ -5206,6 +5210,15 @@ static const struct address_space_operations shmem_aops = {
 	.error_remove_folio = shmem_error_remove_folio,
 };
 
+#ifdef CONFIG_MEMFD_ASHMEM_SHIM
+static long shmem_ashmem_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	if (!(SHMEM_I(file_inode(file))->flags & SHMEM_F_MEMFD))
+		return -ENOTTY;
+	return ashmem_memfd_ioctl(file, cmd, arg);
+}
+#endif
+
 static const struct file_operations shmem_file_operations = {
 	.mmap_prepare	= shmem_mmap_prepare,
 	.open		= shmem_file_open,
@@ -5219,6 +5232,12 @@ static const struct file_operations shmem_file_operations = {
 	.splice_write	= iter_file_splice_write,
 	.fallocate	= shmem_fallocate,
 	.setlease	= generic_setlease,
+#endif
+#ifdef CONFIG_MEMFD_ASHMEM_SHIM
+	.unlocked_ioctl	= shmem_ashmem_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= shmem_ashmem_ioctl,
+#endif
 #endif
 };
 

@@ -473,6 +473,10 @@ struct file *memfd_alloc_file(const char *name, unsigned int flags)
 		return file;
 
 	inode = file_inode(file);
+
+	if (!(flags & MFD_HUGETLB))
+		SHMEM_I(inode)->flags |= SHMEM_F_MEMFD;
+
 	err = security_inode_init_security_anon(inode,
 			&QSTR(MEMFD_ANON_NAME), NULL);
 	if (err) {
