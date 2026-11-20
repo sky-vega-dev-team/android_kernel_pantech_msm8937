@@ -721,7 +721,44 @@
 	};
 };
 
+/*
+ * PN548 NFC controller, driven by the nq-nci char driver the Android NFC
+ * HAL opens as /dev/nq-nci. BB_CLK2 runs in pin control mode and follows
+ * the controller's clock request on PM8937 GPIO 5, so that pin has to be
+ * set up as an input or the PN548 resets as soon as it turns its field on.
+ */
+&blsp2_i2c1 {
+	status = "okay";
+
+	nfc@28 {
+		compatible = "qcom,nq-nci";
+		reg = <0x28>;
+
+		interrupts-extended = <&tlmm 17 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "nfc_irq";
+
+		qcom,nq-irq-gpios = <&tlmm 17 GPIO_ACTIVE_HIGH>;
+		qcom,nq-ven-gpios = <&tlmm 16 GPIO_ACTIVE_HIGH>;
+		qcom,nq-firm-gpios = <&tlmm 130 GPIO_ACTIVE_HIGH>;
+		qcom,nq-clkreq-gpios = <&pm8937_gpios 5 GPIO_ACTIVE_HIGH>;
+		qcom,clk-src = "BBCLK2";
+
+		clocks = <&rpmcc RPM_SMD_BB_CLK2_PIN>;
+		clock-names = "ref_clk";
+
+		pinctrl-0 = <&nfc_int_default &nfc_en_default &nfc_clkreq_default>;
+		pinctrl-names = "default";
+	};
+};
+
 &pm8937_gpios {
+	nfc_clkreq_default: nfc-clkreq-default-state {
+		pins = "gpio5";
+		function = PMIC_GPIO_FUNC_NORMAL;
+		input-enable;
+		power-source = <1>;
+	};
+
 	wcd_mclk_out: wcd-mclk-out-state {
 		pins = "gpio1";
 		function = PMIC_GPIO_FUNC_FUNC1;
@@ -745,6 +782,20 @@
 };
 
 &tlmm {
+	nfc_int_default: nfc-int-default-state {
+		pins = "gpio17";
+		function = "gpio";
+		drive-strength = <6>;
+		bias-pull-down;
+	};
+
+	nfc_en_default: nfc-en-default-state {
+		pins = "gpio16", "gpio130";
+		function = "gpio";
+		drive-strength = <6>;
+		bias-pull-down;
+	};
+
 	wcd_reset_default: wcd-reset-default-state {
 		pins = "gpio68";
 		function = "gpio";
