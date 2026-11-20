@@ -264,6 +264,15 @@ static int mdp5_plane_atomic_check_with_state(struct drm_crtc_state *crtc_state,
 				new_hwpipe = true;
 		}
 
+		/*
+		 * Keeping the old hwpipe(s): check the global state still has
+		 * them down for this plane, take new ones if not.
+		 */
+		if (!new_hwpipe &&
+		    (mdp5_pipe_claim(state->state, plane, mdp5_state->hwpipe) ||
+		     mdp5_pipe_claim(state->state, plane, mdp5_state->r_hwpipe)))
+			new_hwpipe = true;
+
 		/* (re)assign hwpipe if needed, otherwise keep old one: */
 		if (new_hwpipe) {
 			/* TODO maybe we want to re-assign hwpipe sometimes

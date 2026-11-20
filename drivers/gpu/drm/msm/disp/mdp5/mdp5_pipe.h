@@ -37,6 +37,8 @@ int mdp5_pipe_assign(struct drm_atomic_commit *s, struct drm_plane *plane,
 		     uint32_t caps, uint32_t blkcfg,
 		     struct mdp5_hw_pipe **hwpipe,
 		     struct mdp5_hw_pipe **r_hwpipe);
+int mdp5_pipe_claim(struct drm_atomic_commit *s, struct drm_plane *plane,
+		    struct mdp5_hw_pipe *hwpipe);
 int mdp5_pipe_release(struct drm_atomic_commit *s, struct mdp5_hw_pipe *hwpipe);
 
 struct mdp5_hw_pipe *mdp5_pipe_init(struct drm_device *dev,

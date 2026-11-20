@@ -119,6 +119,50 @@ int mdp5_pipe_assign(struct drm_atomic_commit *s, struct drm_plane *plane,
 	return 0;
 }
 
+/*
+ * Make sure the global state still gives @hwpipe to @plane. A plane state
+ * that comes back from drm_atomic_helper_resume() keeps the hwpipe it had
+ * at suspend, while the commit that turned everything off at suspend gave
+ * that hwpipe back. Without this the plane drives a pipe the global state
+ * calls free, and every later commit turning the plane off fails.
+ */
+int mdp5_pipe_claim(struct drm_atomic_commit *s, struct drm_plane *plane,
+		    struct mdp5_hw_pipe *hwpipe)
+{
+	struct msm_drm_private *priv = s->dev->dev_private;
+	struct mdp5_kms *mdp5_kms = to_mdp5_kms(to_mdp_kms(priv->kms));
+	struct mdp5_global_state *new_global_state, *old_global_state;
+	struct drm_plane *owner, *old_owner;
+
+	if (!hwpipe)
+		return 0;
+
+	new_global_state = mdp5_get_global_state(s);
+	if (IS_ERR(new_global_state))
+		return PTR_ERR(new_global_state);
+
+	owner = new_global_state->hwpipe.hwpipe_to_plane[hwpipe->idx];
+	if (owner == plane)
+		return 0;
+	if (owner)
+		return -EBUSY;
+
+	/* Do not pick up a pipe another plane only lets go of in this update */
+	old_global_state = mdp5_get_existing_global_state(mdp5_kms);
+	old_owner = old_global_state->hwpipe.hwpipe_to_plane[hwpipe->idx];
+	if (old_owner && old_owner != plane)
+		return -EBUSY;
+
+	/* The pipe has no SMP blocks to account for here */
+	if (mdp5_kms->smp)
+		return -EBUSY;
+
+	DBG("%s: reclaim for plane %s", hwpipe->name, plane->name);
+	new_global_state->hwpipe.hwpipe_to_plane[hwpipe->idx] = plane;
+
+	return 0;
+}
+
 int mdp5_pipe_release(struct drm_atomic_commit *s, struct mdp5_hw_pipe *hwpipe)
 {
 	struct msm_drm_private *priv = s->dev->dev_private;
@@ -135,8 +179,16 @@ int mdp5_pipe_release(struct drm_atomic_commit *s, struct mdp5_hw_pipe *hwpipe)
 
 	new_state = &state->hwpipe;
 
-	if (WARN_ON(!new_state->hwpipe_to_plane[hwpipe->idx]))
-		return -EINVAL;
+	/*
+	 * A plane can still point at a hwpipe the global state no longer
+	 * gives it. Failing the check here rejects every commit that turns
+	 * such a plane off, and the screen stops updating until the planes
+	 * get reshuffled: the pipe is free already, so let the plane drop it.
+	 */
+	if (!new_state->hwpipe_to_plane[hwpipe->idx]) {
+		pr_warn_ratelimited("mdp5: %s already released\n", hwpipe->name);
+		return 0;
+	}
 
 	DBG("%s: release from plane %s", hwpipe->name,
 		new_state->hwpipe_to_plane[hwpipe->idx]->name);
