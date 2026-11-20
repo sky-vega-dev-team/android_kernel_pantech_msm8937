@@ -580,6 +580,9 @@
 			  "Microphone", "Headset Mic",
 			  "Microphone", "Secondary Mic";
 		audio-routing = "RX_BIAS", "MCLK",
+				"ADC2", "MCLK",
+				"ADC3", "MCLK",
+				"ADC4", "MCLK",
 				"AMIC2", "MIC BIAS2",
 				"AMIC2", "Headset Mic",
 				"AMIC3", "MIC BIAS1",
