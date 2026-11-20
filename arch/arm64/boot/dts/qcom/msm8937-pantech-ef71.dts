@@ -180,6 +180,12 @@
 	vdda-supply = <&pm8937_l2>;
 	vddio-supply = <&pm8937_l6>;
 
+	/*
+	 * The vendor T_CLK_POST: at the computed minimum the NT35695 drops
+	 * the last lines of every frame and shows noise along the bottom.
+	 */
+	qcom,dsi-min-t-clk-post = <0x21>;
+
 	status = "okay";
 
 	/* EF71S; the EF71AS carries an FT8716 video mode panel instead */
