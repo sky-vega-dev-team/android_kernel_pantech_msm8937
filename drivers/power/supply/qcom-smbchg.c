@@ -944,6 +944,20 @@ static void smbchg_detect_work(struct work_struct *work)
 		}
 	}
 
+	/*
+	 * Nothing else raises the input current limit of a SDP from the
+	 * 100mA it starts at: the gadget does not report its configuration
+	 * back here. That is less than the phone draws with the screen on,
+	 * so it discharges while plugged into a computer. Take the 500mA a
+	 * USB 2.0 port provides.
+	 */
+	if (usb_present && usb_type == POWER_SUPPLY_USB_TYPE_SDP) {
+		ret = smbchg_usb_set_ilim(chip, 500000);
+		if (ret < 0)
+			dev_err(chip->dev, "Failed to set SDP current limit: %pe\n",
+				ERR_PTR(ret));
+	}
+
 	smbchg_extcon_update(chip, usb_present, otg_present);
 
 	if (!has_role_sw)
