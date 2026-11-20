@@ -237,6 +237,10 @@
 	status = "okay";
 };
 
+&mba_mem {
+	status = "okay";
+};
+
 /* Where the msm-4.19 modem region sits, as the modem firmware expects */
 &mpss_mem {
 	reg = <0x0 0x86800000 0x0 0x5000000>;
