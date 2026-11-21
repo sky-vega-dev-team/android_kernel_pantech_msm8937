@@ -60,6 +60,8 @@
 
 /* DC-CHGPTH */
 #define SMBCHG_DC_CHGPTH_RT_STS			0x410
+#define DCIN_UV_BIT				BIT(0)
+#define DCIN_OV_BIT				BIT(1)
 #define SMBCHG_DC_CHGPTH_IL_CFG			0x4f2
 #define SMBCHG_DC_CHGPTH_AICL_CFG		0x4f3
 #define SMBCHG_DC_CHGPTH_AICL_WL_SEL_CFG	0x4f5
@@ -240,6 +242,7 @@ struct smbchg_chip {
 
 	struct power_supply_battery_info *batt_info;
 	struct power_supply *usb_psy;
+	struct power_supply *dc_psy;
 
 	struct regulator_desc otg_rdesc;
 	struct regulator_dev *otg_reg;

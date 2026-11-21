@@ -1061,6 +1061,36 @@ static irqreturn_t smbchg_handle_usb_source_detect(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+/*
+ * The DC input, which a wireless charging receiver feeds on some devices,
+ * is valid when it is neither under nor over voltage.
+ */
+static bool smbchg_is_dc_present(struct smbchg_chip *chip)
+{
+	unsigned int value;
+	int ret;
+
+	ret = regmap_read(chip->regmap, chip->base + SMBCHG_DC_CHGPTH_RT_STS,
+			  &value);
+	if (ret) {
+		dev_err(chip->dev, "Failed to read DC input status: %pe\n",
+			ERR_PTR(ret));
+		return false;
+	}
+
+	return !(value & (DCIN_UV_BIT | DCIN_OV_BIT));
+}
+
+static irqreturn_t smbchg_handle_dcin(int irq, void *data)
+{
+	struct smbchg_chip *chip = data;
+
+	power_supply_changed(chip->dc_psy);
+	power_supply_changed(chip->usb_psy);
+
+	return IRQ_HANDLED;
+}
+
 static irqreturn_t smbchg_handle_usbid_change(int irq, void *data)
 {
 	struct smbchg_chip *chip = data;
@@ -1183,8 +1213,8 @@ const struct smbchg_irq smbchg_irqs[] = {
 	{ "otg-fail", smbchg_handle_otg_fail },
 	{ "otg-oc", smbchg_handle_otg_oc },
 	{ "aicl-done", smbchg_handle_aicl_done },
-	{ "dcin-uv", NULL },
-	{ "dcin-ov", NULL },
+	{ "dcin-uv", smbchg_handle_dcin },
+	{ "dcin-ov", smbchg_handle_dcin },
 	{ "power-ok", NULL },
 	{ "temp-shutdown", smbchg_handle_temp_shutdown },
 	{ "wdog-timeout", NULL },
@@ -1444,6 +1474,35 @@ static enum power_supply_property smbchg_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT
 };
 
+static enum power_supply_property smbchg_dc_props[] = {
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_ONLINE,
+};
+
+static int smbchg_dc_get_property(struct power_supply *psy,
+				  enum power_supply_property psp,
+				  union power_supply_propval *val)
+{
+	struct smbchg_chip *chip = power_supply_get_drvdata(psy);
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_PRESENT:
+	case POWER_SUPPLY_PROP_ONLINE:
+		val->intval = smbchg_is_dc_present(chip);
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
+static const struct power_supply_desc smbchg_dc_psy_desc = {
+	.name = "qcom-smbchg-dc",
+	.type = POWER_SUPPLY_TYPE_WIRELESS,
+	.properties = smbchg_dc_props,
+	.num_properties = ARRAY_SIZE(smbchg_dc_props),
+	.get_property = smbchg_dc_get_property,
+};
+
 static const struct power_supply_desc smbchg_usb_psy_desc = {
 	.name = "qcom-smbchg-usb",
 	.type = POWER_SUPPLY_TYPE_USB,
@@ -1592,6 +1651,7 @@ static int smbchg_probe(struct platform_device *pdev)
 	struct smbchg_chip *chip;
 	struct regulator_config config = {};
 	struct power_supply_config supply_config = {};
+	struct power_supply_config dc_config = {};
 	int i, irq, ret;
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
@@ -1648,6 +1708,16 @@ static int smbchg_probe(struct platform_device *pdev)
 		dev_err(chip->dev, "Failed to register USB power supply: %pe\n",
 			chip->usb_psy);
 		return PTR_ERR(chip->usb_psy);
+	}
+
+	/* No fwnode: the battery info belongs to the USB supply */
+	dc_config.drv_data = chip;
+	chip->dc_psy = devm_power_supply_register(chip->dev, &smbchg_dc_psy_desc,
+						  &dc_config);
+	if (IS_ERR(chip->dc_psy)) {
+		dev_err(chip->dev, "Failed to register DC power supply: %pe\n",
+			chip->dc_psy);
+		return PTR_ERR(chip->dc_psy);
 	}
 
 	ret = power_supply_get_battery_info(chip->usb_psy, &chip->batt_info);
