@@ -1306,8 +1306,7 @@ static int smbchg_get_status(struct smbchg_chip *chip)
 	int value, ret, chg_type;
 
 	/* Check if power input is present */
-	/* TODO: Check if DC charge path is present once supported */
-	if (!smbchg_usb_is_present(chip))
+	if (!smbchg_usb_is_present(chip) && !smbchg_is_dc_present(chip))
 		return POWER_SUPPLY_STATUS_DISCHARGING;
 
 	ret = regmap_read(chip->regmap, chip->base + SMBCHG_CHGR_RT_STS,
