@@ -419,8 +419,19 @@ int slim_stream_disable(struct slim_stream_runtime *stream)
 	if (!stream->ports || !stream->num_ports)
 		return -EINVAL;
 
-	if (ctrl->disable_stream)
-		ctrl->disable_stream(stream);
+	if (ctrl->disable_stream) {
+		ret = ctrl->disable_stream(stream);
+		if (ret)
+			return ret;
+
+		/* Removing the channels closed the ports at the device */
+		for (i = 0; i < stream->num_ports; i++) {
+			stream->ports[i].ch.state = SLIM_CH_STATE_REMOVED;
+			stream->ports[i].state = SLIM_PORT_DISCONNECTED;
+		}
+
+		return 0;
+	}
 
 	ret = slim_do_transfer(ctrl, &txn);
 	if (ret)
@@ -453,8 +464,14 @@ int slim_stream_unprepare(struct slim_stream_runtime *stream)
 	if (!stream->ports || !stream->num_ports)
 		return -EINVAL;
 
+	/*
+	 * Leave alone the ports that a removal of their channels closed: a
+	 * port told to disconnect once it is closed carries nothing the next
+	 * time it is connected.
+	 */
 	for (i = 0; i < stream->num_ports; i++)
-		slim_disconnect_port(stream, &stream->ports[i]);
+		if (stream->ports[i].state != SLIM_PORT_DISCONNECTED)
+			slim_disconnect_port(stream, &stream->ports[i]);
 
 	kfree(stream->ports);
 	stream->ports = NULL;

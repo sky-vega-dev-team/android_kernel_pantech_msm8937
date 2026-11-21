@@ -375,7 +375,8 @@ struct slim_stream_runtime {
  * @enable_stream: This function pointer implements controller-specific procedure
  *	to enable a stream.
  * @disable_stream: This function pointer implements controller-specific procedure
- *	to disable stream.
+ *	to disable stream. It removes the channels of the stream, which closes
+ *	the ports connected to them.
  *
  *	'Manager device' is responsible for  device management, bandwidth
  *	allocation, channel setup, and port associations per channel.
