@@ -229,8 +229,15 @@ vdec_try_fmt_common(struct venus_inst *inst, struct v4l2_format *f)
 		pfmt[0].sizeimage = szimage;
 		pfmt[0].bytesperline = ALIGN(stride, 128);
 	} else {
+		/*
+		 * A bitstream buffer only has to hold the largest frame of the
+		 * stream. Keep a size of at least 1 MiB the client asks for: the
+		 * estimate from the resolution grows eightfold below 720p, past
+		 * the buffers Codec2 hands over, which then fail to import.
+		 */
 		pfmt[0].sizeimage = clamp_t(u32, pfmt[0].sizeimage, 0, SZ_8M);
-		pfmt[0].sizeimage = max(pfmt[0].sizeimage, szimage);
+		if (pfmt[0].sizeimage < SZ_1M)
+			pfmt[0].sizeimage = max(pfmt[0].sizeimage, szimage);
 		pfmt[0].bytesperline = 0;
 	}
 
@@ -975,10 +982,14 @@ static int vdec_queue_setup(struct vb2_queue *q,
 	switch (q->type) {
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
 		*num_planes = inst->fmt_out->num_planes;
-		sizes[0] = venus_helper_get_framesz(inst->fmt_out->pixfmt,
-						    inst->out_width,
-						    inst->out_height);
-		sizes[0] = max(sizes[0], inst->input_buf_size);
+		/* As in vdec_try_fmt_common(): keep a client size of 1 MiB up */
+		if (inst->input_buf_size >= SZ_1M)
+			sizes[0] = inst->input_buf_size;
+		else
+			sizes[0] = max(venus_helper_get_framesz(inst->fmt_out->pixfmt,
+								inst->out_width,
+								inst->out_height),
+				       inst->input_buf_size);
 		inst->input_buf_size = sizes[0];
 		*num_buffers = max(*num_buffers, in_num);
 		inst->num_input_bufs = *num_buffers;
