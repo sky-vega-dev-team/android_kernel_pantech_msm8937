@@ -467,9 +467,132 @@
 	clock-frequency = <32768>;
 };
 
+/*
+ * BLSP2 QUP4, absent from msm8937.dtsi, carries the LP5523 that drives the
+ * front indicator, a left and a right RGB LED, and the menu and back key
+ * backlights. Channel 8 only took the commands of the Pantech driver.
+ */
+&soc {
+	blsp2_i2c4: i2c@7af8000 {
+		compatible = "qcom,i2c-qup-v2.2.1";
+		reg = <0x07af8000 0x600>;
+		interrupts = <GIC_SPI 302 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&gcc MSM8937_GCC_BLSP2_QUP4_I2C_APPS_CLK>,
+			 <&gcc GCC_BLSP2_AHB_CLK>;
+		clock-names = "core",
+			      "iface";
+		dmas = <&blsp2_dma 10>,
+		       <&blsp2_dma 11>;
+		dma-names = "tx",
+			    "rx";
+		pinctrl-0 = <&blsp2_i2c4_default>;
+		pinctrl-1 = <&blsp2_i2c4_sleep>;
+		pinctrl-names = "default",
+				"sleep";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		led-controller@32 {
+			compatible = "national,lp5523";
+			reg = <0x32>;
+			clock-mode = /bits/ 8 <1>;
+			enable-gpios = <&tlmm 129 GPIO_ACTIVE_HIGH>;
+			pinctrl-0 = <&lp5523_en_default>;
+			pinctrl-names = "default";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			led@0 {
+				reg = <0>;
+				chan-name = "lp5523:channel0";
+				color = <LED_COLOR_ID_GREEN>;
+				led-cur = /bits/ 8 <40>;
+				max-cur = /bits/ 8 <250>;
+			};
+
+			led@1 {
+				reg = <1>;
+				chan-name = "lp5523:channel1";
+				color = <LED_COLOR_ID_BLUE>;
+				led-cur = /bits/ 8 <40>;
+				max-cur = /bits/ 8 <250>;
+			};
+
+			led@2 {
+				reg = <2>;
+				chan-name = "lp5523:channel2";
+				color = <LED_COLOR_ID_GREEN>;
+				led-cur = /bits/ 8 <40>;
+				max-cur = /bits/ 8 <250>;
+			};
+
+			led@3 {
+				reg = <3>;
+				chan-name = "lp5523:channel3";
+				color = <LED_COLOR_ID_BLUE>;
+				led-cur = /bits/ 8 <40>;
+				max-cur = /bits/ 8 <250>;
+			};
+
+			led@4 {
+				reg = <4>;
+				chan-name = "lp5523:channel4";
+				color = <LED_COLOR_ID_WHITE>;
+				led-cur = /bits/ 8 <40>;
+				max-cur = /bits/ 8 <250>;
+			};
+
+			led@5 {
+				reg = <5>;
+				chan-name = "lp5523:channel5";
+				color = <LED_COLOR_ID_WHITE>;
+				led-cur = /bits/ 8 <40>;
+				max-cur = /bits/ 8 <250>;
+			};
+
+			led@6 {
+				reg = <6>;
+				chan-name = "lp5523:channel6";
+				color = <LED_COLOR_ID_RED>;
+				led-cur = /bits/ 8 <40>;
+				max-cur = /bits/ 8 <250>;
+			};
+
+			led@7 {
+				reg = <7>;
+				chan-name = "lp5523:channel7";
+				color = <LED_COLOR_ID_RED>;
+				led-cur = /bits/ 8 <40>;
+				max-cur = /bits/ 8 <250>;
+			};
+		};
+	};
+};
+
 &tlmm {
 	/* GPIO 0 switches the front camera supply, as on msm-4.19 */
 	gpio-reserved-ranges = <1 3>, <20 4>;
+
+	blsp2_i2c4_default: blsp2-i2c4-default-state {
+		pins = "gpio98", "gpio99";
+		function = "blsp_i2c8";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	blsp2_i2c4_sleep: blsp2-i2c4-sleep-state {
+		pins = "gpio98", "gpio99";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	lp5523_en_default: lp5523-en-default-state {
+		pins = "gpio129";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
 
 	gpio_keys_default: gpio-keys-default-state {
 		pins = "gpio126";
