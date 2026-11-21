@@ -875,6 +875,8 @@ static const unsigned int smbchg_extcon_cable[] = {
 	EXTCON_CHG_USB_DCP, EXTCON_CHG_USB_CDP, EXTCON_NONE,
 };
 
+static void smbchg_dc_update_suspend(struct smbchg_chip *chip);
+
 static bool smbchg_check_role_switch(struct smbchg_chip *chip, bool otg_present)
 {
 	if (chip->role_sw)
@@ -957,6 +959,10 @@ static void smbchg_detect_work(struct work_struct *work)
 			dev_err(chip->dev, "Failed to set SDP current limit: %pe\n",
 				ERR_PTR(ret));
 	}
+
+	smbchg_dc_update_suspend(chip);
+	if (chip->dc_psy)
+		power_supply_changed(chip->dc_psy);
 
 	smbchg_extcon_update(chip, usb_present, otg_present);
 
@@ -1079,6 +1085,34 @@ static bool smbchg_is_dc_present(struct smbchg_chip *chip)
 	}
 
 	return !(value & (DCIN_UV_BIT | DCIN_OV_BIT));
+}
+
+/*
+ * Where a board asks for it, charge from USB alone while it is present, so
+ * that a cable takes over from a wireless pad.
+ */
+static void smbchg_dc_update_suspend(struct smbchg_chip *chip)
+{
+	bool suspend = chip->dc_yields_to_usb && smbchg_usb_is_present(chip);
+	int ret;
+
+	ret = regmap_update_bits(chip->regmap,
+				 chip->base + SMBCHG_USB_CHGPTH_CMD_IL,
+				 DCIN_SUSPEND_BIT, suspend ? DCIN_SUSPEND_BIT : 0);
+	if (ret)
+		dev_err(chip->dev, "Failed to %s the DC input: %pe\n",
+			suspend ? "suspend" : "resume", ERR_PTR(ret));
+}
+
+static bool smbchg_dc_is_suspended(struct smbchg_chip *chip)
+{
+	unsigned int value;
+
+	if (regmap_read(chip->regmap, chip->base + SMBCHG_USB_CHGPTH_CMD_IL,
+			&value))
+		return false;
+
+	return value & DCIN_SUSPEND_BIT;
 }
 
 static irqreturn_t smbchg_handle_dcin(int irq, void *data)
@@ -1486,8 +1520,11 @@ static int smbchg_dc_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
-	case POWER_SUPPLY_PROP_ONLINE:
 		val->intval = smbchg_is_dc_present(chip);
+		return 0;
+	case POWER_SUPPLY_PROP_ONLINE:
+		val->intval = smbchg_is_dc_present(chip) &&
+			      !smbchg_dc_is_suspended(chip);
 		return 0;
 	default:
 		return -EINVAL;
@@ -1671,6 +1708,9 @@ static int smbchg_probe(struct platform_device *pdev)
 			ERR_PTR(ret));
 		return ret;
 	}
+
+	chip->dc_yields_to_usb = of_property_read_bool(chip->dev->of_node,
+						"qcom,dc-yields-to-usb");
 
 	spin_lock_init(&chip->sec_access_lock);
 	mutex_init(&chip->otg_lock);

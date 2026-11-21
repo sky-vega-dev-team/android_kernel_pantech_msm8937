@@ -145,6 +145,7 @@
 #define USBIN_MODE_HC_BIT		BIT(0)
 #define USB51_MODE_BIT			BIT(1)
 #define ICL_OVERRIDE_BIT		BIT(2)
+#define DCIN_SUSPEND_BIT		BIT(3)
 #define USBIN_SUSPEND_BIT		BIT(4)
 
 /* USB_CHGPTH_IL_CFG bits */
@@ -243,6 +244,7 @@ struct smbchg_chip {
 	struct power_supply_battery_info *batt_info;
 	struct power_supply *usb_psy;
 	struct power_supply *dc_psy;
+	bool dc_yields_to_usb;
 
 	struct regulator_desc otg_rdesc;
 	struct regulator_dev *otg_reg;
