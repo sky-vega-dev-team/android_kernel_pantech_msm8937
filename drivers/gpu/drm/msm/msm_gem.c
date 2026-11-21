@@ -52,7 +52,9 @@ static void put_iova_spaces(struct drm_gem_object *obj, struct drm_gpuvm *vm,
 
 static void msm_gem_close(struct drm_gem_object *obj, struct drm_file *file)
 {
+	struct msm_drm_private *priv = obj->dev->dev_private;
 	struct msm_context *ctx = file->driver_priv;
+	struct drm_gpuvm *vm = ctx->vm;
 	struct drm_exec exec;
 	int refcount;
 
@@ -61,12 +63,22 @@ static void msm_gem_close(struct drm_gem_object *obj, struct drm_file *file)
 	refcount = atomic_dec_return(&to_msm_bo(obj)->handle_count);
 
 	/*
-	 * If VM isn't created yet, nothing to cleanup.  And in fact calling
-	 * put_iova_spaces() with vm=NULL would be bad, in that it will tear-
-	 * down the mappings of shared buffers in other contexts.
+	 * If VM isn't created yet, this context mapped nothing.  And in fact
+	 * calling put_iova_spaces() with vm=NULL would be bad, in that it will
+	 * tear down the mappings of shared buffers in other contexts.
+	 *
+	 * But the last handle of a buffer that other contexts mapped into the
+	 * shared GPU VM may well be held by a context that never used the
+	 * GPU, such as a gralloc allocator: the mappings, which hold a
+	 * reference to the buffer, must still go with that handle, or the
+	 * buffer is never freed.
 	 */
-	if (!ctx->vm)
-		return;
+	if (!vm) {
+		if (refcount > 0 || !priv->gpu || !priv->gpu->vm ||
+		    to_msm_vm(priv->gpu->vm)->pid)
+			return;
+		vm = priv->gpu->vm;
+	}
 
 	/*
 	 * VM_BIND does not depend on implicit teardown of VMAs on handle
@@ -76,7 +88,7 @@ static void msm_gem_close(struct drm_gem_object *obj, struct drm_file *file)
 	if (msm_context_is_vmbind(ctx))
 		return;
 
-	if (!to_msm_vm(ctx->vm)->pid && refcount > 0)
+	if (!to_msm_vm(vm)->pid && refcount > 0)
 		return;
 
 	/*
@@ -86,8 +98,8 @@ static void msm_gem_close(struct drm_gem_object *obj, struct drm_file *file)
 	dma_resv_wait_timeout(obj->resv, DMA_RESV_USAGE_BOOKKEEP, false,
 			      MAX_SCHEDULE_TIMEOUT);
 
-	msm_gem_lock_vm_and_obj(&exec, obj, ctx->vm);
-	put_iova_spaces(obj, ctx->vm, true, "close");
+	msm_gem_lock_vm_and_obj(&exec, obj, vm);
+	put_iova_spaces(obj, vm, true, "close");
 	drm_exec_fini(&exec);     /* drop locks */
 }
 
