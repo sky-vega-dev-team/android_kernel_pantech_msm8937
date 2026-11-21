@@ -239,6 +239,8 @@
 	monitored-battery = <&battery>;
 	/* A cable takes over from the wireless pad, as on the vendor software */
 	qcom,dc-yields-to-usb;
+	/* The 5 W of the BQ51221 wireless receiver (vendor software: 700 mA) */
+	qcom,dc-current-limit-microamp = <1000000>;
 
 	status = "okay";
 };

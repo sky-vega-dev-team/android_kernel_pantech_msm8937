@@ -1510,7 +1510,31 @@ static enum power_supply_property smbchg_props[] = {
 static enum power_supply_property smbchg_dc_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 };
+
+/* Limit the DC input current to what the board gives, if it says */
+static int smbchg_dc_set_ilim(struct smbchg_chip *chip)
+{
+	unsigned int index;
+	u32 current_ua;
+	int ret;
+
+	if (of_property_read_u32(chip->dev->of_node,
+				 "qcom,dc-current-limit-microamp", &current_ua))
+		return 0;
+
+	index = find_closest_smaller(current_ua, chip->data->ilim_table,
+			(unsigned int)chip->data->ilim_table_len);
+	ret = qcom_pmic_sec_masked_write(chip->regmap,
+					 chip->base + SMBCHG_DC_CHGPTH_IL_CFG,
+					 USBIN_INPUT_MASK, index);
+	if (ret)
+		dev_err(chip->dev, "Failed to set DC current limit: %pe\n",
+			ERR_PTR(ret));
+
+	return ret;
+}
 
 static int smbchg_dc_get_property(struct power_supply *psy,
 				  enum power_supply_property psp,
@@ -1526,6 +1550,20 @@ static int smbchg_dc_get_property(struct power_supply *psy,
 		val->intval = smbchg_is_dc_present(chip) &&
 			      !smbchg_dc_is_suspended(chip);
 		return 0;
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT: {
+		unsigned int value;
+		int ret;
+
+		ret = regmap_read(chip->regmap,
+				  chip->base + SMBCHG_DC_CHGPTH_IL_CFG, &value);
+		if (ret)
+			return ret;
+		value &= USBIN_INPUT_MASK;
+		if (value >= chip->data->ilim_table_len)
+			return -EINVAL;
+		val->intval = chip->data->ilim_table[value];
+		return 0;
+	}
 	default:
 		return -EINVAL;
 	}
@@ -1748,6 +1786,10 @@ static int smbchg_probe(struct platform_device *pdev)
 			chip->usb_psy);
 		return PTR_ERR(chip->usb_psy);
 	}
+
+	ret = smbchg_dc_set_ilim(chip);
+	if (ret)
+		return ret;
 
 	/* No fwnode: the battery info belongs to the USB supply */
 	dc_config.drv_data = chip;
