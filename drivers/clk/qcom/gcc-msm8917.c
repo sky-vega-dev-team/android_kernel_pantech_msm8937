@@ -1977,6 +1977,19 @@ static struct clk_branch gcc_camss_cpp_clk = {
 	}
 };
 
+static struct clk_branch gcc_camss_cpp_axi_clk = {
+	.halt_reg = 0x58064,
+	.halt_check = BRANCH_HALT,
+	.clkr = {
+		.enable_reg = 0x58064,
+		.enable_mask = BIT(0),
+		.hw.init = &(struct clk_init_data) {
+			.name = "gcc_camss_cpp_axi_clk",
+			.ops = &clk_branch2_ops,
+		}
+	}
+};
+
 static struct clk_branch gcc_camss_csi0_ahb_clk = {
 	.halt_reg = 0x4e040,
 	.halt_check = BRANCH_HALT,
@@ -3807,6 +3820,7 @@ static struct clk_regmap *gcc_msm8937_clocks[] = {
 	[MSM8937_GCC_OXILI_AON_CLK] = &gcc_oxili_aon_clk.clkr,
 	[GCC_OXILI_GFX3D_CLK] = &gcc_oxili_gfx3d_clk.clkr,
 	[MSM8937_GCC_OXILI_TIMER_CLK] = &gcc_oxili_timer_clk.clkr,
+	[MSM8937_GCC_CAMSS_CPP_AXI_CLK] = &gcc_camss_cpp_axi_clk.clkr,
 	[GCC_PDM2_CLK] = &gcc_pdm2_clk.clkr,
 	[GCC_PDM_AHB_CLK] = &gcc_pdm_ahb_clk.clkr,
 	[GCC_PRNG_AHB_CLK] = &gcc_prng_ahb_clk.clkr,
@@ -3989,6 +4003,7 @@ static struct clk_regmap *gcc_msm8940_clocks[] = {
 	[MSM8937_GCC_OXILI_AON_CLK] = &gcc_oxili_aon_clk.clkr,
 	[GCC_OXILI_GFX3D_CLK] = &gcc_oxili_gfx3d_clk.clkr,
 	[MSM8937_GCC_OXILI_TIMER_CLK] = &gcc_oxili_timer_clk.clkr,
+	[MSM8937_GCC_CAMSS_CPP_AXI_CLK] = &gcc_camss_cpp_axi_clk.clkr,
 	[GCC_PDM2_CLK] = &gcc_pdm2_clk.clkr,
 	[GCC_PDM_AHB_CLK] = &gcc_pdm_ahb_clk.clkr,
 	[GCC_PRNG_AHB_CLK] = &gcc_prng_ahb_clk.clkr,
