@@ -88,6 +88,9 @@ struct media_device_ops {
  * @topology_version: Monotonic counter for storing the version of the graph
  *		topology. Should be incremented each time the topology changes.
  * @id:		Unique ID used on the last registered graph object
+ * @entity_id:	Last entity ID, counted apart from the other graph objects so
+ *		entities are numbered without gaps, as the Qualcomm camera_v2
+ *		daemon walks them
  * @entity_internal_idx: Unique internal entity ID used by the graph traversal
  *		algorithms
  * @entity_internal_idx_max: Allocated internal entity indices
@@ -160,6 +163,7 @@ struct media_device {
 	u64 topology_version;
 
 	u32 id;
+	u32 entity_id;
 	struct ida entity_internal_idx;
 	int entity_internal_idx_max;
 

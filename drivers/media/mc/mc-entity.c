@@ -147,8 +147,16 @@ void media_gobj_create(struct media_device *mdev,
 
 	gobj->mdev = mdev;
 
-	/* Create a per-type unique object ID */
-	gobj->id = media_gobj_gen_id(type, ++mdev->id);
+	/*
+	 * Create a per-type unique object ID. Entities take theirs from a
+	 * counter of their own, so their IDs follow each other without the
+	 * interfaces and links in between: the Qualcomm camera_v2 daemon
+	 * enumerates entities by increasing ID and stops at the first gap.
+	 */
+	if (type == MEDIA_GRAPH_ENTITY)
+		gobj->id = media_gobj_gen_id(type, ++mdev->entity_id);
+	else
+		gobj->id = media_gobj_gen_id(type, ++mdev->id);
 
 	switch (type) {
 	case MEDIA_GRAPH_ENTITY:
