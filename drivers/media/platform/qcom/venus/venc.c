@@ -322,6 +322,12 @@ static int venc_g_fmt(struct file *file, void *fh, struct v4l2_format *f)
 		pixmp->ycbcr_enc = inst->ycbcr_enc;
 		pixmp->quantization = inst->quantization;
 		pixmp->xfer_func = inst->xfer_func;
+		/*
+		 * Report the bitstream buffer size the queue was set up with,
+		 * which may be larger than the one for the current size.
+		 */
+		pixmp->num_planes = 1;
+		pixmp->plane_fmt[0].sizeimage = inst->output_buf_size;
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		pixmp->width = inst->out_width;
 		pixmp->height = inst->out_height;
