@@ -47,7 +47,7 @@
 
 		charge-full-design-microamp-hours = <2950000>;
 		charge-term-current-microamp = <200000>;
-		constant-charge-current-max-microamp = <1800000>;
+		constant-charge-current-max-microamp = <2200000>;
 		voltage-min-design-microvolt = <3400000>;
 		voltage-max-design-microvolt = <4400000>;
 	};
@@ -412,6 +412,13 @@
 		pm8937_l13: l13 {
 			regulator-min-microvolt = <3075000>;
 			regulator-max-microvolt = <3075000>;
+			/*
+			 * Powers the USB PHY, whose D+ and D- otherwise clamp
+			 * near 0.6V: an HVDCP adapter then takes the request
+			 * for 9V for one for 12V. The vendor kernel kept it on
+			 * while a charger was attached.
+			 */
+			regulator-always-on;
 		};
 
 		pm8937_l14: l14 {
