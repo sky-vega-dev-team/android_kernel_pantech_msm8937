@@ -379,10 +379,24 @@ static int vdec_s_fmt(struct file *file, void *fh, struct v4l2_format *f)
 
 	inst->width = format.fmt.pix_mp.width;
 	inst->height = format.fmt.pix_mp.height;
-	inst->crop.top = 0;
-	inst->crop.left = 0;
-	inst->crop.width = inst->width;
-	inst->crop.height = inst->height;
+
+	/*
+	 * The capture height is aligned for the hardware, while the visible
+	 * area is what the stream has: take it from the coded size, and do
+	 * not let the client's capture format, which is the aligned size it
+	 * read back, widen it again.
+	 */
+	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+		inst->crop.top = 0;
+		inst->crop.left = 0;
+		inst->crop.width = orig_pixmp.width ?
+			min(orig_pixmp.width, inst->width) : inst->width;
+		inst->crop.height = orig_pixmp.height ?
+			min(orig_pixmp.height, inst->height) : inst->height;
+	} else {
+		inst->crop.width = min(inst->crop.width, inst->width);
+		inst->crop.height = min(inst->crop.height, inst->height);
+	}
 
 	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
 		inst->fmt_out = fmt;
