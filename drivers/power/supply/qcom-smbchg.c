@@ -8,6 +8,7 @@
 
 #include <linux/unaligned.h>
 #include <linux/errno.h>
+#include <linux/delay.h>
 #include <linux/extcon-provider.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -833,7 +834,13 @@ static void smbchg_extcon_update(struct smbchg_chip *chip,
 	enum power_supply_usb_type usb_type = smbchg_usb_get_type(chip);
 	int otg_vbus_present = smbchg_otg_is_enabled(chip->otg_reg);
 
-	extcon_set_state(chip->edev, EXTCON_USB, usb_present);
+	/*
+	 * Only a port that talks USB is one for the gadget: on a DCP its pull-up
+	 * on D+ would break the HVDCP handshake, as the vendor driver knew.
+	 */
+	extcon_set_state(chip->edev, EXTCON_USB, usb_present &&
+			 (usb_type == POWER_SUPPLY_USB_TYPE_SDP ||
+			  usb_type == POWER_SUPPLY_USB_TYPE_CDP));
 	extcon_set_state(chip->edev, EXTCON_USB_HOST, otg_present);
 	extcon_set_property(chip->edev, EXTCON_USB_HOST, EXTCON_PROP_USB_VBUS,
 			    (union extcon_property_value)otg_vbus_present);
@@ -877,6 +884,85 @@ static const unsigned int smbchg_extcon_cable[] = {
 
 static void smbchg_dc_update_suspend(struct smbchg_chip *chip);
 
+#define HVDCP_DETECT_MS		3000
+#define HVDCP_POLL_MS		50
+#define HVDCP_ILIM_UA		1800000
+
+static int smbchg_hvdcp_select(struct smbchg_chip *chip, unsigned int sel)
+{
+	return qcom_pmic_sec_masked_write(chip->regmap,
+					  chip->base + SMBCHG_USB_CHGPTH_CFG,
+					  HVDCP_ADAPTER_SEL_MASK, sel);
+}
+
+/*
+ * A DCP that answered the HVDCP handshake stays at 5V until asked for more.
+ * Ask for 9V the way the vendor driver did on SCHG lite: force QC 2.0 at 5V,
+ * give the adapter time to switch modes, then select 9V. Keep the input
+ * current to what such adapters give at 9V.
+ */
+static void smbchg_hvdcp_work(struct work_struct *work)
+{
+	struct smbchg_chip *chip =
+		container_of(work, struct smbchg_chip, hvdcp_work.work);
+	unsigned int value, index;
+	int ret, tries;
+
+	/*
+	 * Catch the handshake as soon as it completes: the adapter is then
+	 * left at D+ and D- both at 0.6V, which it soon takes for a request
+	 * for 12V, beyond what USBIN tolerates.
+	 */
+	for (tries = 0; ; tries++) {
+		if (!smbchg_usb_is_present(chip))
+			return;
+
+		ret = regmap_read(chip->regmap,
+				  chip->base + SMBCHG_USB_CHGPTH_USBIN_HVDCP_STS,
+				  &value);
+		if (ret)
+			return;
+		if (value & USBIN_HVDCP_SEL_LITE_BIT)
+			break;
+		if (tries >= HVDCP_DETECT_MS / HVDCP_POLL_MS)
+			return;
+		msleep(HVDCP_POLL_MS);
+	}
+
+	ret = smbchg_hvdcp_select(chip, HVDCP_ADAPTER_SEL_5V);
+	if (!ret)
+		ret = regmap_update_bits(chip->regmap,
+				chip->base + SMBCHG_USB_CHGPTH_CMD_HVDCP_1,
+				FORCE_HVDCP_2P0_BIT, FORCE_HVDCP_2P0_BIT);
+	if (!ret)
+		ret = regmap_update_bits(chip->regmap,
+				chip->base + SMBCHG_USB_CHGPTH_CMD_HVDCP_1,
+				FORCE_HVDCP_2P0_BIT, 0);
+	if (ret) {
+		dev_err(chip->dev, "Failed to force QC 2.0: %pe\n",
+			ERR_PTR(ret));
+		return;
+	}
+
+	/* Let the adapter switch into HVDCP 2.0 without dropping USBIN */
+	msleep(500);
+
+	index = find_closest_smaller(HVDCP_ILIM_UA, chip->data->ilim_table,
+			(unsigned int)chip->data->ilim_table_len);
+	ret = qcom_pmic_sec_masked_write(chip->regmap,
+					 chip->base + SMBCHG_USB_CHGPTH_IL_CFG,
+					 USBIN_INPUT_MASK, index);
+	if (!ret)
+		ret = smbchg_hvdcp_select(chip, HVDCP_ADAPTER_SEL_9V);
+	if (ret) {
+		dev_err(chip->dev, "Failed to select 9V HVDCP: %pe\n",
+			ERR_PTR(ret));
+		return;
+	}
+
+	dev_info(chip->dev, "HVDCP adapter, charging at 9V\n");
+}
+
 static bool smbchg_check_role_switch(struct smbchg_chip *chip, bool otg_present)
 {
 	if (chip->role_sw)
@@ -916,6 +1002,7 @@ static void smbchg_detect_work(struct work_struct *work)
 
 	usb_type = smbchg_usb_get_type(chip);
 
+
 	if (!otg_present && has_role_sw)
 		smbchg_otg_switch(chip, false);
 
@@ -944,7 +1031,13 @@ static void smbchg_detect_work(struct work_struct *work)
 				ERR_PTR(ret));
 			return;
 		}
+
+		if (chip->hvdcp_9v && usb_type == POWER_SUPPLY_USB_TYPE_DCP)
+			mod_delayed_work(system_dfl_wq, &chip->hvdcp_work, 0);
 	}
+
+	if (chip->hvdcp_9v && !usb_present)
+		cancel_delayed_work(&chip->hvdcp_work);
 
 	/*
 	 * Nothing else raises the input current limit of a SDP from the
@@ -1632,6 +1725,18 @@ static int smbchg_init(struct smbchg_chip *chip)
 	if (ret)
 		return ret;
 
+	/*
+	 * Keep a battery overvoltage from turning charging off, as the vendor
+	 * driver did on the PMI8950: the HVDCP input at 9V tripped it.
+	 */
+	if (chip->data->smbchg_lite) {
+		ret = qcom_pmic_sec_masked_write(chip->regmap,
+				chip->base + SMBCHG_CHGR_CHGR_CFG2,
+				CHG_BAT_OV_ECC_BIT, 0);
+		if (ret)
+			return ret;
+	}
+
 	/* Set recharge threshold to 100mV */
 	ret = qcom_pmic_sec_masked_write(chip->regmap,
 					 chip->base + SMBCHG_CHGR_CFG,
@@ -1691,6 +1796,36 @@ static int smbchg_init(struct smbchg_chip *chip)
 	if (ret)
 		return ret;
 
+	/*
+	 * Let the APSD of a DCP go on into the HVDCP handshake, select 9V for
+	 * after it and allow USBIN up to 9V, as the vendor driver did.
+	 */
+	if (chip->hvdcp_9v) {
+		ret = qcom_pmic_sec_masked_write(
+			chip->regmap, chip->base + SMBCHG_USB_CHGPTH_CFG,
+			HVDCP_EN_BIT | HVDCP_ADAPTER_SEL_MASK,
+			HVDCP_EN_BIT | HVDCP_ADAPTER_SEL_9V);
+		if (!ret)
+			ret = qcom_pmic_sec_masked_write(
+				chip->regmap,
+				chip->base + SMBCHG_USB_CHGPTH_USBIN_CHGR_CFG,
+				USBIN_ADAPTER_ALLOWANCE_MASK,
+				USBIN_ADAPTER_5V_UNREG_9V);
+		if (ret)
+			return ret;
+	} else {
+		/*
+		 * Nothing else negotiates a higher voltage, and an adapter left
+		 * to the handshake the bootloader enabled may come up at 12V:
+		 * keep to 5V.
+		 */
+		ret = qcom_pmic_sec_masked_write(chip->regmap,
+				chip->base + SMBCHG_USB_CHGPTH_CFG,
+				HVDCP_EN_BIT, 0);
+		if (ret)
+			return ret;
+	}
+
 	/* Enable APSD */
 	ret = qcom_pmic_sec_masked_write(
 		chip->regmap, chip->base + SMBCHG_USB_CHGPTH_APSD_CFG,
@@ -1700,6 +1835,21 @@ static int smbchg_init(struct smbchg_chip *chip)
 			ERR_PTR(ret));
 		return ret;
 	}
+
+	/*
+	 * As the vendor driver did: turn off the AICL ADC for accuracy, and
+	 * switch the buck faster against VBUS oscillation. Without either,
+	 * AICL kept suspending USBIN from a 9V HVDCP adapter.
+	 */
+	ret = qcom_pmic_sec_masked_write(chip->regmap,
+					 chip->base + SMBCHG_MISC_TRIM_OPT_15_8,
+					 AICL_ADC_BIT, 0);
+	if (!ret)
+		ret = qcom_pmic_sec_masked_write(chip->regmap,
+					chip->base + SMBCHG_USB_CHGPTH_TR_8OR32B,
+					BUCK_8_16_FREQ_BIT, 0);
+	if (ret)
+		return ret;
 
 	/* Enable periodic AICL rerun on the USB charge path */
 	ret = qcom_pmic_sec_masked_write(chip->regmap,
@@ -1754,6 +1904,7 @@ static int smbchg_probe(struct platform_device *pdev)
 	mutex_init(&chip->otg_lock);
 	INIT_DELAYED_WORK(&chip->otg_reset_work, smbchg_otg_reset_work);
 	INIT_DELAYED_WORK(&chip->detect_work, smbchg_detect_work);
+	INIT_DELAYED_WORK(&chip->hvdcp_work, smbchg_hvdcp_work);
 
 	/* Initialize OTG regulator */
 	chip->otg_rdesc.id = -1;
@@ -1776,6 +1927,10 @@ static int smbchg_probe(struct platform_device *pdev)
 	}
 
 	chip->data = of_device_get_match_data(chip->dev);
+	/* Only SCHG lite is handled, and only boards that take 9V */
+	chip->hvdcp_9v = chip->data->smbchg_lite &&
+			 of_property_read_bool(chip->dev->of_node,
+					       "qcom,hvdcp-9v");
 
 	supply_config.drv_data = chip;
 	supply_config.fwnode = dev_fwnode(&pdev->dev);

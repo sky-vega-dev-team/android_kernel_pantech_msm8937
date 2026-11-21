@@ -57,6 +57,7 @@
 #define SMBCHG_USB_CHGPTH_TR_RID		0x3fa
 #define SMBCHG_USB_CHGPTH_ICL_BUF_CONFIG	0x3fc
 #define SMBCHG_USB_CHGPTH_TR_8OR32B		0x3fe
+#define SMBCHG_USB_CHGPTH_TR_8OR32B		0x3fe
 
 /* DC-CHGPTH */
 #define SMBCHG_DC_CHGPTH_RT_STS			0x410
@@ -101,6 +102,7 @@
 
 /* CHGR_CHGR_CFG2 bits */
 #define CHARGER_INHIBIT_BIT		BIT(0)
+#define CHG_BAT_OV_ECC_BIT		BIT(4)
 #define AUTO_RECHG_BIT			BIT(2)
 #define I_TERM_BIT			BIT(3)
 #define P2F_CHG_TRAN_BIT		BIT(5)
@@ -133,6 +135,20 @@
 #define USB51AC_CTRL			BIT(1)
 #define USB51_COMMAND_POL		BIT(2)
 #define CFG_USB3P0_SEL_BIT		BIT(7)
+#define HVDCP_EN_BIT			BIT(3)
+#define HVDCP_ADAPTER_SEL_MASK		GENMASK(5, 4)
+#define HVDCP_ADAPTER_SEL_5V		0x00
+#define HVDCP_ADAPTER_SEL_9V		0x10
+
+/* USB_CHGPTH_USBIN_CHGR_CFG bits */
+#define USBIN_ADAPTER_ALLOWANCE_MASK	GENMASK(2, 0)
+#define USBIN_ADAPTER_5V_UNREG_9V	0x5
+
+/* USB_CHGPTH_USBIN_HVDCP_STS bits, SCHG lite */
+#define USBIN_HVDCP_SEL_LITE_BIT	BIT(0)
+
+/* USB_CHGPTH_CMD_HVDCP_1 bits */
+#define FORCE_HVDCP_2P0_BIT		BIT(3)
 
 /* USB_CHGPTH_RT_STS bits */
 #define USBIN_OV_BIT			BIT(1)
@@ -164,6 +180,10 @@
 #define AICL_RERUN_MASK			GENMASK(5, 4)
 #define AICL_RERUN_DC_BIT		BIT(4)
 #define AICL_RERUN_USB_BIT		BIT(5)
+#define AICL_ADC_BIT			BIT(6)
+
+/* USB_CHGPTH_TR_8OR32B bits */
+#define BUCK_8_16_FREQ_BIT		BIT(0)
 
 /* Values */
 /* CHGR_STS values */
@@ -255,6 +275,8 @@ struct smbchg_chip {
 	spinlock_t sec_access_lock;
 	struct delayed_work otg_reset_work;
 	struct delayed_work detect_work;
+	struct delayed_work hvdcp_work;
+	bool hvdcp_9v;
 	struct usb_role_switch *role_sw;
 	enum usb_role last_role;
 	u16 role_sw_timeout;
