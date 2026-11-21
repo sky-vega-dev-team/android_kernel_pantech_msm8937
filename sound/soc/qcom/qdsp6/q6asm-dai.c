@@ -176,6 +176,9 @@ static const struct snd_compr_codec_caps q6asm_compr_caps = {
 	.descriptor[0].formats = 0,
 };
 
+static int q6asm_dai_queue_playback(struct device *dev,
+				    struct snd_pcm_substream *substream);
+
 static void event_handler(uint32_t opcode, uint32_t token,
 			  void *payload, void *priv)
 {
@@ -187,9 +190,18 @@ static void event_handler(uint32_t opcode, uint32_t token,
 		break;
 	case ASM_CLIENT_EVENT_CMD_EOS_DONE:
 		break;
-	case ASM_CLIENT_EVENT_DATA_WRITE_DONE:
+	case ASM_CLIENT_EVENT_DATA_WRITE_DONE: {
+		unsigned long flags;
+
 		snd_pcm_period_elapsed(substream);
+		/* Room in the FIFO again: queue what the last ack could not */
+		snd_pcm_stream_lock_irqsave(substream, flags);
+		if (substream->runtime)
+			q6asm_dai_queue_playback(substream->pcm->card->dev,
+						 substream);
+		snd_pcm_stream_unlock_irqrestore(substream, flags);
 		break;
+	}
 	case ASM_CLIENT_EVENT_DATA_READ_DONE:
 		snd_pcm_period_elapsed(substream);
 		if (prtd->state == Q6ASM_STREAM_RUNNING)
@@ -309,27 +321,44 @@ open_err:
 	return ret;
 }
 
-static int q6asm_dai_ack(struct snd_soc_component *component, struct snd_pcm_substream *substream)
+/*
+ * Queue the periods the application has written to the DSP. The APR packets
+ * go out with rpmsg_trysend(), which fails with -EAGAIN while the SMD FIFO is
+ * full; leave the rest queued here then, for the next ack or write done event,
+ * rather than failing the stream. Called with the stream lock held.
+ */
+static int q6asm_dai_queue_playback(struct device *dev,
+				    struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct q6asm_dai_rtd *prtd = runtime->private_data;
-	int i, ret = 0, avail_periods;
+	int i, ret, avail_periods;
 
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK && prtd->state == Q6ASM_STREAM_RUNNING) {
-		avail_periods = (runtime->control->appl_ptr - prtd->queue_ptr)/runtime->period_size;
-		for (i = 0; i < avail_periods; i++) {
-			ret = q6asm_write_async(prtd->audio_client, prtd->stream_id,
-					   prtd->pcm_count, 0, 0, 0);
+	if (prtd->state != Q6ASM_STREAM_RUNNING)
+		return 0;
 
-			if (ret < 0) {
-				dev_err(component->dev, "Error queuing playback buffer %d\n", ret);
-				return ret;
-			}
-			prtd->queue_ptr += runtime->period_size;
+	avail_periods = (runtime->control->appl_ptr - prtd->queue_ptr)/runtime->period_size;
+	for (i = 0; i < avail_periods; i++) {
+		ret = q6asm_write_async(prtd->audio_client, prtd->stream_id,
+				   prtd->pcm_count, 0, 0, 0);
+		if (ret == -EAGAIN)
+			return 0;
+		if (ret < 0) {
+			dev_err(dev, "Error queuing playback buffer %d\n", ret);
+			return ret;
 		}
+		prtd->queue_ptr += runtime->period_size;
 	}
 
-	return ret;
+	return 0;
+}
+
+static int q6asm_dai_ack(struct snd_soc_component *component, struct snd_pcm_substream *substream)
+{
+	if (substream->stream != SNDRV_PCM_STREAM_PLAYBACK)
+		return 0;
+
+	return q6asm_dai_queue_playback(component->dev, substream);
 }
 
 static int q6asm_dai_trigger(struct snd_soc_component *component,
