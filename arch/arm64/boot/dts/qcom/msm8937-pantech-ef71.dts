@@ -96,40 +96,6 @@
 		pinctrl-names = "default";
 	};
 
-	/* Supplies of the rear IMX214, each switched by a GPIO */
-	cam0_avdd: cam0-avdd-regulator {
-		compatible = "regulator-fixed";
-		regulator-name = "cam0_avdd";
-		regulator-min-microvolt = <2800000>;
-		regulator-max-microvolt = <2800000>;
-		gpio = <&tlmm 133 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-	};
-
-	cam0_dvdd: cam0-dvdd-regulator {
-		compatible = "regulator-fixed";
-		regulator-name = "cam0_dvdd";
-		regulator-min-microvolt = <1200000>;
-		regulator-max-microvolt = <1200000>;
-		gpio = <&tlmm 92 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-	};
-
-	cam0_iovdd: cam0-iovdd-regulator {
-		compatible = "regulator-fixed";
-		regulator-name = "cam0_iovdd";
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
-		gpio = <&tlmm 132 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-		/*
-		 * Switching it off with the sensor leaves CCI master 0 hung
-		 * on the next transfer, so the IMX214 fails to start every
-		 * few streams: keep it on.
-		 */
-		regulator-always-on;
-	};
-
 	usb_vbus: extcon-usb-dummy {
 		compatible = "linux,extcon-usb-dummy";
 	};
@@ -200,57 +166,6 @@
 
 &bam_dmux_dma {
 	status = "okay";
-};
-
-&camss {
-	status = "okay";
-
-	ports {
-		port@0 {
-			reg = <0>;
-
-			csiphy0_ep: endpoint {
-				data-lanes = <0 1 2 3>;
-				remote-endpoint = <&imx214_ep>;
-			};
-		};
-	};
-};
-
-&cci {
-	status = "okay";
-};
-
-&cci_i2c0 {
-	/* Rear camera: Sony IMX214 */
-	camera@1a {
-		compatible = "sony,imx214";
-		reg = <0x1a>;
-
-		clocks = <&gcc GCC_CAMSS_MCLK0_CLK>;
-		assigned-clocks = <&gcc GCC_CAMSS_MCLK0_CLK>;
-		assigned-clock-rates = <24000000>;
-
-		enable-gpios = <&tlmm 36 GPIO_ACTIVE_HIGH>;
-
-		vdda-supply = <&cam0_avdd>;
-		vddd-supply = <&cam0_dvdd>;
-		vdddo-supply = <&cam0_iovdd>;
-
-		orientation = <1>;
-		rotation = <90>;
-
-		pinctrl-0 = <&camss_mclk0_default>, <&cam0_rst_default>;
-		pinctrl-names = "default";
-
-		port {
-			imx214_ep: endpoint {
-				data-lanes = <1 2 3 4>;
-				link-frequencies = /bits/ 64 <600000000>;
-				remote-endpoint = <&csiphy0_ep>;
-			};
-		};
-	};
 };
 
 &gpu {
@@ -543,14 +458,8 @@
 };
 
 &tlmm {
-	gpio-reserved-ranges = <0 4>, <20 4>;
-
-	cam0_rst_default: cam0-rst-default-state {
-		pins = "gpio36";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-disable;
-	};
+	/* GPIO 0 switches the front camera supply, as on msm-4.19 */
+	gpio-reserved-ranges = <1 3>, <20 4>;
 
 	gpio_keys_default: gpio-keys-default-state {
 		pins = "gpio126";
@@ -952,3 +861,5 @@
 		input-enable;
 	};
 };
+
+#include "msm8937-pantech-ef71-camera.dtsi"
