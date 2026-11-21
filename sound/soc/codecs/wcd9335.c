@@ -11,6 +11,7 @@
 #include <linux/bitops.h>
 #include <linux/regulator/consumer.h>
 #include <linux/clk.h>
+#include <linux/clk-provider.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/slimbus.h>
@@ -20,6 +21,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
+#include <linux/of_platform.h>
 #include <sound/tlv.h>
 #include <sound/info.h>
 #include "wcd9335.h"
@@ -298,6 +300,8 @@ struct wcd_slim_codec_dai_data {
 struct wcd9335_codec {
 	struct device *dev;
 	struct clk *mclk;
+	/* gate for the SoundWire master clock, half of MCLK */
+	struct clk_hw swr_hw;
 	struct clk *native_clk;
 	u32 mclk_rate;
 
@@ -2473,6 +2477,14 @@ static const struct snd_soc_dapm_route wcd9335_audio_map[] = {
 	{"LINEOUT4 PA", NULL, "RX INT6 DAC"},
 	{"LINEOUT4", NULL, "LINEOUT4 PA"},
 
+	/* SPK1 and SPK2: the WSA881x amplifiers on the SoundWire master */
+	{"RX INT7 CHAIN", NULL, "RX INT7 INTERP"},
+	{"RX INT7 CHAIN", NULL, "RX_BIAS"},
+	{"SPK1 OUT", NULL, "RX INT7 CHAIN"},
+	{"RX INT8 CHAIN", NULL, "RX INT8 INTERP"},
+	{"RX INT8 CHAIN", NULL, "RX_BIAS"},
+	{"SPK2 OUT", NULL, "RX INT8 CHAIN"},
+
 	/* SLIMBUS Connections */
 	{"AIF1 CAP", NULL, "AIF1_CAP Mixer"},
 	{"AIF2 CAP", NULL, "AIF2_CAP Mixer"},
@@ -4030,20 +4042,22 @@ static void wcd9335_teardown_irqs(struct wcd9335_codec *wcd)
 static void wcd9335_cdc_sido_ccl_enable(struct wcd9335_codec *wcd,
 					bool ccl_flag)
 {
-	struct snd_soc_component *comp = wcd->component;
-
+	/*
+	 * Through the regmap: the SoundWire master asks for MCLK from its
+	 * probe, before the component exists.
+	 */
 	if (ccl_flag) {
 		if (++wcd->sido_ccl_cnt == 1)
-			snd_soc_component_write(comp, WCD9335_SIDO_SIDO_CCL_10,
-					WCD9335_SIDO_SIDO_CCL_DEF_VALUE);
+			regmap_write(wcd->regmap, WCD9335_SIDO_SIDO_CCL_10,
+				     WCD9335_SIDO_SIDO_CCL_DEF_VALUE);
 	} else {
 		if (wcd->sido_ccl_cnt == 0) {
 			dev_err(wcd->dev, "sido_ccl already disabled\n");
 			return;
 		}
 		if (--wcd->sido_ccl_cnt == 0)
-			snd_soc_component_write(comp, WCD9335_SIDO_SIDO_CCL_10,
-				WCD9335_SIDO_SIDO_CCL_10_ICHARG_PWR_SEL_C320FF);
+			regmap_write(wcd->regmap, WCD9335_SIDO_SIDO_CCL_10,
+				     WCD9335_SIDO_SIDO_CCL_10_ICHARG_PWR_SEL_C320FF);
 	}
 }
 
@@ -4271,8 +4285,47 @@ static int wcd9335_codec_enable_mclk(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+/*
+ * The speaker interpolators feed the WSA881x over SoundWire through the
+ * boost path; route them through it as the vendor driver does.
+ */
+static int wcd9335_codec_spk_boost_event(struct snd_soc_dapm_widget *w,
+					 struct snd_kcontrol *kc, int event)
+{
+	struct snd_soc_component *comp = snd_soc_dapm_to_component(w->dapm);
+	u16 boost_path_ctl, boost_path_cfg1, reg, reg_mix;
+
+	if (!snd_soc_dapm_widget_name_cmp(w, "RX INT7 CHAIN")) {
+		boost_path_ctl = WCD9335_CDC_BOOST0_BOOST_PATH_CTL;
+		boost_path_cfg1 = WCD9335_CDC_RX7_RX_PATH_CFG1;
+		reg = WCD9335_CDC_RX7_RX_PATH_CTL;
+		reg_mix = WCD9335_CDC_RX7_RX_PATH_MIX_CTL;
+	} else {
+		boost_path_ctl = WCD9335_CDC_BOOST1_BOOST_PATH_CTL;
+		boost_path_cfg1 = WCD9335_CDC_RX8_RX_PATH_CFG1;
+		reg = WCD9335_CDC_RX8_RX_PATH_CTL;
+		reg_mix = WCD9335_CDC_RX8_RX_PATH_MIX_CTL;
+	}
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		snd_soc_component_update_bits(comp, boost_path_ctl, 0x10, 0x10);
+		snd_soc_component_update_bits(comp, boost_path_cfg1, 0x01, 0x01);
+		snd_soc_component_update_bits(comp, reg, 0x10, 0x00);
+		snd_soc_component_update_bits(comp, reg_mix, 0x10, 0x00);
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		snd_soc_component_update_bits(comp, boost_path_cfg1, 0x01, 0x00);
+		snd_soc_component_update_bits(comp, boost_path_ctl, 0x10, 0x00);
+		break;
+	}
+
+	return 0;
+}
+
 static const struct snd_soc_dapm_widget wcd9335_dapm_widgets[] = {
-	/* TODO SPK1 & SPK2 OUT*/
+	SND_SOC_DAPM_OUTPUT("SPK1 OUT"),
+	SND_SOC_DAPM_OUTPUT("SPK2 OUT"),
 	SND_SOC_DAPM_OUTPUT("EAR"),
 	SND_SOC_DAPM_OUTPUT("HPHL"),
 	SND_SOC_DAPM_OUTPUT("HPHR"),
@@ -4479,6 +4532,13 @@ static const struct snd_soc_dapm_widget wcd9335_dapm_widgets[] = {
 		wcd9335_codec_enable_interpolator,
 		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 		SND_SOC_DAPM_POST_PMD),
+
+	SND_SOC_DAPM_MIXER_E("RX INT7 CHAIN", SND_SOC_NOPM, 0, 0, NULL, 0,
+		wcd9335_codec_spk_boost_event,
+		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_MIXER_E("RX INT8 CHAIN", SND_SOC_NOPM, 0, 0, NULL, 0,
+		wcd9335_codec_spk_boost_event,
+		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_DAC_E("RX INT0 DAC", NULL, SND_SOC_NOPM,
 		0, 0, wcd9335_codec_ear_dac_event,
@@ -4904,6 +4964,7 @@ static bool wcd9335_is_volatile_register(struct device *dev, unsigned int reg)
 	case WCD9335_ANA_MICB2:
 	case WCD9335_ANA_RCO:
 	case WCD9335_ANA_BIAS:
+	case WCD9335_SWR_AHB_BRIDGE_WR_DATA_0...WCD9335_SWR_AHB_BRIDGE_ACCESS_STATUS:
 		return true;
 	default:
 		return false;
@@ -4952,6 +5013,16 @@ static const struct regmap_irq wcd9335_codec_irqs[] = {
 			.type_reg_offset = 0,
 			.types_supported = IRQ_TYPE_EDGE_BOTH,
 			.type_reg_mask	= BIT(0),
+		},
+	},
+	/* INTR_REG 2 */
+	[WCD9335_IRQ_SOUNDWIRE] = {
+		.reg_offset = 2,
+		.mask = BIT(4),
+		.type = {
+			.type_reg_offset = 2,
+			.types_supported = IRQ_TYPE_EDGE_BOTH,
+			.type_reg_mask	= BIT(4),
 		},
 	},
 };
@@ -5103,6 +5174,101 @@ static void wcd9335_put_device_action(void *data)
 	put_device(dev);
 }
 
+static int wcd9335_swclk_prepare(struct clk_hw *hw)
+{
+	struct wcd9335_codec *wcd = container_of(hw, struct wcd9335_codec, swr_hw);
+	int ret;
+
+	ret = wcd9335_cdc_req_mclk_enable(wcd, true);
+	if (ret)
+		return ret;
+
+	regmap_update_bits(wcd->regmap, WCD9335_CDC_CLK_RST_CTRL_SWR_CONTROL,
+			   WCD9335_CDC_SWR_CLK_EN_MASK, WCD9335_CDC_SWR_CLK_EN_MASK);
+
+	return 0;
+}
+
+static void wcd9335_swclk_unprepare(struct clk_hw *hw)
+{
+	struct wcd9335_codec *wcd = container_of(hw, struct wcd9335_codec, swr_hw);
+
+	regmap_update_bits(wcd->regmap, WCD9335_CDC_CLK_RST_CTRL_SWR_CONTROL,
+			   WCD9335_CDC_SWR_CLK_EN_MASK, 0);
+	wcd9335_cdc_req_mclk_enable(wcd, false);
+}
+
+static int wcd9335_swclk_is_prepared(struct clk_hw *hw)
+{
+	struct wcd9335_codec *wcd = container_of(hw, struct wcd9335_codec, swr_hw);
+	unsigned int val;
+
+	regmap_read(wcd->regmap, WCD9335_CDC_CLK_RST_CTRL_SWR_CONTROL, &val);
+
+	return val & WCD9335_CDC_SWR_CLK_EN_MASK;
+}
+
+static unsigned long wcd9335_swclk_recalc_rate(struct clk_hw *hw,
+					       unsigned long parent_rate)
+{
+	return parent_rate / 2;
+}
+
+static const struct clk_ops wcd9335_swclk_ops = {
+	.prepare = wcd9335_swclk_prepare,
+	.unprepare = wcd9335_swclk_unprepare,
+	.is_prepared = wcd9335_swclk_is_prepared,
+	.recalc_rate = wcd9335_swclk_recalc_rate,
+};
+
+/*
+ * The SoundWire master behind the codec, for the WSA881x speaker
+ * amplifiers: hand it a clock and let its node probe.
+ */
+static int wcd9335_register_swr(struct wcd9335_codec *wcd)
+{
+	struct device *dev = wcd->dev;
+	struct device_node *np = dev->of_node;
+	struct clk_init_data init = { };
+	const char *parent_name;
+	int ret;
+
+	struct device_node *swr_np __free(device_node) =
+		of_get_available_child_by_name(np, "soundwire");
+
+	if (!swr_np)
+		return 0;
+
+	/*
+	 * The master reads back zeros until MCLK is ungated and its rate set,
+	 * which the component probe would only do once the card binds, and
+	 * the card waits for the master.
+	 */
+	regmap_update_bits(wcd->regmap, WCD9335_CODEC_RPM_CLK_GATE,
+			   WCD9335_CODEC_RPM_CLK_GATE_MCLK_GATE_MASK, 0);
+	regmap_update_bits(wcd->regmap, WCD9335_CODEC_RPM_CLK_MCLK_CFG,
+			   WCD9335_CODEC_RPM_CLK_MCLK_CFG_MCLK_MASK,
+			   WCD9335_CODEC_RPM_CLK_MCLK_CFG_9P6MHZ);
+
+	parent_name = __clk_get_name(wcd->mclk);
+	init.name = "wcd9335-swr";
+	init.ops = &wcd9335_swclk_ops;
+	init.parent_names = &parent_name;
+	init.num_parents = 1;
+	wcd->swr_hw.init = &init;
+
+	ret = devm_clk_hw_register(dev, &wcd->swr_hw);
+	if (ret)
+		return ret;
+
+	ret = devm_of_clk_add_hw_provider(dev, of_clk_hw_simple_get,
+					  &wcd->swr_hw);
+	if (ret)
+		return ret;
+
+	return devm_of_platform_populate(dev);
+}
+
 static int wcd9335_slim_status(struct slim_device *sdev,
 			       enum slim_device_status status)
 {
@@ -5162,7 +5328,13 @@ static int wcd9335_slim_status(struct slim_device *sdev,
 		return ret;
 	}
 
-	wcd9335_probe(wcd);
+	ret = wcd9335_probe(wcd);
+	if (ret)
+		return ret;
+
+	ret = wcd9335_register_swr(wcd);
+	if (ret)
+		dev_err(dev, "Failed to register the SoundWire master: %d\n", ret);
 
 	return 0;
 }
