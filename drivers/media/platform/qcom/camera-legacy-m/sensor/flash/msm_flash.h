@@ -95,6 +95,9 @@ struct msm_flash_ctrl_t {
 
 	/* flash state */
 	enum msm_camera_flash_state_t flash_state;
+
+	/* Mainline flash LED, in place of the LED triggers */
+	struct led_classdev *led;
 };
 
 int msm_flash_i2c_probe(struct i2c_client *client,

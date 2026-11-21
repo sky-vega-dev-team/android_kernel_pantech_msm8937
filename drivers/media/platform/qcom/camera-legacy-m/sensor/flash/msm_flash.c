@@ -13,6 +13,7 @@
 
 #define pr_fmt(fmt) "%s:%d " fmt, __func__, __LINE__
 
+#include <linux/led-class-flash.h>
 #include <linux/module.h>
 #include <linux/of_gpio.h>
 #include "msm_flash.h"
@@ -381,12 +382,55 @@ static int32_t msm_flash_i2c_release(
 	return 0;
 }
 
+/*
+ * Drive a mainline flash LED, named by the "leds" property of the node, in
+ * place of the msm LED triggers: low is the torch, at a brightness in
+ * proportion to the current asked for, high a flash strobe.
+ */
+enum { MSM_FLASH_LED_OFF, MSM_FLASH_LED_TORCH, MSM_FLASH_LED_FLASH };
+
+static int32_t msm_flash_led_set(struct msm_flash_ctrl_t *fctrl, int mode,
+				 int32_t ma)
+{
+	struct led_classdev *cdev = fctrl->led;
+	struct led_classdev_flash *fled = NULL;
+	unsigned int brightness;
+
+	if (cdev->flags & LED_DEV_CAP_FLASH) {
+		fled = lcdev_to_flcdev(cdev);
+		led_set_flash_strobe(fled, false);
+	}
+	led_set_brightness_sync(cdev, LED_OFF);
+
+	switch (mode) {
+	case MSM_FLASH_LED_TORCH:
+		if (ma <= 0 || ma > fctrl->torch_max_current[0])
+			ma = fctrl->torch_op_current[0];
+		brightness = DIV_ROUND_UP(ma * cdev->max_brightness,
+					  fctrl->torch_max_current[0]);
+		return led_set_brightness_sync(cdev,
+				clamp(brightness, 1U, cdev->max_brightness));
+	case MSM_FLASH_LED_FLASH:
+		if (!fled)
+			return -EINVAL;
+		if (ma <= 0 || ma > fctrl->flash_max_current[0])
+			ma = fctrl->flash_op_current[0];
+		led_set_flash_brightness(fled, ma * 1000);
+		return led_set_flash_strobe(fled, true);
+	}
+
+	return 0;
+}
+
 static int32_t msm_flash_off(struct msm_flash_ctrl_t *flash_ctrl,
 	struct msm_flash_cfg_data_t *flash_data)
 {
 	int32_t i = 0;
 
 	CDBG("Enter\n");
+
+	if (flash_ctrl->led)
+		return msm_flash_led_set(flash_ctrl, MSM_FLASH_LED_OFF, 0);
 
 	for (i = 0; i < flash_ctrl->flash_num_sources; i++)
 		if (flash_ctrl->flash_trigger[i])
@@ -574,6 +618,10 @@ static int32_t msm_flash_low(
 	int32_t i = 0;
 
 	CDBG("Enter\n");
+	if (flash_ctrl->led)
+		return msm_flash_led_set(flash_ctrl, MSM_FLASH_LED_TORCH,
+					 flash_data->flash_current[0]);
+
 	/* Turn off flash triggers */
 	for (i = 0; i < flash_ctrl->flash_num_sources; i++)
 		if (flash_ctrl->flash_trigger[i])
@@ -610,6 +658,10 @@ static int32_t msm_flash_high(
 	int32_t curr = 0;
 	int32_t max_current = 0;
 	int32_t i = 0;
+
+	if (flash_ctrl->led)
+		return msm_flash_led_set(flash_ctrl, MSM_FLASH_LED_FLASH,
+					 flash_data->flash_current[0]);
 
 	/* Turn off torch triggers */
 	for (i = 0; i < flash_ctrl->torch_num_sources; i++)
@@ -944,6 +996,47 @@ static int32_t msm_flash_get_pmic_source_info(
 	return 0;
 }
 
+/*
+ * A flash LED of the mainline LED class, named by "leds", with its torch and
+ * flash currents in microamps.
+ */
+static int32_t msm_flash_get_led_info(struct device_node *of_node,
+	struct msm_flash_ctrl_t *fctrl)
+{
+	struct led_classdev *cdev;
+	u32 ua;
+
+	if (!of_property_present(of_node, "leds"))
+		return 0;
+
+	cdev = devm_of_led_get(&fctrl->pdev->dev, 0);
+	if (IS_ERR(cdev))
+		return dev_err_probe(&fctrl->pdev->dev, PTR_ERR(cdev),
+				     "no flash LED\n");
+
+	fctrl->led = cdev;
+	fctrl->flash_driver_type = FLASH_DRIVER_PMIC;
+	fctrl->flash_num_sources = 1;
+	fctrl->torch_num_sources = 1;
+
+	ua = 200000;
+	of_property_read_u32(of_node, "torch-max-microamp", &ua);
+	fctrl->torch_max_current[0] = ua / 1000;
+	ua = fctrl->torch_max_current[0] * 1000 / 2;
+	of_property_read_u32(of_node, "torch-microamp", &ua);
+	fctrl->torch_op_current[0] = ua / 1000;
+
+	ua = 1000000;
+	of_property_read_u32(of_node, "flash-max-microamp", &ua);
+	fctrl->flash_max_current[0] = ua / 1000;
+	ua = fctrl->flash_max_current[0] * 1000;
+	of_property_read_u32(of_node, "flash-microamp", &ua);
+	fctrl->flash_op_current[0] = ua / 1000;
+	fctrl->flash_max_duration[0] = 1280;
+
+	return 0;
+}
+
 static int32_t msm_flash_get_dt_data(struct device_node *of_node,
 	struct msm_flash_ctrl_t *fctrl)
 {
@@ -987,6 +1080,10 @@ static int32_t msm_flash_get_dt_data(struct device_node *of_node,
 			__func__, __LINE__, rc);
 		return rc;
 	}
+
+	rc = msm_flash_get_led_info(of_node, fctrl);
+	if (rc < 0)
+		return rc;
 
 	/* Read the gpio information from device tree */
 	rc = legacy_m_msm_sensor_driver_get_gpio_data(
@@ -1117,7 +1214,8 @@ static int32_t msm_flash_platform_probe(struct platform_device *pdev)
 		pr_err("%s:%d msm_flash_get_dt_data failed\n",
 			__func__, __LINE__);
 		kfree(flash_ctrl);
-		return -EINVAL;
+		/* Wait for the flash LED module rather than give up */
+		return rc == -EPROBE_DEFER ? rc : -EINVAL;
 	}
 
 	flash_ctrl->flash_state = MSM_CAMERA_FLASH_RELEASE;
@@ -1160,7 +1258,9 @@ static int32_t msm_flash_platform_probe(struct platform_device *pdev)
 #endif
 	flash_ctrl->msm_sd.sd.devnode->fops = &msm_flash_v4l2_subdev_fops;
 
-	if (flash_ctrl->flash_driver_type == FLASH_DRIVER_PMIC)
+	/* A mainline flash LED is a LED class device of its own already */
+	if (flash_ctrl->flash_driver_type == FLASH_DRIVER_PMIC &&
+	    !flash_ctrl->led)
 		rc = msm_torch_create_classdev(pdev, flash_ctrl);
 
 	CDBG("probe success\n");
