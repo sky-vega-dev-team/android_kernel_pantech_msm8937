@@ -256,8 +256,18 @@
 
 &adsp {
 	firmware-name = "image/adsp.mdt";
-
 	status = "okay";
+
+	/*
+	 * Ring the ADSP straight through the APCS IPC register: through the
+	 * mailbox framework the doorbells queue up behind each other under
+	 * steady APR traffic, the queue overflows and drops them, and the ADSP
+	 * then stops reading the SMD FIFO, which stalls playback.
+	 */
+	smd-edge {
+		/delete-property/ mboxes;
+		qcom,ipc = <&apcs1 8 8>;
+	};
 };
 
 &mba_mem {
