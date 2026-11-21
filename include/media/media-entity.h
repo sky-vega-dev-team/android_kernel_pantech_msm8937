@@ -339,6 +339,10 @@ enum media_entity_type {
  * @info.dev:	Contains device major and minor info.
  * @info.dev.major: device node major, if the device is a devnode.
  * @info.dev.minor: device node minor, if the device is a devnode.
+ * @group_id:	Entity group ID, reported to userspace as is. The Qualcomm
+ *		camera_v2 stack tells its subdevices apart by it.
+ * @revision:	Entity revision, reported to userspace as is. camera_v2
+ *		puts the subdevice node number there.
  *
  * .. note::
  *
@@ -352,6 +356,8 @@ struct media_entity {
 	enum media_entity_type obj_type;
 	u32 function;
 	unsigned long flags;
+	u32 group_id;
+	u32 revision;
 
 	u16 num_pads;
 	u16 num_links;
