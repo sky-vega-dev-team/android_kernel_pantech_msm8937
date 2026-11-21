@@ -6,11 +6,19 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/pcm.h>
+#include <dt-bindings/sound/qcom,q6afe.h>
 #include "common.h"
+#include "qdsp6/q6afe.h"
+#include "sdw.h"
 
 #define SLIM_MAX_TX_PORTS 16
 #define SLIM_MAX_RX_PORTS 16
 #define WCD9335_DEFAULT_MCLK_RATE	9600000
+
+struct apq8096_snd_data {
+	/* SoundWire streams of the WSA881x amplifiers behind the codec */
+	bool stream_prepared[AFE_PORT_MAX];
+};
 
 static int apq8096_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 				      struct snd_pcm_hw_params *params)
@@ -26,11 +34,27 @@ static int apq8096_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 
+/*
+ * The SLIMbus link also carries the SoundWire master and amplifiers, which
+ * come first so the master sees their ports: find the WCD9335 among them.
+ */
+static struct snd_soc_dai *apq8096_slim_codec_dai(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_soc_dai *codec_dai;
+	int i;
+
+	for_each_rtd_codec_dais(rtd, i, codec_dai)
+		if (strstr(codec_dai->name, "wcd9335"))
+			return codec_dai;
+
+	return snd_soc_rtd_to_codec(rtd, 0);
+}
+
 static int msm_snd_hw_params(struct snd_pcm_substream *substream,
 			     struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
-	struct snd_soc_dai *codec_dai = snd_soc_rtd_to_codec(rtd, 0);
+	struct snd_soc_dai *codec_dai = apq8096_slim_codec_dai(rtd);
 	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
 	u32 rx_ch[SLIM_MAX_RX_PORTS], tx_ch[SLIM_MAX_TX_PORTS];
 	u32 rx_ch_cnt = 0, tx_ch_cnt = 0;
@@ -59,13 +83,47 @@ end:
 	return ret;
 }
 
+static int apq8096_snd_startup(struct snd_pcm_substream *substream)
+{
+	return qcom_snd_sdw_startup(substream);
+}
+
+static void apq8096_snd_shutdown(struct snd_pcm_substream *substream)
+{
+	qcom_snd_sdw_shutdown(substream);
+}
+
+static int apq8096_snd_prepare(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+	struct apq8096_snd_data *data = snd_soc_card_get_drvdata(rtd->card);
+
+	return qcom_snd_sdw_prepare(substream,
+				    &data->stream_prepared[cpu_dai->id]);
+}
+
+static int apq8096_snd_hw_free(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+	struct apq8096_snd_data *data = snd_soc_card_get_drvdata(rtd->card);
+
+	return qcom_snd_sdw_hw_free(substream,
+				    &data->stream_prepared[cpu_dai->id]);
+}
+
 static const struct snd_soc_ops apq8096_ops = {
+	.startup = apq8096_snd_startup,
+	.shutdown = apq8096_snd_shutdown,
 	.hw_params = msm_snd_hw_params,
+	.prepare = apq8096_snd_prepare,
+	.hw_free = apq8096_snd_hw_free,
 };
 
 static int apq8096_init(struct snd_soc_pcm_runtime *rtd)
 {
-	struct snd_soc_dai *codec_dai = snd_soc_rtd_to_codec(rtd, 0);
+	struct snd_soc_dai *codec_dai = apq8096_slim_codec_dai(rtd);
 
 	/*
 	 * Codec SLIMBUS configuration
@@ -104,6 +162,7 @@ static void apq8096_add_be_ops(struct snd_soc_card *card)
 
 static int apq8096_platform_probe(struct platform_device *pdev)
 {
+	struct apq8096_snd_data *data;
 	struct snd_soc_card *card;
 	struct device *dev = &pdev->dev;
 	int ret;
@@ -112,10 +171,15 @@ static int apq8096_platform_probe(struct platform_device *pdev)
 	if (!card)
 		return -ENOMEM;
 
+	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
 	card->driver_name = "apq8096";
 	card->dev = dev;
 	card->owner = THIS_MODULE;
 	dev_set_drvdata(dev, card);
+	snd_soc_card_set_drvdata(card, data);
 	ret = qcom_snd_parse_of(card);
 	if (ret)
 		return ret;
