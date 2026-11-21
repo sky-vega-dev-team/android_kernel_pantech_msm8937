@@ -584,8 +584,11 @@
 		model = "ef71-tasha";
 		widgets = "Microphone", "Handset Mic",
 			  "Microphone", "Headset Mic",
-			  "Microphone", "Secondary Mic";
+			  "Microphone", "Secondary Mic",
+			  "Speaker", "Loudspeaker";
 		audio-routing = "RX_BIAS", "MCLK",
+				"SpkrLeft IN", "SPK1 OUT",
+				"Loudspeaker", "SpkrLeft SPKR",
 				"ADC2", "MCLK",
 				"ADC3", "MCLK",
 				"ADC4", "MCLK",
@@ -632,7 +635,10 @@
 			};
 
 			codec {
-				sound-dai = <&wcd9335 AIF1_PB>;
+				/* Amplifier first: the master allocates its ports */
+				sound-dai = <&wsa8810>,
+					    <&swm 0>,
+					    <&wcd9335 AIF1_PB>;
 			};
 		};
 
@@ -711,6 +717,39 @@
 				vdd-tx-supply = <&pm8937_l5>;
 				vdd-rx-supply = <&pm8937_l5>;
 				vdd-io-supply = <&pm8937_l5>;
+
+				#clock-cells = <0>;
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				/* The loudspeaker amplifier hangs off this master */
+				swm: soundwire@c29 {
+					compatible = "qcom,soundwire-v1.3.0";
+					reg = <0xc29 0x12>;
+					interrupts-extended = <&wcd9335 20>;
+
+					qcom,dout-ports = <6>;
+					qcom,din-ports = <2>;
+					qcom,ports-sinterval-low = /bits/ 8 <0x07 0x1f 0x3f 0x07 0x1f 0x3f 0x0f 0x0f>;
+					qcom,ports-offset1 = /bits/ 8 <0x01 0x02 0x0c 0x06 0x12 0x0d 0x07 0x0a>;
+					qcom,ports-offset2 = /bits/ 8 <0x00 0x00 0x1f 0x00 0x00 0x1f 0x00 0x00>;
+
+					clocks = <&wcd9335>;
+					clock-names = "iface";
+
+					#sound-dai-cells = <1>;
+					#address-cells = <2>;
+					#size-cells = <0>;
+
+					wsa8810: speaker@0,1 {
+						compatible = "sdw10217201000";
+						reg = <0 1>;
+						/* SD_N: low shuts the amplifier down */
+						powerdown-gpios = <&tlmm 96 GPIO_ACTIVE_LOW>;
+						sound-name-prefix = "SpkrLeft";
+						#sound-dai-cells = <0>;
+					};
+				};
 			};
 		};
 	};
