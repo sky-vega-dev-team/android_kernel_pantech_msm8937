@@ -811,9 +811,10 @@ static int spmi_haptics_probe(struct platform_device *pdev)
 	if (!haptics)
 		return -ENOMEM;
 
+	/* The regmap of the PMIC may not be up yet: try again later */
 	haptics->regmap = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!haptics->regmap)
-		return -ENODEV;
+		return -EPROBE_DEFER;
 
 	node = pdev->dev.of_node;
 
