@@ -96,8 +96,18 @@
 		pinctrl-names = "default";
 	};
 
-	usb_vbus: extcon-usb-dummy {
-		compatible = "linux,extcon-usb-dummy";
+	/*
+	 * VBUS in host mode: the OTG boost of the PMI8950, which the MAX14731
+	 * only passes to the connector while OTG_EN is high.
+	 */
+	usb_otg_vbus: usb-otg-vbus-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "usb_otg_vbus";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&tlmm 8 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		vin-supply = <&otg_vbus>;
 	};
 
 	vph_pwr: vph-pwr-regulator {
@@ -227,6 +237,8 @@
 
 &pmi8950_smbcharger {
 	monitored-battery = <&battery>;
+	/* A cable takes over from the wireless pad, as on the vendor software */
+	qcom,dc-yields-to-usb;
 
 	status = "okay";
 };
@@ -590,13 +602,13 @@
 
 	/*
 	 * The MAX14731 in front of USBIN and the DCIN of the BQ51221 wireless
-	 * receiver: the vendor driver holds OVP_EN_N, P-CONNECT and OTG_EN low
-	 * as outputs, without which the wireless input stays cut off.
+	 * receiver: the vendor driver holds OVP_EN_N and P-CONNECT low as
+	 * outputs, without which the wireless input stays cut off. OTG_EN goes
+	 * with the OTG VBUS regulator.
 	 */
 	max14731-ctrl-hog {
 		gpio-hog;
-		gpios = <8 GPIO_ACTIVE_HIGH>, <59 GPIO_ACTIVE_HIGH>,
-			<125 GPIO_ACTIVE_HIGH>;
+		gpios = <59 GPIO_ACTIVE_HIGH>, <125 GPIO_ACTIVE_HIGH>;
 		output-low;
 		line-name = "max14731-ctrl";
 	};
@@ -666,8 +678,9 @@
 };
 
 &usb {
-	dr_mode = "peripheral";
-	extcon = <&usb_vbus>;
+	dr_mode = "otg";
+	extcon = <&pmi8950_smbcharger>, <&pmi8950_smbcharger>;
+	vbus-supply = <&usb_otg_vbus>;
 
 	status = "okay";
 };
