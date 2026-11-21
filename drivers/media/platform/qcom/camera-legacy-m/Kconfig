@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+menuconfig MSMB_CAMERA_LEGACY_M
+	bool "Qualcomm camera_v2 stack (legacy, msm-3.18 interface)"
+	depends on ARCH_QCOM && VIDEO_DEV && I2C && IOMMU_API
+	depends on MEDIA_CONTROLLER && VIDEO_V4L2_SUBDEV_API
+	select MSMB_CAMERA
+	select VIDEOBUF2_CORE
+	select VIDEOBUF2_V4L2
+	select DMA_SHARED_BUFFER
+	help
+	  The downstream Qualcomm camera stack (CCI, CSIPHY, CSID, ISPIF,
+	  VFE, CPP and sensor control) with the userspace interface of
+	  msm-3.18, for devices that run the vendor camera daemon. It
+	  conflicts with the CAMSS driver, which drives the same blocks.
+
+if MSMB_CAMERA_LEGACY_M
+
+config MSMB_CAMERA
+	bool
+
+config MSM_CAMERA_SENSOR
+	def_bool y
+	depends on LEDS_CLASS
+
+config MSM_CPP
+	def_bool y
+
+config MSM_CCI
+	def_bool y
+
+config MSM_CSI20_HEADER
+	def_bool y
+
+config MSM_CSI22_HEADER
+	def_bool y
+
+config MSM_CSI30_HEADER
+	def_bool y
+
+config MSM_CSI31_HEADER
+	def_bool y
+
+config MSM_CSIPHY
+	def_bool y
+
+config MSM_CSID
+	def_bool y
+
+config MSM_EEPROM
+	def_bool y
+
+config MSM_ISPIF_V2
+	def_bool y
+
+config MSMB_JPEG
+	bool "JPEG encoder engine"
+	default y
+
+config MSM_FD
+	bool "Face detection engine"
+
+config PANTECH_CAMERA
+	bool "Pantech changes the EF71 camera daemon relies on"
+	help
+	  The DVDD/IOVDD/AVDD/VDDIO enable GPIOs of the sensor power
+	  sequences and the VCM park steps of the Pantech camera_v2.
+
+endif
