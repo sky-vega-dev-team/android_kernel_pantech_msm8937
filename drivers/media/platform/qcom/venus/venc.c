@@ -395,6 +395,53 @@ venc_s_selection(struct file *file, void *fh, struct v4l2_selection *s)
 	return 0;
 }
 
+/*
+ * The firmware tells the encoder load, in macroblocks per second, from
+ * which it wants its power save mode, where it does about half the work
+ * per macroblock. 1080p at 30 fps needs it on the 3xx MSM8937 encoder,
+ * which takes 50 ms a frame otherwise. Venus 4xx and later turn it on
+ * from the clock scaling instead.
+ *
+ * Clients may change the frame rate while encoding, as the Codec2 HAL does
+ * from the frame timestamps, so a raise is looked at then too. The mode is
+ * only left when streaming restarts: a frame rate that drops because frames
+ * came too late must not slow the encoder down further.
+ */
+static int venc_set_power_save_mode(struct venus_inst *inst, bool restart)
+{
+	u32 min = cap_min(inst, HFI_CAPABILITY_MBS_PER_SECOND_POWERSAVE);
+	bool enable = false;
+	u32 mode;
+	u64 mbs;
+	int ret;
+
+	if (!IS_V1(inst->core) && !IS_V3(inst->core))
+		return 0;
+
+	if (min &&
+	    inst->controls.enc.bitrate_mode != V4L2_MPEG_VIDEO_BITRATE_MODE_CQ) {
+		mbs = (ALIGN(inst->width, 16) / 16) * (ALIGN(inst->height, 16) / 16);
+		enable = mbs * inst->fps >= min;
+	}
+
+	if (!restart && (!enable || inst->flags & VENUS_LOW_POWER))
+		return 0;
+
+	mode = enable ? HFI_VENC_PERFMODE_POWER_SAVE :
+			HFI_VENC_PERFMODE_MAX_QUALITY;
+	ret = hfi_session_set_property(inst, HFI_PROPERTY_CONFIG_VENC_PERF_MODE,
+				       &mode);
+	if (ret)
+		return ret;
+
+	if (enable)
+		inst->flags |= VENUS_LOW_POWER;
+	else
+		inst->flags &= ~VENUS_LOW_POWER;
+
+	return 0;
+}
+
 static int venc_s_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
 {
 	struct venus_inst *inst = to_inst(file);
@@ -424,6 +471,13 @@ static int venc_s_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
 
 	inst->timeperframe = *timeperframe;
 	inst->fps = fps;
+
+	/* Only a hint for the firmware: the frame rate is set all the same */
+	mutex_lock(&inst->lock);
+	if (inst->streamon_out && inst->streamon_cap &&
+	    venc_set_power_save_mode(inst, false))
+		dev_warn(inst->core->dev_enc, "cannot change the power save mode\n");
+	mutex_unlock(&inst->lock);
 
 	return 0;
 }
@@ -1030,7 +1084,7 @@ static int venc_set_properties(struct venus_inst *inst)
 			return ret;
 	}
 
-	return 0;
+	return venc_set_power_save_mode(inst, true);
 }
 
 static int venc_init_session(struct venus_inst *inst)
