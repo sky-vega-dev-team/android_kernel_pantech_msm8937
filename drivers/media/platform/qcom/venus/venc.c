@@ -1308,6 +1308,40 @@ static int venc_verify_conf(struct venus_inst *inst)
 	return 0;
 }
 
+/*
+ * Stopping streaming ends the session and takes the capture buffers off the
+ * list of those to register with the firmware, which only allocating them
+ * starts and fills again. Do both for clients that stream on again with the
+ * buffers they have, as after a flush: the firmware of those Venus that
+ * cannot take any buffer aborts on a capture buffer it was not told of.
+ */
+static int venc_restart_session(struct venus_inst *inst)
+{
+	struct vb2_queue *q = v4l2_m2m_get_dst_vq(inst->m2m_ctx);
+	struct venus_buffer *buf;
+	struct vb2_buffer *vb;
+	unsigned int i;
+	int ret;
+
+	ret = venc_init_session(inst);
+	if (ret)
+		return ret;
+
+	if (!list_empty(&inst->registeredbufs))
+		return 0;
+
+	for (i = 0; i < q->max_num_buffers; i++) {
+		vb = vb2_get_buffer(q, i);
+		if (!vb)
+			continue;
+
+		buf = to_venus_buffer(to_vb2_v4l2_buffer(vb));
+		list_add_tail(&buf->reg_list, &inst->registeredbufs);
+	}
+
+	return 0;
+}
+
 static int venc_start_streaming(struct vb2_queue *q, unsigned int count)
 {
 	struct venus_inst *inst = vb2_get_drv_priv(q);
@@ -1339,6 +1373,10 @@ static int venc_start_streaming(struct vb2_queue *q, unsigned int count)
 		goto put_power;
 
 	ret = venc_pm_put(inst, true);
+	if (ret)
+		goto error;
+
+	ret = venc_restart_session(inst);
 	if (ret)
 		goto error;
 
