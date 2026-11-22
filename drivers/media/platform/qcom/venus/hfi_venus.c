@@ -1615,8 +1615,14 @@ static int venus_suspend_3xx(struct venus_core *core)
 	ret = readx_poll_timeout(venus_cpu_and_video_core_idle, hdev, val, val,
 				 1500, 100 * 1500);
 	if (ret) {
-		dev_err(dev, "wait for cpu and video core idle fail (%d)\n", ret);
-		return ret;
+		/*
+		 * Nothing was asked of the firmware yet: say busy, for the
+		 * runtime PM core to leave the device on and try again later.
+		 * Any other error sticks to the device, and no session can
+		 * power it up again.
+		 */
+		dev_warn(dev, "cpu and video core not idle, staying on\n");
+		return -EBUSY;
 	}
 
 	ret = venus_prepare_power_collapse(hdev, false);
