@@ -1345,13 +1345,26 @@ static void venc_vb2_buf_queue(struct vb2_buffer *vb)
 	mutex_unlock(&inst->lock);
 }
 
+static void venc_stop_streaming(struct vb2_queue *q)
+{
+	struct venus_inst *inst = vb2_get_drv_priv(q);
+
+	/*
+	 * The encoder may have suspended while no frames came, and stopping
+	 * the session writes to the hardware: power it up first.
+	 */
+	venc_pm_get(inst);
+	venus_helper_vb2_stop_streaming(q);
+	venc_pm_put(inst, true);
+}
+
 static const struct vb2_ops venc_vb2_ops = {
 	.queue_setup = venc_queue_setup,
 	.buf_init = venc_buf_init,
 	.buf_cleanup = venc_buf_cleanup,
 	.buf_prepare = venus_helper_vb2_buf_prepare,
 	.start_streaming = venc_start_streaming,
-	.stop_streaming = venus_helper_vb2_stop_streaming,
+	.stop_streaming = venc_stop_streaming,
 	.buf_queue = venc_vb2_buf_queue,
 };
 
