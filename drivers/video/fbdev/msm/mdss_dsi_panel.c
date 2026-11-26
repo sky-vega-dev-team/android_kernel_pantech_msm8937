@@ -1404,6 +1404,18 @@ static int mdss_dsi_panel_set_reading_mode(struct mdss_panel_data *pdata, u32 re
 	return mdss_dsi_panel_livedisplay_check_panel_alive(pdata);
 }
 
+#ifdef MDSS_DSI_PANTECH_DT2W
+/*
+ * Idle mode off, after the on commands of a panel double tap to wake left
+ * in idle mode (8 colours): its reset does not clear it.
+ */
+static char pantech_dt2w_idle_off[] = {0x38};
+static struct dsi_cmd_desc pantech_dt2w_on_cmds[] = {
+	{{DTYPE_DCS_WRITE, 1, 0, 0, 0, sizeof(pantech_dt2w_idle_off)},
+		pantech_dt2w_idle_off},
+};
+#endif
+
 static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
@@ -1440,6 +1452,19 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 
 	if (on_cmds->cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, on_cmds, CMD_REQ_COMMIT);
+
+#ifdef MDSS_DSI_PANTECH_DT2W
+	if (ctrl->pantech_dt2w_idle) {
+		struct dsi_panel_cmds cmds = {
+			.cmds = pantech_dt2w_on_cmds,
+			.cmd_cnt = ARRAY_SIZE(pantech_dt2w_on_cmds),
+			.link_state = on_cmds->link_state,
+		};
+
+		mdss_dsi_panel_cmds_send(ctrl, &cmds, CMD_REQ_COMMIT);
+		ctrl->pantech_dt2w_idle = false;
+	}
+#endif
 
 #if IS_ENABLED(CONFIG_MACH_XIAOMI_SDM439)
 	if (xiaomi_sdm439_mach_get()) {
@@ -1559,6 +1584,7 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 		};
 
 		mdss_dsi_panel_cmds_send(ctrl, &cmds, CMD_REQ_COMMIT);
+		ctrl->pantech_dt2w_idle = true;
 	} else if (ctrl->off_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
 
